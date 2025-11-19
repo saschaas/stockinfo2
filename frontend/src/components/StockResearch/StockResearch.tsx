@@ -129,6 +129,100 @@ export default function StockResearch() {
                   ))}
                 </div>
               )}
+
+              {/* Results Display */}
+              {job.status === 'completed' && job.result && (
+                <div className="mt-6 border-t pt-6">
+                  <h5 className="text-lg font-semibold mb-4">Analysis Results</h5>
+
+                  {/* Recommendation */}
+                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">Recommendation</span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                        job.result.recommendation === 'strong_buy' || job.result.recommendation === 'buy'
+                          ? 'bg-green-100 text-green-800'
+                          : job.result.recommendation === 'strong_sell' || job.result.recommendation === 'sell'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {job.result.recommendation?.toUpperCase().replace('_', ' ')}
+                      </span>
+                    </div>
+                    {job.result.confidence_score && (
+                      <div className="text-sm text-gray-600">
+                        Confidence: {(job.result.confidence_score * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Company Info */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    {job.result.current_price && (
+                      <div className="bg-white border rounded-lg p-3">
+                        <div className="text-xs text-gray-500">Price</div>
+                        <div className="text-lg font-semibold">${job.result.current_price.toFixed(2)}</div>
+                      </div>
+                    )}
+                    {job.result.pe_ratio && (
+                      <div className="bg-white border rounded-lg p-3">
+                        <div className="text-xs text-gray-500">P/E Ratio</div>
+                        <div className="text-lg font-semibold">{job.result.pe_ratio}</div>
+                      </div>
+                    )}
+                    {job.result.rsi && (
+                      <div className="bg-white border rounded-lg p-3">
+                        <div className="text-xs text-gray-500">RSI (14)</div>
+                        <div className="text-lg font-semibold">{job.result.rsi.toFixed(1)}</div>
+                      </div>
+                    )}
+                    {job.result.sma_20 && (
+                      <div className="bg-white border rounded-lg p-3">
+                        <div className="text-xs text-gray-500">SMA 20</div>
+                        <div className="text-lg font-semibold">${job.result.sma_20.toFixed(2)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reasoning */}
+                  {job.result.recommendation_reasoning && (
+                    <div className="mb-4">
+                      <div className="text-sm font-medium text-gray-700 mb-1">Analysis</div>
+                      <p className="text-sm text-gray-600">{job.result.recommendation_reasoning}</p>
+                    </div>
+                  )}
+
+                  {/* Risks & Opportunities */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {job.result.risks && job.result.risks.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-red-700 mb-2">Risks</div>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          {job.result.risks.slice(0, 3).map((risk: string, i: number) => (
+                            <li key={i} className="flex items-start">
+                              <span className="text-red-500 mr-2">•</span>
+                              {risk}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {job.result.opportunities && job.result.opportunities.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-green-700 mb-2">Opportunities</div>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          {job.result.opportunities.slice(0, 3).map((opp: string, i: number) => (
+                            <li key={i} className="flex items-start">
+                              <span className="text-green-500 mr-2">•</span>
+                              {opp}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

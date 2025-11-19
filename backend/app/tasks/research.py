@@ -17,11 +17,16 @@ logger = structlog.get_logger(__name__)
 
 def run_async(coro):
     """Run async function in sync context."""
-    loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(coro)
 
 
 @celery_app.task(bind=True, name="backend.app.tasks.research.research_stock")
@@ -49,11 +54,12 @@ def research_stock(
     async def run():
         from backend.app.services.alpha_vantage import get_alpha_vantage_client
         from backend.app.services.yahoo_finance import get_yahoo_finance_client
-        from backend.app.api.routes.websocket import send_job_progress, send_job_complete, send_job_error
+        from backend.app.services.cache import set_job_progress
 
         logger.info("Starting stock research", ticker=ticker, job_id=job_id)
 
         # Update job status
+        await set_job_progress(job_id, "running", 0, "Initializing research...")
         await update_job_status(job_id, ticker, "running", 0, "Initializing research...")
 
         try:
@@ -61,7 +67,7 @@ def research_stock(
             result = {"ticker": ticker}
 
             # Step 1: Fetch basic stock info (20%)
-            await send_job_progress(job_id, 10, "Fetching stock information...", "running")
+            await set_job_progress(job_id, "running", 10, "Fetching stock information...")
             await update_job_status(job_id, ticker, "running", 10, "Fetching stock information...")
 
             yf_client = get_yahoo_finance_client()
@@ -76,7 +82,7 @@ def research_stock(
             data_sources["stock_info"] = {"type": "api", "name": "yahoo_finance"}
 
             # Step 2: Fetch fundamentals (40%)
-            await send_job_progress(job_id, 30, "Fetching fundamentals...", "running")
+            await set_job_progress(job_id, "running", 30, "Fetching fundamentals...")
             await update_job_status(job_id, ticker, "running", 30, "Fetching fundamentals...")
 
             av_client = await get_alpha_vantage_client()
@@ -104,7 +110,7 @@ def research_stock(
 
             # Step 3: Technical analysis (60%)
             if include_technical:
-                await send_job_progress(job_id, 50, "Calculating technical indicators...", "running")
+                await set_job_progress(job_id, "running", 50, "Calculating technical indicators...")
                 await update_job_status(job_id, ticker, "running", 50, "Calculating technical indicators...")
 
                 prices = await yf_client.get_historical_prices(ticker, period="3mo", interval="1d")
@@ -113,7 +119,7 @@ def research_stock(
                 data_sources["technical"] = {"type": "api", "name": "yahoo_finance"}
 
             # Step 4: Price performance (70%)
-            await send_job_progress(job_id, 60, "Calculating price performance...", "running")
+            await set_job_progress(job_id, "running", 60, "Calculating price performance...")
 
             result.update({
                 "target_price_6m": stock_info.get("target_mean_price"),
@@ -122,7 +128,7 @@ def research_stock(
 
             # Step 5: AI Analysis (90%)
             if include_ai_analysis:
-                await send_job_progress(job_id, 75, "Running AI analysis...", "running")
+                await set_job_progress(job_id, "running", 75, "Running AI analysis...")
                 await update_job_status(job_id, ticker, "running", 75, "Running AI analysis...")
 
                 ai_analysis = await run_ai_analysis(ticker, result)
@@ -130,15 +136,15 @@ def research_stock(
                 data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
 
             # Step 6: Save to database (100%)
-            await send_job_progress(job_id, 90, "Saving results...", "running")
+            await set_job_progress(job_id, "running", 90, "Saving results...")
 
             result["data_sources"] = data_sources
             analysis_id = await save_analysis_to_db(result)
             result["analysis_id"] = analysis_id
 
             # Complete
+            await set_job_progress(job_id, "completed", 100, "Research completed")
             await update_job_status(job_id, ticker, "completed", 100, "Research completed")
-            await send_job_complete(job_id, result)
 
             logger.info("Stock research completed", ticker=ticker, job_id=job_id)
             return result
@@ -146,8 +152,8 @@ def research_stock(
         except Exception as e:
             logger.error("Stock research failed", ticker=ticker, error=str(e))
             suggestion = generate_error_suggestion(str(e))
+            await set_job_progress(job_id, "failed", 0, str(e))
             await update_job_status(job_id, ticker, "failed", 0, str(e), suggestion)
-            await send_job_error(job_id, str(e), suggestion)
             raise
 
     return run_async(run())

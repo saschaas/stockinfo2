@@ -1,7 +1,6 @@
 """WebSocket routes for real-time updates."""
 
 import asyncio
-import json
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -71,28 +70,172 @@ async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
     await manager.connect(websocket, channel)
 
     try:
-        while True:
-            # Wait for messages from client (ping/pong or commands)
-            data = await websocket.receive_text()
+        # Send immediate acknowledgment with current job status
+        job_status = await get_job_progress_from_redis(job_id)
+        last_progress = job_status.get("progress", 0)
+        last_status = job_status.get("status", "queued")
 
-            if data == "ping":
-                await manager.send_personal_message({"type": "pong"}, websocket)
-            elif data == "status":
-                # Send current job status
-                # TODO: Get actual job status from database/Celery
-                await manager.send_personal_message(
-                    {
-                        "type": "status",
-                        "job_id": job_id,
-                        "status": "running",
-                        "progress": 50,
-                        "current_step": "Fetching stock data",
-                    },
-                    websocket,
-                )
+        await manager.send_personal_message(
+            {
+                "type": "connected",
+                "job_id": job_id,
+                "status": last_status,
+                "progress": last_progress,
+                "current_step": job_status.get("current_step", "Initializing..."),
+            },
+            websocket,
+        )
+
+        # Poll for updates every 500ms
+        while True:
+            await asyncio.sleep(0.5)
+
+            # Check for progress updates from Redis
+            job_status = await get_job_progress_from_redis(job_id)
+            current_progress = job_status.get("progress", 0)
+            current_status = job_status.get("status", "queued")
+
+            # Send update if progress changed
+            if current_progress != last_progress or current_status != last_status:
+                if current_status == "completed":
+                    # Fetch and send results
+                    result = await get_job_result(job_id)
+                    await manager.send_personal_message(
+                        {
+                            "type": "complete",
+                            "job_id": job_id,
+                            "result": result,
+                        },
+                        websocket,
+                    )
+                    break
+                elif current_status == "failed":
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "job_id": job_id,
+                            "error": job_status.get("current_step", "Research failed"),
+                        },
+                        websocket,
+                    )
+                    break
+                else:
+                    await manager.send_personal_message(
+                        {
+                            "type": "progress",
+                            "job_id": job_id,
+                            "status": current_status,
+                            "progress": current_progress,
+                            "current_step": job_status.get("current_step", ""),
+                        },
+                        websocket,
+                    )
+
+                last_progress = current_progress
+                last_status = current_status
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, channel)
+
+
+async def get_job_progress_from_redis(job_id: str) -> dict:
+    """Get job progress from Redis cache."""
+    from backend.app.services.cache import get_job_progress
+
+    progress = await get_job_progress(job_id)
+    if progress:
+        return progress
+
+    # Fallback to database
+    return await get_job_status(job_id)
+
+
+async def get_job_status(job_id: str) -> dict:
+    """Get current job status from database."""
+    from sqlalchemy import select
+    from backend.app.db.session import async_session_factory
+    from backend.app.db.models import ResearchJob
+
+    try:
+        async with async_session_factory() as session:
+            stmt = select(ResearchJob).where(ResearchJob.job_id == job_id)
+            result = await session.execute(stmt)
+            job = result.scalar_one_or_none()
+
+            if job:
+                return {
+                    "status": job.status,
+                    "progress": job.progress,
+                    "current_step": job.current_step,
+                }
+    except Exception as e:
+        logger.error("Failed to get job status", job_id=job_id, error=str(e))
+
+    return {"status": "queued", "progress": 0, "current_step": "Waiting to start..."}
+
+
+async def get_job_result(job_id: str) -> dict:
+    """Get job result (analysis) from database."""
+    from sqlalchemy import select
+    from backend.app.db.session import async_session_factory
+    from backend.app.db.models import ResearchJob, StockAnalysis
+
+    try:
+        async with async_session_factory() as session:
+            # Get job to find ticker
+            job_stmt = select(ResearchJob).where(ResearchJob.job_id == job_id)
+            job_result = await session.execute(job_stmt)
+            job = job_result.scalar_one_or_none()
+
+            if not job or not job.input_data:
+                return {}
+
+            ticker = job.input_data.get("ticker")
+            if not ticker:
+                return {}
+
+            # Get latest analysis for this ticker
+            analysis_stmt = (
+                select(StockAnalysis)
+                .where(StockAnalysis.ticker == ticker)
+                .order_by(StockAnalysis.analysis_date.desc())
+                .limit(1)
+            )
+            analysis_result = await session.execute(analysis_stmt)
+            analysis = analysis_result.scalar_one_or_none()
+
+            if analysis:
+                # Helper to convert Decimal to float
+                def to_float(val):
+                    if val is None:
+                        return None
+                    try:
+                        return float(val)
+                    except (TypeError, ValueError):
+                        return None
+
+                return {
+                    "ticker": analysis.ticker,
+                    "company_name": analysis.company_name,
+                    "sector": analysis.sector,
+                    "industry": analysis.industry,
+                    "current_price": to_float(analysis.current_price),
+                    "market_cap": analysis.market_cap,
+                    "pe_ratio": str(analysis.pe_ratio) if analysis.pe_ratio else None,
+                    "recommendation": analysis.recommendation,
+                    "confidence_score": to_float(analysis.confidence_score),
+                    "recommendation_reasoning": analysis.recommendation_reasoning,
+                    "risks": analysis.risks,
+                    "opportunities": analysis.opportunities,
+                    "rsi": to_float(analysis.rsi),
+                    "sma_20": to_float(analysis.sma_20),
+                    "sma_50": to_float(analysis.sma_50),
+                    "data_sources": analysis.data_sources,
+                }
+    except Exception as e:
+        logger.error("Failed to get job result", job_id=job_id, error=str(e))
+
+    return {}
 
 
 @router.websocket("/market")

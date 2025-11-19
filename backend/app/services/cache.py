@@ -194,3 +194,45 @@ def news_key(source: str, query: str) -> str:
 
 # Global cache instance
 cache = CacheService()
+
+
+# Job progress functions for WebSocket updates
+async def set_job_progress(
+    job_id: str,
+    status: str,
+    progress: int,
+    current_step: str,
+) -> bool:
+    """Set job progress in Redis for WebSocket polling."""
+    client = await get_redis_client()
+    if not client:
+        return False
+
+    try:
+        data = json.dumps({
+            "status": status,
+            "progress": progress,
+            "current_step": current_step,
+        })
+        # Store with 1 hour TTL
+        await client.setex(f"job_progress:{job_id}", 3600, data)
+        return True
+    except Exception as e:
+        logger.warning("Failed to set job progress", job_id=job_id, error=str(e))
+        return False
+
+
+async def get_job_progress(job_id: str) -> dict | None:
+    """Get job progress from Redis."""
+    client = await get_redis_client()
+    if not client:
+        return None
+
+    try:
+        data = await client.get(f"job_progress:{job_id}")
+        if data:
+            return json.loads(data)
+    except Exception as e:
+        logger.warning("Failed to get job progress", job_id=job_id, error=str(e))
+
+    return None

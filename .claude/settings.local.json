@@ -12,7 +12,8 @@
       "Bash(timeout 10 docker logs:*)",
       "Bash(docker exec:*)",
       "Bash(npx:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(timeout 60 docker logs:*)"
     ],
     "deny": [],
     "ask": []

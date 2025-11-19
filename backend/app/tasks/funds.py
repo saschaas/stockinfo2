@@ -12,11 +12,16 @@ logger = structlog.get_logger(__name__)
 
 def run_async(coro):
     """Run async function in sync context."""
-    loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(coro)
 
 
 @celery_app.task(name="backend.app.tasks.funds.check_fund_holdings")

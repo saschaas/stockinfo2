@@ -16,11 +16,30 @@ export function useWebSocket(
   const socketRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
 
+  // Store callbacks in refs to avoid recreating connection on every render
+  const onMessageRef = useRef(options.onMessage)
+  const onConnectRef = useRef(options.onConnect)
+  const onDisconnectRef = useRef(options.onDisconnect)
+  const onErrorRef = useRef(options.onError)
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onMessageRef.current = options.onMessage
+    onConnectRef.current = options.onConnect
+    onDisconnectRef.current = options.onDisconnect
+    onErrorRef.current = options.onError
+  }, [options.onMessage, options.onConnect, options.onDisconnect, options.onError])
+
   const connect = useCallback(() => {
+    // Close existing connection if any
+    if (socketRef.current) {
+      socketRef.current.close()
+    }
+
     const ws = new WebSocket(`${WS_BASE_URL}/api/v1/ws/${endpoint}`)
 
     ws.onopen = () => {
-      options.onConnect?.()
+      onConnectRef.current?.()
       // Send ping every 30 seconds to keep connection alive
       const pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -30,7 +49,7 @@ export function useWebSocket(
 
       ws.onclose = () => {
         clearInterval(pingInterval)
-        options.onDisconnect?.()
+        onDisconnectRef.current?.()
         // Attempt to reconnect after 5 seconds
         reconnectTimeoutRef.current = window.setTimeout(() => {
           connect()
@@ -42,19 +61,19 @@ export function useWebSocket(
       try {
         const data = JSON.parse(event.data)
         if (data.type !== 'pong') {
-          options.onMessage?.(data)
+          onMessageRef.current?.(data)
         }
       } catch {
-        options.onMessage?.(event.data)
+        onMessageRef.current?.(event.data)
       }
     }
 
     ws.onerror = (error) => {
-      options.onError?.(error)
+      onErrorRef.current?.(error)
     }
 
     socketRef.current = ws
-  }, [endpoint, options])
+  }, [endpoint])
 
   const send = useCallback((data: any) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
