@@ -195,13 +195,7 @@ ignore_errors = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "migrations"]
-skips = [
-    "B101",  # assert_used
-    "B104",  # hardcoded_bind_all_interfaces - intentional for Docker/API server
-    "B112",  # try_except_continue - common pattern for resilient iteration
-    "B314",  # xml.etree.ElementTree.fromstring - SEC Edgar data from trusted source
-    "B405",  # import xml.etree - SEC Edgar XML parsing from trusted SEC website
-]
+skips = ["B101", "B104", "B112", "B314", "B405"]
 
 [tool.ruff.isort]
 known-first-party = ["backend", "agents", "pipelines"]
