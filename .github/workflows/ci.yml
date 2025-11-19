@@ -112,7 +112,7 @@ jobs:
         run: bandit -r backend agents pipelines -c pyproject.toml
 
       - name: Check dependencies for vulnerabilities
-        run: pip install -e . && pip-audit
+        run: pip install -e . && pip-audit --skip-editable
         continue-on-error: true
 
   # Docker build test
