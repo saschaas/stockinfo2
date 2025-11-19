@@ -106,13 +106,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install bandit safety
+          pip install bandit pip-audit
 
       - name: Run Bandit
         run: bandit -r backend agents pipelines -c pyproject.toml
 
-      - name: Check dependencies
-        run: pip install -e . && safety check
+      - name: Check dependencies for vulnerabilities
+        run: pip install -e . && pip-audit
         continue-on-error: true
 
   # Docker build test
