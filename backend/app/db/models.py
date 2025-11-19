@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -22,6 +23,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.session import Base
+
+# Portable JSON type: uses JSONB for PostgreSQL, JSON for SQLite
+PortableJSON = JSON().with_variant(JSONB(), "postgresql")
 
 
 class StockPrice(Base):
@@ -138,11 +142,11 @@ class MarketSentiment(Base):
     bearish_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
 
     # Sector analysis
-    hot_sectors: Mapped[dict] = mapped_column(JSONB, nullable=True)
-    negative_sectors: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    hot_sectors: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
+    negative_sectors: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
 
     # News summary
-    top_news: Mapped[list] = mapped_column(JSONB, nullable=True)
+    top_news: Mapped[list] = mapped_column(PortableJSON, nullable=True)
     news_count: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # source_metadata
@@ -195,7 +199,7 @@ class StockAnalysis(Base):
     price_change_ytd: Mapped[Decimal] = mapped_column(Numeric(7, 4), nullable=True)
 
     # Fund ownership
-    fund_ownership: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    fund_ownership: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     total_fund_shares: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
     # AI analysis
@@ -204,14 +208,14 @@ class StockAnalysis(Base):
     )  # strong_buy, buy, hold, sell, strong_sell
     confidence_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
     recommendation_reasoning: Mapped[str] = mapped_column(Text, nullable=True)
-    risks: Mapped[list] = mapped_column(JSONB, nullable=True)
-    opportunities: Mapped[list] = mapped_column(JSONB, nullable=True)
+    risks: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    opportunities: Mapped[list] = mapped_column(PortableJSON, nullable=True)
 
     # Peer comparison
-    peer_comparison: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    peer_comparison: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
 
     # Data provenance
-    data_sources: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    data_sources: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -243,7 +247,7 @@ class DataSource(Base):
     url: Mapped[str] = mapped_column(Text, nullable=True)
     response_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
     was_cached: Mapped[bool] = mapped_column(Boolean, default=False)
-    source_metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    source_metadata: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -274,8 +278,8 @@ class ResearchJob(Base):
     completed_steps: Mapped[int] = mapped_column(Integer, default=0)
 
     # Input/Output
-    input_data: Mapped[dict] = mapped_column(JSONB, nullable=True)
-    result_data: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    input_data: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
+    result_data: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     error_suggestion: Mapped[str] = mapped_column(
         Text, nullable=True
@@ -300,7 +304,7 @@ class UserConfig(Base):
     config_key: Mapped[str] = mapped_column(
         String(100), nullable=False, unique=True, index=True
     )
-    config_value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    config_value: Mapped[dict] = mapped_column(PortableJSON, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
