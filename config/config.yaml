@@ -1,0 +1,274 @@
+# Stock Research Tool Configuration
+# This file contains application settings that can be version controlled
+
+# =============================================================================
+# Data Sources Configuration
+# =============================================================================
+data_sources:
+  alpha_vantage:
+    base_url: "https://www.alphavantage.co/query"
+    rate_limit: 30  # requests per minute
+    timeout: 10  # seconds
+    retry_attempts: 3
+
+  sec_edgar:
+    base_url: "https://www.sec.gov/cgi-bin/browse-edgar"
+    filings_url: "https://data.sec.gov"
+    rate_limit: 10  # requests per second
+    timeout: 15
+    retry_attempts: 3
+
+  yahoo_finance:
+    enabled: true
+    timeout: 10
+    retry_attempts: 3
+
+  financial_modeling_prep:
+    base_url: "https://financialmodelingprep.com/api/v3"
+    rate_limit: 250  # requests per day for free tier
+    timeout: 10
+
+# =============================================================================
+# Fund Tracking Configuration
+# =============================================================================
+funds:
+  # Tech-focused funds (10 funds)
+  tech_focused:
+    - name: "ARK Innovation ETF"
+      ticker: "ARKK"
+      cik: "0001579982"
+      priority: 1
+
+    - name: "Technology Select Sector SPDR"
+      ticker: "XLK"
+      cik: "0001064641"
+      priority: 2
+
+    - name: "Vanguard Information Technology ETF"
+      ticker: "VGT"
+      cik: "0000876437"
+      priority: 3
+
+    - name: "iShares Global Tech ETF"
+      ticker: "IXN"
+      cik: "0000930667"
+      priority: 4
+
+    - name: "Global X Robotics & Artificial Intelligence ETF"
+      ticker: "BOTZ"
+      cik: "0001432353"
+      priority: 5
+
+    - name: "BGF Next Generation Technology Fund"
+      ticker: "BGSAX"
+      cik: "0000225030"
+      priority: 6
+
+    - name: "Janus Henderson Global Technology Leaders Fund"
+      ticker: "JAGTX"
+      cik: "0000277751"
+      priority: 7
+
+    - name: "Polar Capital Global Technology Fund"
+      ticker: "PCTIX"
+      cik: ""
+      priority: 8
+
+    - name: "iShares U.S. Technology ETF"
+      ticker: "IYW"
+      cik: "0000930667"
+      priority: 9
+
+    - name: "Global X Artificial Intelligence & Technology ETF"
+      ticker: "AIQ"
+      cik: "0001432353"
+      priority: 10
+
+  # General/diversified funds (10 funds)
+  general:
+    - name: "Berkshire Hathaway"
+      ticker: "BRK-A"
+      cik: "0001067983"
+      priority: 1
+
+    - name: "Bridgewater Associates"
+      ticker: ""
+      cik: "0001350694"
+      priority: 2
+
+    - name: "Health Care Select Sector SPDR Fund"
+      ticker: "XLV"
+      cik: "0001064641"
+      priority: 3
+
+    - name: "Energy Select Sector SPDR Fund"
+      ticker: "XLE"
+      cik: "0001064641"
+      priority: 4
+
+    - name: "Financial Select Sector SPDR Fund"
+      ticker: "XLF"
+      cik: "0001064641"
+      priority: 5
+
+    - name: "Industrial Select Sector SPDR Fund"
+      ticker: "XLI"
+      cik: "0001064641"
+      priority: 6
+
+    - name: "Consumer Discretionary Select Sector SPDR Fund"
+      ticker: "XLY"
+      cik: "0001064641"
+      priority: 7
+
+    - name: "Consumer Staples Select Sector SPDR Fund"
+      ticker: "XLP"
+      cik: "0001064641"
+      priority: 8
+
+    - name: "Utilities Select Sector SPDR Fund"
+      ticker: "XLU"
+      cik: "0001064641"
+      priority: 9
+
+    - name: "Materials Select Sector SPDR Fund"
+      ticker: "XLB"
+      cik: "0001064641"
+      priority: 10
+
+# =============================================================================
+# Market Indices
+# =============================================================================
+market_indices:
+  - name: "S&P 500"
+    symbol: "^GSPC"
+
+  - name: "Dow Jones Industrial Average"
+    symbol: "^DJI"
+
+  - name: "NASDAQ Composite"
+    symbol: "^IXIC"
+
+  - name: "Russell 2000"
+    symbol: "^RUT"
+
+# =============================================================================
+# Analysis Configuration
+# =============================================================================
+analysis:
+  # Confidence thresholds for recommendations
+  confidence_thresholds:
+    high: 0.8
+    medium: 0.6
+    low: 0.4
+
+  # Technical analysis parameters
+  technical:
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bollinger_period: 20
+    bollinger_std: 2
+    sma_periods: [20, 50, 200]
+
+  # Valuation metrics thresholds
+  valuation:
+    pe_ratio:
+      undervalued: 15
+      fair: 25
+      overvalued: 35
+    peg_ratio:
+      undervalued: 1.0
+      fair: 1.5
+      overvalued: 2.0
+    debt_to_equity:
+      low: 0.5
+      moderate: 1.0
+      high: 2.0
+
+# =============================================================================
+# AI/LLM Configuration
+# =============================================================================
+ai:
+  ollama:
+    model: "mistral:7b"
+    temperature: 0.3
+    max_tokens: 2048
+    timeout: 120
+
+  # Agent-specific settings
+  agents:
+    supervisor:
+      max_iterations: 10
+      timeout: 300
+
+    market_sentiment:
+      news_sources: 5
+      history_days: 7
+
+    stock_research:
+      max_retries: 3
+      fallback_enabled: true
+
+    analysis_engine:
+      peer_comparison_count: 5
+      forecast_months: 6
+
+# =============================================================================
+# Data Collection Strategy
+# =============================================================================
+data_collection:
+  # Progressive fallback pattern targets
+  fallback_targets:
+    direct_api: 0.90  # 90% target
+    mcp_extraction: 0.08  # 8% target
+    vision_analysis: 0.02  # 2% target
+
+  # Cache settings
+  cache:
+    stock_prices_ttl: 300  # 5 minutes
+    fundamentals_ttl: 3600  # 1 hour
+    news_ttl: 900  # 15 minutes
+    filings_ttl: 86400  # 24 hours
+
+# =============================================================================
+# Scheduling
+# =============================================================================
+scheduling:
+  market_sentiment:
+    schedule: "0 16 * * 1-5"  # 4 PM EST weekdays
+    timezone: "America/New_York"
+
+  fund_holdings:
+    trigger: "sensor"  # Triggered by SEC filing detection
+    check_interval: 3600  # Check every hour
+
+  stock_prices:
+    schedule: "*/5 16-20 * * 1-5"  # Every 5 min during market hours
+    timezone: "America/New_York"
+
+# =============================================================================
+# Performance Settings
+# =============================================================================
+performance:
+  max_concurrent_requests: 10
+  request_timeout: 30
+  batch_size: 50
+  memory_limit_mb: 2048
+  cache_hit_rate_target: 0.60
+
+# =============================================================================
+# Reporting
+# =============================================================================
+reporting:
+  pdf:
+    page_size: "A4"
+    margin: "1in"
+    include_charts: true
+    executive_summary: true
+
+  charts:
+    default_height: 400
+    default_width: 800
+    theme: "plotly_white"

@@ -1,0 +1,68 @@
+Can you Research on how to best develop a stock Research tool with he following functionality and requirements. The tool should Research interesting stocks based on Investments done by popular Funds and analyse the stocks itself and provide a Report with the results.
+Please do NOT start developing any code. This is just to Research the best way to implement this and to make a detailed Play to develop this later in Claude Code.
+
+## Technology used:
+The tool should be developed with he following Tools:
+- Python and all necessary plpugins or furhter tools
+- Langchain, Langraph
+- Ollama for the local AI models (this is already pre installed)
+- mcp-server: playwright, Context7, Chrome DevTools (please amke sure to install them before starting the tool
+- the tool should be able to parse Pdf-files and Excel files and csv-files
+- UI: web based: HTML, CSS, Java Script (feel free to add necessary Tools for a modern user friendly interface.
+
+## General aspects of the tool:
+The tool should be felxible to be able to analyse differnt Websites and analyse differnt Kinds of data Sources.
+The tool should Always estimate if it can analyse the data it can fetch directly from a source or if an ai Agent (see Point 6: Ai-Agent) should be used to get the relevantinformation.
+
+## The usual workflow will look like the follwoing:
+a) the user defines the Funds to be in the list of Investors (usually that will be done the first time the tool is used)
+b) the user starts the Research process by clicking a button: this will start the Overall market Sentiment and the Investors Research to get interesting stocks and an idea of the market Overall (both Options should be visible in the UI as tick boxes which are pre tickt, but the user can decide to untick them
+c) Alternative the user cann Input an individual stock or list of stocks via an Input field
+d) the user selects the stocks he wants to be analysed and clicks a button to start the analysed
+e) the results are displayed in the UI and can be downloaded as PDF-document.
+
+
+## Functionality:
+1. Overall market Sentiment:
+The tool should make a Research every day on the market Sentiment. The Evolution of the main Indexes like NASDAQ, S&P 500 and Dow Jones in the past 7 days and for the current day and the day before.
+Which are hot sectors and where are negative positions mostly.
+Are there any News for the day or the near future that could affect the stock market.
+
+2. Stock Research data:
+The tool should Research individual stocks that are passed as Argument. For this the tool should use mcps to Gather Information from finaincail webistes are will be defined in a config file. It will be necessary to take screenshots from the Websites to get all Information in some cases. For this a direct Access of the Website data and a ai Analysis of the taken creenshot should be possible. The first choice should Always be the direct Access. This decission should be visible in the UI (see below in the UI part for more details). It should be possible to link multiple resources to get the infroamtion from. This should be configured in the UI before the start of the tool and saved i a config file.
+Also it should be possible to retrieve the latest annual finaincial Statements from the relevant source. For this the tool should be able to search the Internet for this resouce and download it and if not possible to be uploaded by the user. This should be handeld via the UI interface and a relevant Information for the user.
+When will the Entity Report results next?
+
+3.Analyse the researched data from Point 2 above:
+The tool shuld use the gathered infromation from the Research part and analyse the stock. Please add relevant analyse possibilities to get an idea, if an Investment would be profatable within the next 6-12 month. Make sure to include metrics that fit generla stock but also growth stocks that are not yet profitable. Refresh on a daily Basis also the Industry avareage P/E Ratio to compare to the stock and ohter meaningfulmetrics.
+Teh result of the Analysis should be a summary of:
+- the Company profile,
+- the main Business case,
+- the competetion in the area,
+- the finaincial aspects of the Entity,
+- the Outlook in the future for the Entity and the product category
+- the currecnt stock Price and the estimate in 6 month
+- if this would be a good Investment
+- known Investors (see Point 4: Investors research)
+- Stock buy backs from the Entity
+- Insider selling/buying the stock
+
+4. Investors Research:
+The tool should Research on a daily basis or on request (this should be possible to configure in the UI and saved in the config file) the top 20 Funds on changes (buys/sells) of individual stocks in their funds. For this the tool Needs to use mcp Services that Need to be installed. The tool should first try to Gather the data directly from the relevant source (configured in the UI and saved in the config file) and if that does not work, use an AI Approach where the tool uses an AI to analyse screenshots taken fro the Website or Gather the infromation via an mcp Service. This decision shold be visible in the tool later, so the user knows how the data was gahtered.
+Please Research the top 20 funds and make sure that 10 are in the tech sector.
+The UI should Display a summary of the found stocks (where it was found, if sold or bought or hold) by how many Investors from the search list it was listed. The user should be able to make a selection of the stocks he wants to be researched and analysed. For this selection the tool should do the Research under Point 2 and the Analysis under Point 3 Above. The results will be displayed in the UI as well as the Progress.
+The user should also be able to add individual stocks to be researched and analysed. The percentual allocation of the indivudual stock in the fund should be displayed for the user as Information.
+
+5. UI:
+The UI should make it possible for the user to configure the Above mentioned functions and Basic Settings, which will be saved in a config file. The Output should be user freindly and in a modern design.
+For the data displayed that was researched by the tool, the user shuld Always know, if the data was directly gathered or with the help of an AI.
+Teh user should be able to Chose which AI model will be used before the tool starts.
+
+6. AI-Agent:
+The tol should provide an ai Agent that will be responsible for deciding the best way to Gather Information that is needed. For this the needed infromation should be passed to the Agent and the source where to get it from. The Agent Need to use relevant mcp-servers to Gather the Information in the best was. This can be by directly accessing the data on the Website and returning them in a meaninful Format or via a screesnhot of the Website or a download of a document and then analysing the document and returning the relevant infromation. 
+
+7. Reports:
+The tool should produce a Report summarizing all results from the Analysis and provide the Report as webbased Report and to download as pdf.
+
+Please do NOT start developing any code. This is just to Research the best way to implement this and to make a detailed Play to develop this later in Claude Code.
+
