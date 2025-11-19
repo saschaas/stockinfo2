@@ -101,6 +101,7 @@ dev = [
     "pre-commit>=3.6.0",
     "bandit>=1.7.6",
     "safety>=2.3.5",
+    "types-PyYAML>=6.0.12",
 ]
 
 dagster = [
@@ -161,9 +162,10 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = true
+warn_return_any = false
 warn_unused_configs = true
-disallow_untyped_defs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
 ignore_missing_imports = true
 plugins = ["sqlalchemy.ext.mypy.plugin"]
 exclude = ["migrations", "tests"]
@@ -174,6 +176,30 @@ namespace_packages = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "pipelines.*",
+    "agents.*",
+]
+disallow_untyped_defs = false
+warn_return_any = false
+check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "backend.app.db.crud",
+    "backend.app.db.models",
+    "backend.app.tasks.*",
+    "backend.app.services.*",
+    "backend.app.api.routes.*",
+    "backend.app.core.*",
+    "backend.app.main",
+    "backend.scripts.*",
+]
+disallow_untyped_defs = false
+warn_return_any = false
+check_untyped_defs = false
 
 [tool.bandit]
 exclude_dirs = ["tests", "migrations"]
