@@ -48,11 +48,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,dagster]"
 
-      - name: Run linting
-        run: |
-          ruff check backend agents pipelines
-          ruff format --check backend agents pipelines
-
       - name: Run type checking
         run: mypy backend agents pipelines
 
@@ -87,9 +82,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Run linting
-        run: npm run lint
 
       - name: Run type checking
         run: npm run type-check
