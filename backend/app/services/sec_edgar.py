@@ -24,6 +24,7 @@ class SECEdgarClient:
     """Client for SEC EDGAR API to fetch 13F filings."""
 
     BASE_URL = "https://data.sec.gov"
+    WWW_URL = "https://www.sec.gov"
     SUBMISSIONS_URL = "https://data.sec.gov/submissions"
 
     def __init__(self) -> None:
@@ -162,38 +163,55 @@ class SECEdgarClient:
 
         # Format accession number for URL
         acc_formatted = accession_number.replace("-", "")
-        cik_padded = cik.lstrip("0").zfill(10)
+        cik_stripped = cik.lstrip("0")
 
-        # Try to find the information table XML
-        index_url = f"{self.BASE_URL}/Archives/edgar/data/{cik_padded}/{acc_formatted}/index.json"
+        # Common info table XML file names to try
+        common_names = [
+            "form13fInfoTable.xml",
+            "infotable.xml",
+            "InfoTable.xml",
+            "INFOTABLE.xml",
+        ]
+
+        xml_content = None
+        base_path = f"/Archives/edgar/data/{cik_stripped}/{acc_formatted}"
+
+        # Try common file names first (faster)
+        for filename in common_names:
+            xml_url = f"{self.WWW_URL}{base_path}/{filename}"
+            try:
+                xml_content = await self._make_request(xml_url, accept="application/xml")
+                if xml_content and not xml_content.startswith("<?xml") or "<Error>" not in str(xml_content)[:100]:
+                    logger.info("Found info table", url=xml_url)
+                    break
+                xml_content = None
+            except Exception:
+                continue
+
+        # If common names didn't work, parse HTML index to find the file
+        if not xml_content:
+            try:
+                index_url = f"{self.WWW_URL}{base_path}/{accession_number}-index.htm"
+                html_content = await self._make_request(index_url, accept="text/html")
+
+                # Parse HTML to find info table XML file
+                soup = BeautifulSoup(html_content, "lxml")
+                for link in soup.find_all("a", href=True):
+                    href = link["href"].lower()
+                    if "infotable" in href and href.endswith(".xml"):
+                        # Extract filename from href
+                        filename = link["href"].split("/")[-1]
+                        xml_url = f"{self.WWW_URL}{base_path}/{filename}"
+                        xml_content = await self._make_request(xml_url, accept="application/xml")
+                        break
+            except Exception as e:
+                logger.warning("Failed to parse HTML index", cik=cik, error=str(e))
+
+        if not xml_content:
+            logger.warning("No information table found", cik=cik, accession=accession_number)
+            return []
 
         try:
-            index_data = await self._make_request(index_url)
-
-            # Find the information table file
-            info_table_file = None
-            for item in index_data.get("directory", {}).get("item", []):
-                name = item.get("name", "").lower()
-                if "infotable" in name and name.endswith(".xml"):
-                    info_table_file = item.get("name")
-                    break
-
-            if not info_table_file:
-                # Try alternative naming
-                for item in index_data.get("directory", {}).get("item", []):
-                    name = item.get("name", "").lower()
-                    if name.endswith(".xml") and "table" in name:
-                        info_table_file = item.get("name")
-                        break
-
-            if not info_table_file:
-                logger.warning("No information table found", cik=cik, accession=accession_number)
-                return []
-
-            # Fetch and parse the XML
-            xml_url = f"{self.BASE_URL}/Archives/edgar/data/{cik_padded}/{acc_formatted}/{info_table_file}"
-            xml_content = await self._make_request(xml_url, accept="application/xml")
-
             holdings = self._parse_13f_xml(xml_content)
 
             # Cache for 24 hours

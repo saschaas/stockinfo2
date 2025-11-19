@@ -210,9 +210,13 @@ async def refresh_fund_holdings(
 
     This will queue a job to check for new 13F filings and update holdings.
     """
-    # TODO: Implement Celery task for fund holdings refresh
+    from backend.app.tasks.funds import check_fund_holdings
+
+    # Send task to Celery
+    task = check_fund_holdings.delay()
+
     return {
         "status": "queued",
         "message": "Fund holdings refresh has been queued",
-        "job_id": "placeholder",
+        "job_id": task.id,
     }

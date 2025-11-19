@@ -107,12 +107,18 @@ async def start_stock_research(
 
     Returns a job ID that can be used to track progress via WebSocket.
     """
-    # TODO: Implement Celery task for stock research
-    import uuid
-    job_id = str(uuid.uuid4())
+    from backend.app.tasks.research import research_stock
+
+    # Send task to Celery
+    task = research_stock.delay(
+        ticker=request.ticker.upper(),
+        include_peers=True,
+        include_technical=True,
+        include_ai_analysis=True,
+    )
 
     return StockResearchResponse(
-        job_id=job_id,
+        job_id=task.id,
         ticker=request.ticker.upper(),
         status="queued",
         message=f"Research job queued for {request.ticker.upper()}",

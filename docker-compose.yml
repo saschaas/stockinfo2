@@ -64,6 +64,8 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - OLLAMA_BASE_URL=http://ollama:11434
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
@@ -87,6 +89,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        INSTALL_EXTRAS: dagster
     container_name: stockinfo-celery-worker
     command: celery -A backend.app.celery_app worker --loglevel=info --concurrency=4
     environment:
@@ -95,6 +99,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_HOST=http://ollama:11434
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
     depends_on:

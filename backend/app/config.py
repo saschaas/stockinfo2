@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(
         default="http://localhost:11434", description="Ollama server URL"
     )
-    ollama_model: str = Field(default="mistral:7b", description="Default Ollama model")
+    ollama_model: str = Field(default="llama3.2", description="Default Ollama model")
 
     # ==========================================================================
     # Logging

@@ -104,9 +104,13 @@ async def refresh_market_sentiment(
 
     This will queue a job to fetch latest market data and run sentiment analysis.
     """
-    # TODO: Implement Celery task for market sentiment refresh
+    from backend.app.tasks.market import refresh_market_sentiment as refresh_task
+
+    # Send task to Celery
+    task = refresh_task.delay()
+
     return {
         "status": "queued",
         "message": "Market sentiment refresh has been queued",
-        "job_id": "placeholder",
+        "job_id": task.id,
     }

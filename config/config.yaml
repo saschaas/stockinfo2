@@ -32,59 +32,59 @@ data_sources:
 # Fund Tracking Configuration
 # =============================================================================
 funds:
-  # Tech-focused funds (10 funds)
+  # Tech-focused funds (10 funds) - Investment managers known for tech holdings
   tech_focused:
-    - name: "ARK Innovation ETF"
+    - name: "ARK Investment Management"
       ticker: "ARKK"
-      cik: "0001579982"
+      cik: "0001697748"
       priority: 1
 
-    - name: "Technology Select Sector SPDR"
-      ticker: "XLK"
-      cik: "0001064641"
+    - name: "Coatue Management"
+      ticker: ""
+      cik: "0001535392"
       priority: 2
 
-    - name: "Vanguard Information Technology ETF"
-      ticker: "VGT"
-      cik: "0000876437"
+    - name: "Tiger Global Management"
+      ticker: ""
+      cik: "0001167483"
       priority: 3
 
-    - name: "iShares Global Tech ETF"
-      ticker: "IXN"
-      cik: "0000930667"
+    - name: "Dragoneer Investment Group"
+      ticker: ""
+      cik: "0001699197"
       priority: 4
 
-    - name: "Global X Robotics & Artificial Intelligence ETF"
-      ticker: "BOTZ"
-      cik: "0001432353"
+    - name: "Altimeter Capital Management"
+      ticker: ""
+      cik: "0001649339"
       priority: 5
 
-    - name: "BGF Next Generation Technology Fund"
-      ticker: "BGSAX"
-      cik: "0000225030"
+    - name: "Lone Pine Capital"
+      ticker: ""
+      cik: "0000934791"
       priority: 6
 
-    - name: "Janus Henderson Global Technology Leaders Fund"
-      ticker: "JAGTX"
-      cik: "0000277751"
+    - name: "Viking Global Investors"
+      ticker: ""
+      cik: "0001103804"
       priority: 7
 
-    - name: "Polar Capital Global Technology Fund"
-      ticker: "PCTIX"
-      cik: ""
+    - name: "Whale Rock Capital Management"
+      ticker: ""
+      cik: "0001530301"
       priority: 8
 
-    - name: "iShares U.S. Technology ETF"
-      ticker: "IYW"
-      cik: "0000930667"
+    - name: "Light Street Capital"
+      ticker: ""
+      cik: "0001569391"
       priority: 9
 
-    - name: "Global X Artificial Intelligence & Technology ETF"
-      ticker: "AIQ"
-      cik: "0001432353"
+    - name: "Durable Capital Partners"
+      ticker: ""
+      cik: "0001810090"
       priority: 10
 
-  # General/diversified funds (10 funds)
+  # General/diversified funds (10 funds) - Institutional managers that file 13F
   general:
     - name: "Berkshire Hathaway"
       ticker: "BRK-A"
@@ -96,44 +96,44 @@ funds:
       cik: "0001350694"
       priority: 2
 
-    - name: "Health Care Select Sector SPDR Fund"
-      ticker: "XLV"
-      cik: "0001064641"
+    - name: "Renaissance Technologies"
+      ticker: ""
+      cik: "0001037389"
       priority: 3
 
-    - name: "Energy Select Sector SPDR Fund"
-      ticker: "XLE"
-      cik: "0001064641"
+    - name: "Two Sigma Investments"
+      ticker: ""
+      cik: "0001179392"
       priority: 4
 
-    - name: "Financial Select Sector SPDR Fund"
-      ticker: "XLF"
-      cik: "0001064641"
+    - name: "Citadel Advisors"
+      ticker: ""
+      cik: "0001423053"
       priority: 5
 
-    - name: "Industrial Select Sector SPDR Fund"
-      ticker: "XLI"
-      cik: "0001064641"
+    - name: "DE Shaw & Co"
+      ticker: ""
+      cik: "0001009207"
       priority: 6
 
-    - name: "Consumer Discretionary Select Sector SPDR Fund"
-      ticker: "XLY"
-      cik: "0001064641"
+    - name: "Millennium Management"
+      ticker: ""
+      cik: "0000892450"
       priority: 7
 
-    - name: "Consumer Staples Select Sector SPDR Fund"
-      ticker: "XLP"
-      cik: "0001064641"
+    - name: "Point72 Asset Management"
+      ticker: ""
+      cik: "0001603466"
       priority: 8
 
-    - name: "Utilities Select Sector SPDR Fund"
-      ticker: "XLU"
-      cik: "0001064641"
+    - name: "Third Point LLC"
+      ticker: ""
+      cik: "0001040273"
       priority: 9
 
-    - name: "Materials Select Sector SPDR Fund"
-      ticker: "XLB"
-      cik: "0001064641"
+    - name: "Pershing Square Capital"
+      ticker: ""
+      cik: "0001336528"
       priority: 10
 
 # =============================================================================
