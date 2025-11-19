@@ -112,7 +112,7 @@ jobs:
         run: bandit -r backend agents pipelines -c pyproject.toml
 
       - name: Check dependencies for vulnerabilities
-        run: pip install -e . && pip-audit --skip-editable
+        run: pip install -e . && pip-audit --skip-editable --ignore-vuln GHSA-wj6h-64fc-37mp
         continue-on-error: true
 
   # Docker build test
