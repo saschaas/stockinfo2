@@ -1,12 +1,34 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { fetchFunds, fetchFundHoldings, fetchFundChanges } from '../../services/api'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { fetchFunds, fetchFundHoldings, fetchFundChanges, addFund, removeFund, validateFund, searchFunds } from '../../services/api'
+
+interface SearchResult {
+  cik: string
+  name: string
+  ticker: string | null
+  has_13f_filings: boolean
+  is_recommended: boolean
+  latest_filing_date: string | null
+}
 
 export default function FundTracker() {
   const [selectedFund, setSelectedFund] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<'holdings' | 'changes' | 'new' | 'sold'>('holdings')
+  const [newFundCik, setNewFundCik] = useState('')
+  const [newFundName, setNewFundName] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [addSuccess, setAddSuccess] = useState<string | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
+  const hasValidated = useRef(false)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const { data: funds, isLoading: fundsLoading } = useQuery({
+  const queryClient = useQueryClient()
+
+  const { data: funds, isLoading: fundsLoading, error: fundsError } = useQuery({
     queryKey: ['funds'],
     queryFn: () => fetchFunds(),
   })
@@ -23,6 +45,161 @@ export default function FundTracker() {
     enabled: !!selectedFund && (activeTab === 'changes' || activeTab === 'new' || activeTab === 'sold'),
   })
 
+  // Mutation for removing a fund
+  const removeFundMutation = useMutation({
+    mutationFn: removeFund,
+    onSuccess: (_data, fundId) => {
+      queryClient.invalidateQueries({ queryKey: ['funds'] })
+      if (selectedFund === fundId) {
+        setSelectedFund(null)
+      }
+    },
+  })
+
+  // Mutation for adding a fund
+  const addFundMutation = useMutation({
+    mutationFn: ({ cik, name }: { cik: string; name?: string }) => addFund(cik, name),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['funds'] })
+      setNewFundCik('')
+      setNewFundName('')
+      setAddError(null)
+      setAddSuccess(`Fund "${data.name}" added successfully!`)
+      setTimeout(() => setAddSuccess(null), 5000)
+    },
+    onError: (error: any) => {
+      setAddError(error.response?.data?.detail || 'Failed to add fund')
+      setAddSuccess(null)
+    },
+  })
+
+  // Validate all funds on startup and remove invalid ones
+  useEffect(() => {
+    const validateAllFunds = async () => {
+      if (!funds?.funds || funds.funds.length === 0 || hasValidated.current) return
+
+      hasValidated.current = true
+      const invalidFundIds: number[] = []
+
+      // Validate all funds first
+      for (const fund of funds.funds) {
+        if (fund.cik) {
+          try {
+            const validation = await validateFund(fund.cik, fund.name)
+            if (!validation.is_valid) {
+              console.warn(`Invalid fund detected: ${fund.name} (${fund.cik}) - ${validation.error}`)
+              invalidFundIds.push(fund.id)
+            }
+          } catch (error) {
+            console.error(`Error validating fund ${fund.name}:`, error)
+          }
+        }
+      }
+
+      // Remove all invalid funds
+      if (invalidFundIds.length > 0) {
+        console.log(`Removing ${invalidFundIds.length} invalid funds...`)
+        for (const fundId of invalidFundIds) {
+          try {
+            await removeFund(fundId)
+            console.log(`Removed fund ID ${fundId}`)
+          } catch (error) {
+            console.error(`Error removing fund ${fundId}:`, error)
+          }
+        }
+        // Refresh the funds list after all removals
+        queryClient.invalidateQueries({ queryKey: ['funds'] })
+      }
+    }
+
+    validateAllFunds()
+  }, [funds, queryClient])
+
+  // Handle search input with debouncing
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Don't search if query is too short
+    if (value.length < 2) {
+      setSearchResults([])
+      setShowSearchResults(false)
+      return
+    }
+
+    // Debounce search
+    setIsSearching(true)
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await searchFunds(value)
+        setSearchResults(results.results || [])
+        setShowSearchResults(true)
+      } catch (error) {
+        console.error('Search failed:', error)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+  }
+
+  // Handle selecting a search result
+  const handleSelectSearchResult = (result: SearchResult) => {
+    setNewFundCik(result.cik)
+    setNewFundName(result.name)
+    setSearchQuery('')
+    setSearchResults([])
+    setShowSearchResults(false)
+  }
+
+  const handleAddFund = async () => {
+    if (!newFundCik.trim()) {
+      setAddError('Please enter a CIK or search for a fund')
+      return
+    }
+
+    setAddError(null)
+    setAddSuccess(null)
+    setIsValidating(true)
+
+    try {
+      // Validate first
+      const validation = await validateFund(newFundCik.trim(), newFundName.trim() || undefined)
+
+      if (!validation.is_valid) {
+        setAddError(validation.error || 'Validation failed')
+        setIsValidating(false)
+        return
+      }
+
+      if (validation.fund_type === 'etf') {
+        setAddError('ETFs are not supported. Please add only investment funds that file 13F forms.')
+        setIsValidating(false)
+        return
+      }
+
+      // If validation passed, add the fund
+      await addFundMutation.mutateAsync({
+        cik: newFundCik.trim(),
+        name: newFundName.trim() || validation.name || undefined,
+      })
+    } catch (error: any) {
+      setAddError(error.response?.data?.detail || error.message || 'Failed to add fund')
+    } finally {
+      setIsValidating(false)
+    }
+  }
+
+  const handleRemoveFund = (fundId: number, fundName: string) => {
+    if (confirm(`Are you sure you want to remove "${fundName}" from the tracked list?`)) {
+      removeFundMutation.mutate(fundId)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Fund Tracker</h2>
@@ -38,25 +215,142 @@ export default function FundTracker() {
                 <div key={i} className="h-10 bg-gray-200 rounded"></div>
               ))}
             </div>
+          ) : fundsError ? (
+            <div className="text-red-600 text-sm">Error loading funds</div>
           ) : (
-            <div className="space-y-2">
-              {funds?.funds?.map((fund: any) => (
-                <button
-                  key={fund.id}
-                  onClick={() => setSelectedFund(fund.id)}
-                  className={`w-full text-left px-4 py-2 rounded-lg ${
-                    selectedFund === fund.id
-                      ? 'bg-primary-100 text-primary-800'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="font-medium text-sm">{fund.name}</div>
-                  {fund.ticker && (
-                    <div className="text-xs text-gray-500">{fund.ticker}</div>
-                  )}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="space-y-2 mb-6">
+                {funds?.funds?.map((fund: any) => (
+                  <div
+                    key={fund.id}
+                    className={`flex items-center justify-between px-4 py-2 rounded-lg ${
+                      selectedFund === fund.id
+                        ? 'bg-primary-100 text-primary-800'
+                        : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    <button
+                      onClick={() => setSelectedFund(fund.id)}
+                      className="flex-1 text-left"
+                    >
+                      <div className="font-medium text-sm">{fund.name}</div>
+                      {fund.ticker && (
+                        <div className="text-xs text-gray-500">{fund.ticker}</div>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleRemoveFund(fund.id, fund.name)}
+                      className="ml-2 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      title="Remove fund"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Fund Form */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Add New Fund</h4>
+
+                {addError && (
+                  <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                    {addError}
+                  </div>
+                )}
+
+                {addSuccess && (
+                  <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                    {addSuccess}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search funds (e.g., FMR, Fidelity, or CIK)"
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    {isSearching && (
+                      <div className="absolute right-3 top-2.5 text-gray-400 text-xs">
+                        Searching...
+                      </div>
+                    )}
+
+                    {/* Search Results Dropdown */}
+                    {showSearchResults && searchResults.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {searchResults.map((result) => (
+                          <div
+                            key={result.cik}
+                            onClick={() => handleSelectSearchResult(result)}
+                            className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${
+                              result.is_recommended ? 'bg-green-50' : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm text-gray-900">
+                                  {result.name}
+                                  {result.is_recommended && (
+                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                      ✓ Recommended
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  CIK: {result.cik}
+                                  {result.ticker && ` • Ticker: ${result.ticker}`}
+                                  {result.has_13f_filings && result.latest_filing_date && (
+                                    <span> • Latest filing: {result.latest_filing_date}</span>
+                                  )}
+                                </div>
+                                {!result.has_13f_filings && (
+                                  <div className="text-xs text-orange-600 mt-0.5">
+                                    ⚠ No 13F filings found
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CIK and Name Inputs (Auto-filled from search) */}
+                  <input
+                    type="text"
+                    placeholder="CIK (auto-filled from search)"
+                    value={newFundCik}
+                    onChange={(e) => setNewFundCik(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
+                    readOnly
+                  />
+                  <input
+                    type="text"
+                    placeholder="Fund Name (auto-filled from search)"
+                    value={newFundName}
+                    onChange={(e) => setNewFundName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
+                    readOnly
+                  />
+                  <button
+                    onClick={handleAddFund}
+                    disabled={isValidating || addFundMutation.isPending || !newFundCik}
+                    className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    {isValidating || addFundMutation.isPending ? 'Adding...' : 'Add Fund'}
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
 

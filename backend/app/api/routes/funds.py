@@ -3,7 +3,8 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,14 +16,65 @@ from backend.app.schemas.funds import (
     FundHoldingsResponse,
     FundChangesResponse,
 )
+from backend.app.services.fund_validator import get_fund_validator
 
 router = APIRouter()
+
+
+# Request/Response models
+class AddFundRequest(BaseModel):
+    """Request body for adding a new fund."""
+
+    cik: str = Field(..., description="Central Index Key (CIK)")
+    name: str | None = Field(None, description="Optional fund name")
+    category: str = Field(default="general", description="Fund category")
+
+
+class ValidateFundResponse(BaseModel):
+    """Response for fund validation."""
+
+    is_valid: bool
+    fund_type: str | None
+    name: str | None
+    has_13f_filings: bool
+    latest_filing_date: str | None
+    error: str | None
+
+
+class FundSearchResult(BaseModel):
+    """Single search result."""
+
+    cik: str
+    name: str
+    ticker: str | None
+    has_13f_filings: bool
+    is_recommended: bool
+    latest_filing_date: str | None
+
+
+class FundSearchResponse(BaseModel):
+    """Response for fund search."""
+
+    query: str
+    results: list[FundSearchResult]
+
+
+class AddFundResponse(BaseModel):
+    """Response for adding a fund."""
+
+    id: int
+    name: str
+    cik: str
+    fund_type: str
+    category: str
+    message: str
 
 
 @router.get("/", response_model=FundListResponse)
 async def list_funds(
     category: str | None = Query(default=None, description="Filter by category (tech_focused, general)"),
     active_only: bool = Query(default=True),
+    funds_only: bool = Query(default=True, description="Exclude ETFs, show only funds"),
     db: AsyncSession = Depends(get_db),
 ) -> FundListResponse:
     """List all tracked funds.
@@ -35,6 +87,8 @@ async def list_funds(
         stmt = stmt.where(Fund.category == category)
     if active_only:
         stmt = stmt.where(Fund.is_active == True)
+    if funds_only:
+        stmt = stmt.where(Fund.fund_type == "fund")
 
     result = await db.execute(stmt)
     funds = result.scalars().all()
@@ -232,4 +286,245 @@ async def refresh_fund_holdings(
         "status": "queued",
         "message": "Fund holdings refresh has been queued",
         "job_id": task.id,
+    }
+
+
+@router.get("/search", response_model=FundSearchResponse)
+async def search_funds(
+    query: str = Query(..., min_length=2, description="Search query (name, ticker, or CIK)"),
+    limit: int = Query(default=5, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
+) -> FundSearchResponse:
+    """Search for funds in SEC database and local tracked funds.
+
+    Returns matching entities with information about whether they have 13F filings.
+    Results from local database are prioritized, followed by results with 13F filings.
+    """
+    import structlog
+    from backend.app.services.sec_edgar import get_sec_edgar_client
+
+    logger = structlog.get_logger(__name__)
+    results = []
+    seen_ciks = set()
+
+    # First, search local database for matching funds
+    query_upper = query.upper()
+    query_padded = query.strip().lstrip("0").zfill(10) if query.strip().isdigit() else None
+
+    logger.info("Searching local database", query=query, query_padded=query_padded)
+
+    # Build search conditions
+    if query_padded:
+        # If query is all digits, search by CIK
+        local_stmt = select(Fund).where(Fund.cik == query_padded)
+    else:
+        # Otherwise search by name, ticker, or CIK substring
+        local_stmt = select(Fund).where(
+            (Fund.name.ilike(f"%{query}%")) |
+            (Fund.ticker.ilike(f"%{query}%")) |
+            (Fund.cik.like(f"%{query}%"))
+        )
+
+    local_result = await db.execute(local_stmt)
+    local_funds = local_result.scalars().all()
+
+    logger.info("Local database search completed", query=query, local_funds_count=len(local_funds))
+
+    # Add local funds first (highest priority)
+    for fund in local_funds:
+        if fund.cik in seen_ciks:
+            continue
+        seen_ciks.add(fund.cik)
+
+        # Get latest filing date if available
+        latest_filing_stmt = (
+            select(func.max(FundHolding.filing_date))
+            .where(FundHolding.fund_id == fund.id)
+        )
+        filing_result = await db.execute(latest_filing_stmt)
+        latest_date = filing_result.scalar()
+
+        results.append(
+            FundSearchResult(
+                cik=fund.cik,
+                name=fund.name,
+                ticker=fund.ticker,
+                has_13f_filings=True,  # Already in database means validated
+                is_recommended=True,  # Local funds are always recommended
+                latest_filing_date=latest_date.isoformat() if latest_date else None,
+            )
+        )
+
+    # Then search SEC database for additional matches
+    client = await get_sec_edgar_client()
+    search_results = await client.search_companies(query, limit * 3)
+
+    # Check each SEC result for 13F filings
+    for company in search_results:
+        # Skip if already added from local database
+        if company["cik"] in seen_ciks:
+            continue
+        seen_ciks.add(company["cik"])
+
+        has_filings = False
+        latest_date = None
+
+        try:
+            # Quick check for 13F filings
+            filings = await client.get_13f_filings(company["cik"])
+            has_filings = len(filings) > 0
+            if filings:
+                latest_date = filings[0].get("filing_date")
+        except Exception:
+            # If we can't check filings, assume no filings
+            pass
+
+        results.append(
+            FundSearchResult(
+                cik=company["cik"],
+                name=company["name"],
+                ticker=company.get("ticker"),
+                has_13f_filings=has_filings,
+                is_recommended=has_filings,  # Recommend entities with 13F filings
+                latest_filing_date=latest_date,
+            )
+        )
+
+    # Sort results: local funds first, then recommended (with 13F filings), then by name
+    results.sort(key=lambda x: (
+        x.cik not in [f.cik for f in local_funds],  # Local funds first
+        not x.is_recommended,  # Then recommended
+        x.name  # Then alphabetically
+    ))
+
+    return FundSearchResponse(
+        query=query,
+        results=results[:limit],
+    )
+
+
+@router.get("/validate/{cik}", response_model=ValidateFundResponse)
+async def validate_fund(
+    cik: Annotated[str, Path(description="CIK to validate")],
+    name: str | None = Query(default=None, description="Optional fund name"),
+) -> ValidateFundResponse:
+    """Validate that a CIK belongs to a fund with available data.
+
+    Returns validation results including whether the entity is a fund (not ETF)
+    and if 13F filing data is available.
+    """
+    validator = get_fund_validator()
+    result = await validator.validate_fund(cik, name)
+    return ValidateFundResponse(**result)
+
+
+@router.post("/", response_model=AddFundResponse)
+async def add_fund(
+    request: AddFundRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AddFundResponse:
+    """Add a new fund to the tracked list.
+
+    Validates that the CIK belongs to a fund (not ETF) and has available data
+    before adding it to the database.
+    """
+    # Validate the fund first
+    validator = get_fund_validator()
+    validation = await validator.validate_fund(request.cik, request.name)
+
+    if not validation["is_valid"]:
+        raise HTTPException(
+            status_code=400,
+            detail=validation.get("error", "Fund validation failed"),
+        )
+
+    # Check if fund already exists
+    cik_padded = request.cik.strip().lstrip("0").zfill(10)
+    stmt = select(Fund).where(Fund.cik == cik_padded)
+    result = await db.execute(stmt)
+    existing_fund = result.scalar_one_or_none()
+
+    if existing_fund:
+        # If fund exists but is inactive, reactivate it
+        if not existing_fund.is_active:
+            existing_fund.is_active = True
+            await db.commit()
+
+            # Trigger automatic holdings fetch for the reactivated fund
+            from backend.app.tasks.funds import refresh_single_fund
+
+            refresh_single_fund.delay(existing_fund.id)
+
+            return AddFundResponse(
+                id=existing_fund.id,
+                name=existing_fund.name,
+                cik=existing_fund.cik,
+                fund_type=existing_fund.fund_type,
+                category=existing_fund.category,
+                message="Fund reactivated successfully. Holdings are being fetched in the background.",
+            )
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail="Fund already exists in the tracked list",
+            )
+
+    # Get the highest priority for the category
+    max_priority_stmt = select(func.max(Fund.priority)).where(
+        Fund.category == request.category
+    )
+    result = await db.execute(max_priority_stmt)
+    max_priority = result.scalar() or 0
+
+    # Create new fund
+    new_fund = Fund(
+        name=validation["name"] or request.name or f"Fund {cik_padded}",
+        cik=cik_padded,
+        fund_type=validation["fund_type"],
+        category=request.category,
+        priority=max_priority + 1,
+        is_active=True,
+    )
+
+    db.add(new_fund)
+    await db.commit()
+    await db.refresh(new_fund)
+
+    # Trigger automatic holdings fetch for the new fund
+    from backend.app.tasks.funds import refresh_single_fund
+
+    refresh_single_fund.delay(new_fund.id)
+
+    return AddFundResponse(
+        id=new_fund.id,
+        name=new_fund.name,
+        cik=new_fund.cik,
+        fund_type=new_fund.fund_type,
+        category=new_fund.category,
+        message="Fund added successfully. Holdings are being fetched in the background.",
+    )
+
+
+@router.delete("/{fund_id}")
+async def remove_fund(
+    fund_id: Annotated[int, Path(ge=1)],
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Remove a fund from the tracked list.
+
+    This deactivates the fund rather than deleting it to preserve historical data.
+    """
+    # Get fund
+    fund = await db.get(Fund, fund_id)
+    if not fund:
+        raise NotFoundException("Fund", str(fund_id))
+
+    # Deactivate the fund
+    fund.is_active = False
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Fund '{fund.name}' has been removed from the tracked list",
+        "fund_id": fund_id,
     }

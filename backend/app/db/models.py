@@ -62,6 +62,9 @@ class Fund(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     ticker: Mapped[str] = mapped_column(String(20), nullable=True, index=True)
     cik: Mapped[str] = mapped_column(String(20), nullable=True, index=True)
+    fund_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="fund"
+    )  # fund or etf
     category: Mapped[str] = mapped_column(
         String(50), nullable=False, default="general"
     )  # tech_focused or general

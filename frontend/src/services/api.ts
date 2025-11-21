@@ -65,9 +65,9 @@ export async function fetchFundOwnership(ticker: string) {
 }
 
 // Fund endpoints
-export async function fetchFunds(category?: string, activeOnly: boolean = true) {
+export async function fetchFunds(category?: string, activeOnly: boolean = true, fundsOnly: boolean = true) {
   const { data } = await api.get('/funds', {
-    params: { category, active_only: activeOnly },
+    params: { category, active_only: activeOnly, funds_only: fundsOnly },
   })
   return data
 }
@@ -86,6 +86,34 @@ export async function fetchFundChanges(fundId: number) {
 
 export async function refreshFundHoldings() {
   const { data } = await api.post('/funds/refresh')
+  return data
+}
+
+export async function searchFunds(query: string, limit: number = 5) {
+  const { data } = await api.get('/funds/search', {
+    params: { query, limit },
+  })
+  return data
+}
+
+export async function validateFund(cik: string, name?: string) {
+  const { data } = await api.get(`/funds/validate/${cik}`, {
+    params: name ? { name } : {},
+  })
+  return data
+}
+
+export async function addFund(cik: string, name?: string, category: string = 'general') {
+  const { data } = await api.post('/funds', {
+    cik,
+    name,
+    category,
+  })
+  return data
+}
+
+export async function removeFund(fundId: number) {
+  const { data } = await api.delete(`/funds/${fundId}`)
   return data
 }
 

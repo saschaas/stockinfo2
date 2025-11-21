@@ -34,6 +34,9 @@ env/
 *.swo
 *~
 
+# Images
+*.png
+
 # Environment variables
 .env
 .env.local
