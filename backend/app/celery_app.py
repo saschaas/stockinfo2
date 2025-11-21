@@ -1,6 +1,7 @@
 """Celery application configuration."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from backend.app.config import get_settings
 
@@ -39,11 +40,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "market-sentiment-daily": {
         "task": "backend.app.tasks.market.refresh_market_sentiment",
-        "schedule": {
-            "hour": 16,
-            "minute": 0,
-            "day_of_week": "1-5",  # Monday-Friday
-        },
+        "schedule": crontab(hour=16, minute=0, day_of_week="1-5"),  # Monday-Friday at 4 PM
     },
     "fund-holdings-check": {
         "task": "backend.app.tasks.funds.check_fund_holdings",

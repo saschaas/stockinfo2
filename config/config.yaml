@@ -35,7 +35,7 @@ funds:
   # Tech-focused funds (10 funds) - Investment managers known for tech holdings
   tech_focused:
     - name: "ARK Investment Management"
-      ticker: "ARKK"
+      ticker: ""
       cik: "0001697748"
       priority: 1
 
@@ -87,7 +87,7 @@ funds:
   # General/diversified funds (10 funds) - Institutional managers that file 13F
   general:
     - name: "Berkshire Hathaway"
-      ticker: "BRK-A"
+      ticker: ""
       cik: "0001067983"
       priority: 1
 

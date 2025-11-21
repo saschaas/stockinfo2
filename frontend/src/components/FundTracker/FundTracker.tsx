@@ -4,7 +4,7 @@ import { fetchFunds, fetchFundHoldings, fetchFundChanges } from '../../services/
 
 export default function FundTracker() {
   const [selectedFund, setSelectedFund] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState<'holdings' | 'changes'>('holdings')
+  const [activeTab, setActiveTab] = useState<'holdings' | 'changes' | 'new' | 'sold'>('holdings')
 
   const { data: funds, isLoading: fundsLoading } = useQuery({
     queryKey: ['funds'],
@@ -20,7 +20,7 @@ export default function FundTracker() {
   const { data: changes, isLoading: changesLoading } = useQuery({
     queryKey: ['fundChanges', selectedFund],
     queryFn: () => fetchFundChanges(selectedFund!),
-    enabled: !!selectedFund && activeTab === 'changes',
+    enabled: !!selectedFund && (activeTab === 'changes' || activeTab === 'new' || activeTab === 'sold'),
   })
 
   return (
@@ -87,6 +87,26 @@ export default function FundTracker() {
                   >
                     Recent Changes
                   </button>
+                  <button
+                    onClick={() => setActiveTab('new')}
+                    className={`px-6 py-3 text-sm font-medium ${
+                      activeTab === 'new'
+                        ? 'border-b-2 border-primary-500 text-primary-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    New Stocks
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('sold')}
+                    className={`px-6 py-3 text-sm font-medium ${
+                      activeTab === 'sold'
+                        ? 'border-b-2 border-primary-500 text-primary-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Sold Stocks
+                  </button>
                 </nav>
               </div>
 
@@ -150,65 +170,188 @@ export default function FundTracker() {
                         ))}
                       </div>
                     ) : (
-                      <div className="space-y-6">
-                        {changes?.new_positions?.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-green-600 mb-2">New Positions</h4>
-                            <ul className="space-y-1">
-                              {changes.new_positions.map((item: any, index: number) => (
-                                <li key={index} className="text-sm">
-                                  {item.ticker} - ${(item.value / 1000000).toFixed(2)}M
-                                </li>
-                              ))}
-                            </ul>
+                      <div>
+                        {changes?.filing_date && (
+                          <div className="mb-4 text-sm text-gray-500">
+                            Filing Date: {changes.filing_date}
                           </div>
                         )}
-
-                        {changes?.increased?.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Top 10 Bought */}
                           <div>
-                            <h4 className="font-medium text-blue-600 mb-2">Increased</h4>
-                            <ul className="space-y-1">
-                              {changes.increased.map((item: any, index: number) => (
-                                <li key={index} className="text-sm">
-                                  {item.ticker} +{item.shares_change?.toLocaleString()} shares
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+                            <h4 className="font-medium text-green-600 mb-3">Top 10 Bought</h4>
+                            {(() => {
+                              const bought = [
+                                ...(changes?.new_positions || []),
+                                ...(changes?.increased || [])
+                              ]
+                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                                .slice(0, 10);
 
-                        {changes?.decreased?.length > 0 && (
+                              return bought.length > 0 ? (
+                                <div className="space-y-2">
+                                  {bought.map((item: any, index: number) => (
+                                    <div key={index} className="bg-green-50 p-3 rounded border border-green-200">
+                                      <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
+                                      <div className="text-xs text-gray-600">{item.ticker}</div>
+                                      <div className="flex justify-between mt-1">
+                                        <span className="text-xs text-green-700">
+                                          +${(item.value_change / 1000000).toFixed(2)}M
+                                        </span>
+                                        <span className="text-xs text-gray-600">
+                                          {item.percentage?.toFixed(2)}% of fund
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">No positions bought</p>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Top 10 Sold */}
                           <div>
-                            <h4 className="font-medium text-orange-600 mb-2">Decreased</h4>
-                            <ul className="space-y-1">
-                              {changes.decreased.map((item: any, index: number) => (
-                                <li key={index} className="text-sm">
-                                  {item.ticker} {item.shares_change?.toLocaleString()} shares
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+                            <h4 className="font-medium text-red-600 mb-3">Top 10 Sold</h4>
+                            {(() => {
+                              const sold = [
+                                ...(changes?.decreased || []),
+                                ...(changes?.sold || [])
+                              ]
+                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                                .slice(0, 10);
 
-                        {changes?.sold?.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-red-600 mb-2">Sold</h4>
-                            <ul className="space-y-1">
-                              {changes.sold.map((item: any, index: number) => (
-                                <li key={index} className="text-sm">{item.ticker}</li>
-                              ))}
-                            </ul>
+                              return sold.length > 0 ? (
+                                <div className="space-y-2">
+                                  {sold.map((item: any, index: number) => (
+                                    <div key={index} className="bg-red-50 p-3 rounded border border-red-200">
+                                      <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
+                                      <div className="text-xs text-gray-600">{item.ticker}</div>
+                                      <div className="flex justify-between mt-1">
+                                        <span className="text-xs text-red-700">
+                                          ${(item.value_change / 1000000).toFixed(2)}M
+                                        </span>
+                                        <span className="text-xs text-gray-600">
+                                          {item.percentage?.toFixed(2)}% of fund
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">No positions sold</p>
+                              );
+                            })()}
                           </div>
-                        )}
-
-                        {!changes?.new_positions?.length &&
-                          !changes?.increased?.length &&
-                          !changes?.decreased?.length &&
-                          !changes?.sold?.length && (
-                            <p className="text-gray-500">No recent changes</p>
-                          )}
+                        </div>
                       </div>
                     )}
+                  </>
+                )}
+
+                {activeTab === 'new' && (
+                  <>
+                    {changesLoading ? (
+                      <div className="animate-pulse space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
+                        ))}
+                      </div>
+                    ) : changes?.new_positions?.length > 0 ? (
+                      <>
+                        {changes?.filing_date && (
+                          <div className="mb-4 text-sm text-gray-500">
+                            Filing Date: {changes.filing_date}
+                          </div>
+                        )}
+                        <table className="w-full">
+                          <thead>
+                            <tr className="text-left text-sm text-gray-500">
+                              <th className="pb-2">Ticker</th>
+                              <th className="pb-2">Company</th>
+                              <th className="pb-2 text-right">Value</th>
+                              <th className="pb-2 text-right">% of Fund</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {changes.new_positions
+                              .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                              .map((item: any, index: number) => (
+                              <tr key={index} className="border-t border-gray-100">
+                                <td className="py-2 font-medium">{item.ticker}</td>
+                                <td className="py-2 text-sm text-gray-600">
+                                  {item.company_name || '-'}
+                                </td>
+                                <td className="py-2 text-right text-sm text-green-600">
+                                  +${(item.value / 1000000).toFixed(2)}M
+                                </td>
+                                <td className="py-2 text-right text-sm">
+                                  {item.percentage?.toFixed(2)}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
+                    ) : (
+                      <p className="text-gray-500">No new positions</p>
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'sold' && (
+                  <>
+                    {changesLoading ? (
+                      <div className="animate-pulse space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
+                        ))}
+                      </div>
+                    ) : (() => {
+                      const soldPositions = [
+                        ...(changes?.decreased || []),
+                        ...(changes?.sold || [])
+                      ].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+
+                      return soldPositions.length > 0 ? (
+                        <>
+                          {changes?.filing_date && (
+                            <div className="mb-4 text-sm text-gray-500">
+                              Filing Date: {changes.filing_date}
+                            </div>
+                          )}
+                          <table className="w-full">
+                            <thead>
+                              <tr className="text-left text-sm text-gray-500">
+                                <th className="pb-2">Ticker</th>
+                                <th className="pb-2">Company</th>
+                                <th className="pb-2 text-right">Value Change</th>
+                                <th className="pb-2 text-right">% of Fund</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {soldPositions.map((item: any, index: number) => (
+                                <tr key={index} className="border-t border-gray-100">
+                                  <td className="py-2 font-medium">{item.ticker}</td>
+                                  <td className="py-2 text-sm text-gray-600">
+                                    {item.company_name || '-'}
+                                  </td>
+                                  <td className="py-2 text-right text-sm text-red-600">
+                                    ${(item.value_change / 1000000).toFixed(2)}M
+                                  </td>
+                                  <td className="py-2 text-right text-sm">
+                                    {item.percentage?.toFixed(2)}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </>
+                      ) : (
+                        <p className="text-gray-500">No sold or decreased positions</p>
+                      );
+                    })()}
                   </>
                 )}
               </div>

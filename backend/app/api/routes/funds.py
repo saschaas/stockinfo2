@@ -174,12 +174,25 @@ async def get_fund_changes(
     holdings = result.scalars().all()
 
     for h in holdings:
+        # Calculate value_change based on change type
+        if h.change_type == "new":
+            value_change = float(h.value)  # Entire position is new
+        elif h.change_type == "sold":
+            value_change = -float(h.value)  # Entire position removed
+        elif h.shares and h.shares_change:
+            # For increased/decreased, calculate proportional value change
+            value_change = (h.shares_change / h.shares) * float(h.value)
+        else:
+            value_change = 0.0
+
         change_data = {
             "ticker": h.ticker,
             "company_name": h.company_name,
             "shares": h.shares,
             "value": float(h.value),
             "shares_change": h.shares_change,
+            "percentage": float(h.percentage) if h.percentage else 0.0,
+            "value_change": value_change,
         }
 
         if h.change_type == "new":
