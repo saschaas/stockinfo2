@@ -41,7 +41,8 @@
       "Bash(timeout 30 sh:*)",
       "Bash(timeout:*)",
       "Bash(xargs:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(dos2unix:*)"
     ],
     "deny": [],
     "ask": []

@@ -44,8 +44,9 @@ COPY config/ ./config/
 COPY agents/ ./agents/
 COPY pipelines/ ./pipelines/
 
-# Set ownership
-RUN chown -R stockinfo:stockinfo /app
+# Set ownership and make scripts executable
+RUN chown -R stockinfo:stockinfo /app && \
+    chmod +x /app/backend/scripts/*.sh
 
 # Switch to non-root user
 USER stockinfo
