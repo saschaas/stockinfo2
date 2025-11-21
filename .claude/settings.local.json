@@ -42,7 +42,8 @@
       "Bash(timeout:*)",
       "Bash(xargs:*)",
       "WebSearch",
-      "Bash(dos2unix:*)"
+      "Bash(dos2unix:*)",
+      "Bash(docker images:*)"
     ],
     "deny": [],
     "ask": []

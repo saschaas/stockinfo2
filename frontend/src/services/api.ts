@@ -84,6 +84,18 @@ export async function fetchFundChanges(fundId: number) {
   return data
 }
 
+export async function fetchAggregatedHoldings(limit: number = 50) {
+  const { data } = await api.get('/funds/aggregate/holdings', {
+    params: { limit },
+  })
+  return data
+}
+
+export async function fetchAggregatedChanges() {
+  const { data } = await api.get('/funds/aggregate/changes')
+  return data
+}
+
 export async function refreshFundHoldings() {
   const { data } = await api.post('/funds/refresh')
   return data

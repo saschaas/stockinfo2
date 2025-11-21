@@ -109,6 +109,270 @@ async def list_funds(
     )
 
 
+@router.get("/aggregate/holdings", response_model=FundHoldingsResponse)
+async def get_aggregated_holdings(
+    limit: int = Query(default=50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+) -> FundHoldingsResponse:
+    """Get aggregated holdings across all active funds.
+
+    Returns combined holdings from all funds, aggregated by ticker/company name.
+    """
+    # Get all active funds
+    funds_stmt = select(Fund).where(Fund.is_active == True)
+    funds_result = await db.execute(funds_stmt)
+    active_funds = funds_result.scalars().all()
+
+    if not active_funds:
+        return FundHoldingsResponse(
+            fund_id=0,
+            fund_name="ALL FUNDS",
+            filing_date=None,
+            holdings=[],
+            total_value=0,
+        )
+
+    # Get latest filing date across all funds
+    latest_date_stmt = select(func.max(FundHolding.filing_date))
+    result = await db.execute(latest_date_stmt)
+    latest_date = result.scalar()
+
+    if not latest_date:
+        return FundHoldingsResponse(
+            fund_id=0,
+            fund_name="ALL FUNDS",
+            filing_date=None,
+            holdings=[],
+            total_value=0,
+        )
+
+    # Get all holdings for active funds at their respective latest filing dates
+    # For each fund, we need to get their latest filing date
+    aggregated_holdings = {}
+    total_value = 0
+
+    for fund in active_funds:
+        # Get latest filing date for this fund
+        fund_latest_date_stmt = (
+            select(func.max(FundHolding.filing_date))
+            .where(FundHolding.fund_id == fund.id)
+        )
+        fund_result = await db.execute(fund_latest_date_stmt)
+        fund_latest_date = fund_result.scalar()
+
+        if not fund_latest_date:
+            continue
+
+        # Get holdings for this fund
+        holdings_stmt = (
+            select(FundHolding)
+            .where(FundHolding.fund_id == fund.id)
+            .where(FundHolding.filing_date == fund_latest_date)
+        )
+        holdings_result = await db.execute(holdings_stmt)
+        holdings = holdings_result.scalars().all()
+
+        # Aggregate by ticker
+        for h in holdings:
+            key = h.ticker
+            if key not in aggregated_holdings:
+                aggregated_holdings[key] = {
+                    "ticker": h.ticker,
+                    "company_name": h.company_name,
+                    "shares": 0,
+                    "value": 0,
+                    "fund_count": 0,
+                }
+            aggregated_holdings[key]["shares"] += h.shares or 0
+            aggregated_holdings[key]["value"] += float(h.value)
+            aggregated_holdings[key]["fund_count"] += 1
+            total_value += float(h.value)
+
+    # Convert to list and calculate percentages
+    holdings_list = []
+    for data in aggregated_holdings.values():
+        percentage = (data["value"] / total_value * 100) if total_value > 0 else 0
+        holdings_list.append({
+            "ticker": data["ticker"],
+            "company_name": data["company_name"],
+            "shares": data["shares"],
+            "value": data["value"],
+            "percentage": percentage,
+            "fund_count": data["fund_count"],
+            "change_type": None,
+            "shares_change": None,
+        })
+
+    # Sort by value and limit
+    holdings_list.sort(key=lambda x: x["value"], reverse=True)
+    holdings_list = holdings_list[:limit]
+
+    return FundHoldingsResponse(
+        fund_id=0,
+        fund_name="ALL FUNDS",
+        filing_date=latest_date,
+        holdings=holdings_list,
+        total_value=total_value,
+    )
+
+
+@router.get("/aggregate/changes", response_model=FundChangesResponse)
+async def get_aggregated_changes(
+    db: AsyncSession = Depends(get_db),
+) -> FundChangesResponse:
+    """Get aggregated changes across all active funds.
+
+    Returns combined new positions, increased, decreased, and sold positions
+    from all funds, aggregated by ticker.
+    """
+    # Get all active funds
+    funds_stmt = select(Fund).where(Fund.is_active == True)
+    funds_result = await db.execute(funds_stmt)
+    active_funds = funds_result.scalars().all()
+
+    if not active_funds:
+        return FundChangesResponse(
+            fund_id=0,
+            fund_name="ALL FUNDS",
+            filing_date=None,
+            new_positions=[],
+            increased=[],
+            decreased=[],
+            sold=[],
+        )
+
+    # Get latest filing date across all funds
+    latest_date_stmt = select(func.max(FundHolding.filing_date))
+    result = await db.execute(latest_date_stmt)
+    latest_date = result.scalar()
+
+    if not latest_date:
+        return FundChangesResponse(
+            fund_id=0,
+            fund_name="ALL FUNDS",
+            filing_date=None,
+            new_positions=[],
+            increased=[],
+            decreased=[],
+            sold=[],
+        )
+
+    # Aggregate changes by type and ticker
+    aggregated_changes = {
+        "new": {},
+        "increased": {},
+        "decreased": {},
+        "sold": {}
+    }
+    total_portfolio_value = 0
+
+    for fund in active_funds:
+        # Get latest filing date for this fund
+        fund_latest_date_stmt = (
+            select(func.max(FundHolding.filing_date))
+            .where(FundHolding.fund_id == fund.id)
+        )
+        fund_result = await db.execute(fund_latest_date_stmt)
+        fund_latest_date = fund_result.scalar()
+
+        if not fund_latest_date:
+            continue
+
+        # Get total value for this fund (for percentage calculations)
+        total_value_stmt = (
+            select(func.sum(FundHolding.value))
+            .where(FundHolding.fund_id == fund.id)
+            .where(FundHolding.filing_date == fund_latest_date)
+        )
+        total_result = await db.execute(total_value_stmt)
+        fund_total_value = total_result.scalar() or 0
+        total_portfolio_value += float(fund_total_value)
+
+        # Get changes for this fund
+        holdings_stmt = (
+            select(FundHolding)
+            .where(FundHolding.fund_id == fund.id)
+            .where(FundHolding.filing_date == fund_latest_date)
+            .where(FundHolding.change_type.isnot(None))
+        )
+        holdings_result = await db.execute(holdings_stmt)
+        holdings = holdings_result.scalars().all()
+
+        for h in holdings:
+            if not h.change_type or h.change_type == "unchanged":
+                continue
+
+            # Calculate value_change
+            if h.change_type == "new":
+                value_change = float(h.value)
+            elif h.change_type == "sold":
+                value_change = -float(h.value)
+            elif h.shares and h.shares_change:
+                value_change = (h.shares_change / h.shares) * float(h.value)
+            else:
+                value_change = 0.0
+
+            # Aggregate by ticker and change type
+            change_dict = aggregated_changes[h.change_type]
+            key = h.ticker
+
+            if key not in change_dict:
+                change_dict[key] = {
+                    "ticker": h.ticker,
+                    "company_name": h.company_name,
+                    "shares": 0,
+                    "value": 0,
+                    "shares_change": 0,
+                    "value_change": 0,
+                    "fund_count": 0,
+                }
+
+            change_dict[key]["shares"] += h.shares or 0
+            change_dict[key]["value"] += float(h.value)
+            change_dict[key]["shares_change"] += h.shares_change or 0
+            change_dict[key]["value_change"] += value_change
+            change_dict[key]["fund_count"] += 1
+
+    # Convert to lists and calculate percentages
+    result_changes = {
+        "new": [],
+        "increased": [],
+        "decreased": [],
+        "sold": []
+    }
+
+    for change_type, changes_dict in aggregated_changes.items():
+        for data in changes_dict.values():
+            percentage = (data["value"] / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
+            result_changes[change_type].append({
+                "ticker": data["ticker"],
+                "company_name": data["company_name"],
+                "shares": data["shares"],
+                "value": data["value"],
+                "shares_change": data["shares_change"],
+                "percentage": percentage,
+                "value_change": data["value_change"],
+                "fund_count": data["fund_count"],
+            })
+
+    # Sort each list by value (descending)
+    for change_type in result_changes:
+        result_changes[change_type].sort(
+            key=lambda x: abs(x["value_change"]),
+            reverse=True
+        )
+
+    return FundChangesResponse(
+        fund_id=0,
+        fund_name="ALL FUNDS",
+        filing_date=latest_date,
+        new_positions=result_changes["new"],
+        increased=result_changes["increased"],
+        decreased=result_changes["decreased"],
+        sold=result_changes["sold"],
+    )
+
+
 @router.get("/{fund_id}/holdings", response_model=FundHoldingsResponse)
 async def get_fund_holdings(
     fund_id: Annotated[int, Path(ge=1)],

@@ -34,6 +34,7 @@ class HoldingData(BaseModel):
     percentage: float | None = None
     change_type: str | None = None
     shares_change: int | None = None
+    fund_count: int | None = None
 
 
 class FundHoldingsResponse(BaseModel):
@@ -54,6 +55,7 @@ class ChangeData(BaseModel):
     shares: int
     value: float
     shares_change: int | None = None
+    fund_count: int | None = None
 
 
 class FundChangesResponse(BaseModel):

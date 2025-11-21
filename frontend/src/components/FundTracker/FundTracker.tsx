@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchFunds, fetchFundHoldings, fetchFundChanges, addFund, removeFund, validateFund, searchFunds } from '../../services/api'
+import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds } from '../../services/api'
 
 interface SearchResult {
   cik: string
@@ -35,14 +35,14 @@ export default function FundTracker() {
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery({
     queryKey: ['fundHoldings', selectedFund],
-    queryFn: () => fetchFundHoldings(selectedFund!),
-    enabled: !!selectedFund && activeTab === 'holdings',
+    queryFn: () => selectedFund === 0 ? fetchAggregatedHoldings() : fetchFundHoldings(selectedFund!),
+    enabled: selectedFund !== null && activeTab === 'holdings',
   })
 
   const { data: changes, isLoading: changesLoading } = useQuery({
     queryKey: ['fundChanges', selectedFund],
-    queryFn: () => fetchFundChanges(selectedFund!),
-    enabled: !!selectedFund && (activeTab === 'changes' || activeTab === 'new' || activeTab === 'sold'),
+    queryFn: () => selectedFund === 0 ? fetchAggregatedChanges() : fetchFundChanges(selectedFund!),
+    enabled: selectedFund !== null && (activeTab === 'changes' || activeTab === 'new' || activeTab === 'sold'),
   })
 
   // Mutation for removing a fund
@@ -220,6 +220,24 @@ export default function FundTracker() {
           ) : (
             <>
               <div className="space-y-2 mb-6">
+                {/* ALL FUNDS aggregated view */}
+                <div
+                  className={`flex items-center justify-between px-4 py-2 rounded-lg border-2 ${
+                    selectedFund === 0
+                      ? 'bg-primary-100 text-primary-800 border-primary-500'
+                      : 'hover:bg-gray-100 border-gray-300'
+                  }`}
+                >
+                  <button
+                    onClick={() => setSelectedFund(0)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="font-bold text-sm">ALL FUNDS</div>
+                    <div className="text-xs text-gray-500">Combined holdings across all funds</div>
+                  </button>
+                </div>
+
+                {/* Individual funds */}
                 {funds?.funds?.map((fund: any) => (
                   <div
                     key={fund.id}
@@ -356,7 +374,7 @@ export default function FundTracker() {
 
         {/* Fund Details */}
         <div className="lg:col-span-2">
-          {selectedFund ? (
+          {selectedFund !== null ? (
             <div className="bg-white rounded-lg shadow">
               {/* Tabs */}
               <div className="border-b border-gray-200">
@@ -426,6 +444,7 @@ export default function FundTracker() {
                               <th className="pb-2 text-right">Shares</th>
                               <th className="pb-2 text-right">Value</th>
                               <th className="pb-2 text-right">%</th>
+                              {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -444,6 +463,11 @@ export default function FundTracker() {
                                 <td className="py-2 text-right text-sm">
                                   {holding.percentage?.toFixed(2)}%
                                 </td>
+                                {selectedFund === 0 && (
+                                  <td className="py-2 text-right text-sm font-medium text-primary-600">
+                                    {holding.fund_count}
+                                  </td>
+                                )}
                               </tr>
                             ))}
                           </tbody>
@@ -487,14 +511,23 @@ export default function FundTracker() {
                                   {bought.map((item: any, index: number) => (
                                     <div key={index} className="bg-green-50 p-3 rounded border border-green-200">
                                       <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
-                                      <div className="text-xs text-gray-600">{item.ticker}</div>
-                                      <div className="flex justify-between mt-1">
-                                        <span className="text-xs text-green-700">
-                                          +${(item.value_change / 1000000).toFixed(2)}M
-                                        </span>
-                                        <span className="text-xs text-gray-600">
-                                          {item.percentage?.toFixed(2)}% of fund
-                                        </span>
+                                      <div className="flex justify-between items-start mt-1">
+                                        <div>
+                                          <div className="text-xs text-gray-600">{item.ticker}</div>
+                                          <div className="text-xs text-green-700">
+                                            +${(item.value_change / 1000000).toFixed(2)}M
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="text-xs text-gray-600">
+                                            {item.percentage?.toFixed(2)}% of fund
+                                          </div>
+                                          {selectedFund === 0 && item.fund_count && (
+                                            <div className="text-xs font-medium text-primary-600">
+                                              {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
@@ -521,14 +554,23 @@ export default function FundTracker() {
                                   {sold.map((item: any, index: number) => (
                                     <div key={index} className="bg-red-50 p-3 rounded border border-red-200">
                                       <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
-                                      <div className="text-xs text-gray-600">{item.ticker}</div>
-                                      <div className="flex justify-between mt-1">
-                                        <span className="text-xs text-red-700">
-                                          ${(item.value_change / 1000000).toFixed(2)}M
-                                        </span>
-                                        <span className="text-xs text-gray-600">
-                                          {item.percentage?.toFixed(2)}% of fund
-                                        </span>
+                                      <div className="flex justify-between items-start mt-1">
+                                        <div>
+                                          <div className="text-xs text-gray-600">{item.ticker}</div>
+                                          <div className="text-xs text-red-700">
+                                            ${(item.value_change / 1000000).toFixed(2)}M
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="text-xs text-gray-600">
+                                            {item.percentage?.toFixed(2)}% of fund
+                                          </div>
+                                          {selectedFund === 0 && item.fund_count && (
+                                            <div className="text-xs font-medium text-primary-600">
+                                              {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
@@ -566,6 +608,7 @@ export default function FundTracker() {
                               <th className="pb-2">Company</th>
                               <th className="pb-2 text-right">Value</th>
                               <th className="pb-2 text-right">% of Fund</th>
+                              {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -583,6 +626,11 @@ export default function FundTracker() {
                                 <td className="py-2 text-right text-sm">
                                   {item.percentage?.toFixed(2)}%
                                 </td>
+                                {selectedFund === 0 && (
+                                  <td className="py-2 text-right text-sm font-medium text-primary-600">
+                                    {item.fund_count}
+                                  </td>
+                                )}
                               </tr>
                             ))}
                           </tbody>
@@ -622,6 +670,7 @@ export default function FundTracker() {
                                 <th className="pb-2">Company</th>
                                 <th className="pb-2 text-right">Value Change</th>
                                 <th className="pb-2 text-right">% of Fund</th>
+                                {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -637,6 +686,11 @@ export default function FundTracker() {
                                   <td className="py-2 text-right text-sm">
                                     {item.percentage?.toFixed(2)}%
                                   </td>
+                                  {selectedFund === 0 && (
+                                    <td className="py-2 text-right text-sm font-medium text-primary-600">
+                                      {item.fund_count}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
