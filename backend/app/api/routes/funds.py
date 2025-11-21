@@ -182,10 +182,12 @@ async def get_aggregated_holdings(
                     "shares": 0,
                     "value": 0,
                     "fund_count": 0,
+                    "fund_names": [],
                 }
             aggregated_holdings[key]["shares"] += h.shares or 0
             aggregated_holdings[key]["value"] += float(h.value)
             aggregated_holdings[key]["fund_count"] += 1
+            aggregated_holdings[key]["fund_names"].append(fund.name)
             total_value += float(h.value)
 
     # Convert to list and calculate percentages
@@ -199,6 +201,7 @@ async def get_aggregated_holdings(
             "value": data["value"],
             "percentage": percentage,
             "fund_count": data["fund_count"],
+            "fund_names": data["fund_names"],
             "change_type": None,
             "shares_change": None,
         })
@@ -325,6 +328,7 @@ async def get_aggregated_changes(
                     "shares_change": 0,
                     "value_change": 0,
                     "fund_count": 0,
+                    "fund_names": [],
                 }
 
             change_dict[key]["shares"] += h.shares or 0
@@ -332,6 +336,7 @@ async def get_aggregated_changes(
             change_dict[key]["shares_change"] += h.shares_change or 0
             change_dict[key]["value_change"] += value_change
             change_dict[key]["fund_count"] += 1
+            change_dict[key]["fund_names"].append(fund.name)
 
     # Convert to lists and calculate percentages
     result_changes = {
@@ -353,6 +358,7 @@ async def get_aggregated_changes(
                 "percentage": percentage,
                 "value_change": data["value_change"],
                 "fund_count": data["fund_count"],
+                "fund_names": data["fund_names"],
             })
 
     # Sort each list by value (descending)

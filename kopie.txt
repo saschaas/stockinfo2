@@ -1,0 +1,114 @@
+# Stock Research Tool Environment Variables
+# Copy this file to .env and fill in your values
+
+# =============================================================================
+# API KEYS - Required for data sources
+# =============================================================================
+
+# Alpha Vantage - Primary stock data source ($29.99/month for production)
+# Get your key at: https://www.alphavantage.co/support/#api-key
+ALPHA_VANTAGE_API_KEY=SIDA3U5PC9ML7DT9
+
+# Financial Modeling Prep - Fundamentals data
+# Get your key at: https://financialmodelingprep.com/developer/docs/
+FMP_API_KEY=your_fmp_key_here
+
+# SEC EDGAR - User agent required for fair use compliance
+# Format: "Company Name AdminContact@company.com"
+SEC_USER_AGENT=YourCompany/1.0 admin@yourcompany.com
+
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
+
+# PostgreSQL connection
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=stockresearch
+POSTGRES_USER=stockuser
+POSTGRES_PASSWORD=renegadeN56
+
+# Full PostgreSQL URL (alternative to individual settings)
+DATABASE_URL=postgresql+asyncpg://stockuser:your_secure_password_here@localhost:5432/stockresearch
+
+# =============================================================================
+# REDIS CONFIGURATION
+# =============================================================================
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=123456
+REDIS_DB=0
+
+# Full Redis URL (alternative to individual settings)
+REDIS_URL=redis://localhost:6379/0
+
+# =============================================================================
+# OLLAMA CONFIGURATION
+# =============================================================================
+
+# Ollama server URL (local installation)
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Default model for analysis (Mistral 7B recommended)
+OLLAMA_MODEL=mistral:7b
+
+# =============================================================================
+# APPLICATION SETTINGS
+# =============================================================================
+
+# Environment: development, staging, production
+ENVIRONMENT=development
+
+# Debug mode (disable in production)
+DEBUG=true
+
+# API host and port
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Frontend URL for CORS
+FRONTEND_URL=http://localhost:3000
+
+# Secret key for JWT tokens (generate with: openssl rand -hex 32)
+SECRET_KEY=your_secret_key_here_generate_with_openssl
+
+# =============================================================================
+# RATE LIMITING
+# =============================================================================
+
+# Requests per hour per user
+RATE_LIMIT_PER_HOUR=100
+
+# Alpha Vantage rate limit (requests per minute)
+ALPHA_VANTAGE_RATE_LIMIT=30
+
+# SEC EDGAR rate limit (requests per second)
+SEC_RATE_LIMIT=10
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+# Log level: DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
+
+# Enable JSON structured logging
+JSON_LOGS=false
+
+# =============================================================================
+# CELERY TASK QUEUE
+# =============================================================================
+
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
+# =============================================================================
+# MONITORING (Optional)
+# =============================================================================
+
+# Sentry DSN for error tracking
+SENTRY_DSN=
+
+# Prometheus metrics endpoint
+ENABLE_METRICS=true

@@ -25,8 +25,17 @@ export default function FundTracker() {
   const [isValidating, setIsValidating] = useState(false)
   const hasValidated = useRef(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [modalFunds, setModalFunds] = useState<{ ticker: string; companyName: string; fundNames: string[] } | null>(null)
 
   const queryClient = useQueryClient()
+
+  const handleFundCountClick = (ticker: string, companyName: string, fundNames: string[]) => {
+    setModalFunds({ ticker, companyName, fundNames })
+  }
+
+  const closeModal = () => {
+    setModalFunds(null)
+  }
 
   const { data: funds, isLoading: fundsLoading, error: fundsError } = useQuery({
     queryKey: ['funds'],
@@ -464,8 +473,14 @@ export default function FundTracker() {
                                   {holding.percentage?.toFixed(2)}%
                                 </td>
                                 {selectedFund === 0 && (
-                                  <td className="py-2 text-right text-sm font-medium text-primary-600">
-                                    {holding.fund_count}
+                                  <td className="py-2 text-right text-sm">
+                                    <button
+                                      onClick={() => handleFundCountClick(holding.ticker, holding.company_name, holding.fund_names || [])}
+                                      className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                      title="Click to see which funds hold this position"
+                                    >
+                                      {holding.fund_count}
+                                    </button>
                                   </td>
                                 )}
                               </tr>
@@ -523,9 +538,13 @@ export default function FundTracker() {
                                             {item.percentage?.toFixed(2)}% of fund
                                           </div>
                                           {selectedFund === 0 && item.fund_count && (
-                                            <div className="text-xs font-medium text-primary-600">
+                                            <button
+                                              onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
+                                              className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                              title="Click to see which funds hold this position"
+                                            >
                                               {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
-                                            </div>
+                                            </button>
                                           )}
                                         </div>
                                       </div>
@@ -566,9 +585,13 @@ export default function FundTracker() {
                                             {item.percentage?.toFixed(2)}% of fund
                                           </div>
                                           {selectedFund === 0 && item.fund_count && (
-                                            <div className="text-xs font-medium text-primary-600">
+                                            <button
+                                              onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
+                                              className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                              title="Click to see which funds hold this position"
+                                            >
                                               {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
-                                            </div>
+                                            </button>
                                           )}
                                         </div>
                                       </div>
@@ -627,8 +650,14 @@ export default function FundTracker() {
                                   {item.percentage?.toFixed(2)}%
                                 </td>
                                 {selectedFund === 0 && (
-                                  <td className="py-2 text-right text-sm font-medium text-primary-600">
-                                    {item.fund_count}
+                                  <td className="py-2 text-right text-sm">
+                                    <button
+                                      onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
+                                      className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                      title="Click to see which funds hold this position"
+                                    >
+                                      {item.fund_count}
+                                    </button>
                                   </td>
                                 )}
                               </tr>
@@ -687,8 +716,14 @@ export default function FundTracker() {
                                     {item.percentage?.toFixed(2)}%
                                   </td>
                                   {selectedFund === 0 && (
-                                    <td className="py-2 text-right text-sm font-medium text-primary-600">
-                                      {item.fund_count}
+                                    <td className="py-2 text-right text-sm">
+                                      <button
+                                        onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
+                                        className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                                        title="Click to see which funds hold this position"
+                                      >
+                                        {item.fund_count}
+                                      </button>
                                     </td>
                                   )}
                                 </tr>
@@ -711,6 +746,51 @@ export default function FundTracker() {
           )}
         </div>
       </div>
+
+      {/* Modal for showing which funds hold a position */}
+      {modalFunds && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={closeModal}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">{modalFunds.ticker}</h3>
+                  <p className="text-sm text-gray-600">{modalFunds.companyName}</p>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">
+                  Held by {modalFunds.fundNames.length} fund{modalFunds.fundNames.length !== 1 ? 's' : ''}:
+                </h4>
+                <div className="space-y-1 max-h-96 overflow-y-auto">
+                  {modalFunds.fundNames.map((fundName, index) => (
+                    <div key={index} className="px-3 py-2 bg-gray-50 rounded text-sm text-gray-800">
+                      {fundName}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={closeModal}
+                className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
