@@ -43,7 +43,9 @@
       "Bash(xargs:*)",
       "WebSearch",
       "Bash(dos2unix:*)",
-      "Bash(docker images:*)"
+      "Bash(docker images:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker rmi:*)"
     ],
     "deny": [],
     "ask": []

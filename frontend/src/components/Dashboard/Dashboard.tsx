@@ -48,6 +48,9 @@ export default function Dashboard() {
           score={sentiment?.overall_sentiment}
           bullish={sentiment?.bullish_score}
           bearish={sentiment?.bearish_score}
+          hotSectors={sentiment?.hot_sectors}
+          negativeSectors={sentiment?.negative_sectors}
+          indices={sentiment?.indices}
         />
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Sectors</h3>

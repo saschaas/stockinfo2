@@ -78,6 +78,28 @@ class StockAnalysisResponse(BaseModel):
     # Peer comparison
     peer_comparison: dict[str, Any] | None = None
 
+    # Growth Analysis fields
+    portfolio_allocation: float | None = None
+    price_target_base: float | None = None
+    price_target_optimistic: float | None = None
+    price_target_pessimistic: float | None = None
+    upside_potential: float | None = None
+    composite_score: float | None = None
+    fundamental_score: float | None = None
+    sentiment_score: float | None = None
+    technical_score: float | None = None
+    competitive_score: float | None = None
+    risk_score: float | None = None
+    risk_level: str | None = None
+    key_strengths: list[str] | None = None
+    key_risks: list[str] | None = None
+    catalyst_points: list[str] | None = None
+    monitoring_points: list[str] | None = None
+    data_completeness_score: float | None = None
+    missing_data_categories: list[str] | None = None
+    ai_summary: str | None = None
+    ai_reasoning: str | None = None
+
     # Data sources
     data_sources: dict[str, Any] | None = None
 
@@ -121,6 +143,27 @@ class StockAnalysisResponse(BaseModel):
             risks=obj.risks,
             opportunities=obj.opportunities,
             peer_comparison=obj.peer_comparison,
+            # Growth Analysis fields
+            portfolio_allocation=float(obj.portfolio_allocation) if obj.portfolio_allocation else None,
+            price_target_base=float(obj.price_target_base) if obj.price_target_base else None,
+            price_target_optimistic=float(obj.price_target_optimistic) if obj.price_target_optimistic else None,
+            price_target_pessimistic=float(obj.price_target_pessimistic) if obj.price_target_pessimistic else None,
+            upside_potential=float(obj.upside_potential) if obj.upside_potential else None,
+            composite_score=float(obj.composite_score) if obj.composite_score else None,
+            fundamental_score=float(obj.fundamental_score) if obj.fundamental_score else None,
+            sentiment_score=float(obj.sentiment_score) if obj.sentiment_score else None,
+            technical_score=float(obj.technical_score) if obj.technical_score else None,
+            competitive_score=float(obj.competitive_score) if obj.competitive_score else None,
+            risk_score=float(obj.risk_score) if obj.risk_score else None,
+            risk_level=obj.risk_level,
+            key_strengths=obj.key_strengths,
+            key_risks=obj.key_risks,
+            catalyst_points=obj.catalyst_points,
+            monitoring_points=obj.monitoring_points,
+            data_completeness_score=float(obj.data_completeness_score) if obj.data_completeness_score else None,
+            missing_data_categories=obj.missing_data_categories,
+            ai_summary=obj.ai_summary,
+            ai_reasoning=obj.ai_reasoning,
             data_sources=obj.data_sources,
         )
 

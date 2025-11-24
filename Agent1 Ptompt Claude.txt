@@ -1,0 +1,807 @@
+#!/usr/bin/env python3
+"""
+Growth Stock Analyzer Agent for Claude Code
+Ein umfassendes Tool zur Analyse von Wachstumsaktien mit modularer Struktur
+
+Author: Claude Assistant
+Version: 1.0.0
+"""
+
+import json
+import os
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any, Tuple
+from enum import Enum
+import asyncio
+import aiohttp
+from pathlib import Path
+
+
+class AnalysisType(Enum):
+    """Definiert verschiedene Arten von Analysen"""
+    FUNDAMENTAL = "fundamental"
+    SENTIMENT = "sentiment"
+    COMPETITIVE = "competitive"
+    TECHNICAL = "technical"
+    COMPREHENSIVE = "comprehensive"
+
+
+class InvestmentRecommendation(Enum):
+    """Investment-Empfehlungen"""
+    STRONG_BUY = "STARKES KAUFEN"
+    BUY = "KAUFEN"
+    HOLD = "HALTEN"
+    SELL = "VERKAUFEN"
+    STRONG_SELL = "STARKES VERKAUFEN"
+
+
+@dataclass
+class CompanyProfile:
+    """Unternehmensprofile und Basisdaten"""
+    ticker: str
+    name: str = ""
+    sector: str = ""
+    industry: str = ""
+    market_cap: float = 0.0
+    employees: int = 0
+    founded_year: int = 0
+    headquarters: str = ""
+    description: str = ""
+    main_products: List[str] = field(default_factory=list)
+    key_markets: List[str] = field(default_factory=list)
+
+
+@dataclass
+class FinancialData:
+    """Finanzdaten des Unternehmens"""
+    revenue: Dict[int, float] = field(default_factory=dict)  # Jahr: Umsatz
+    net_income: Dict[int, float] = field(default_factory=dict)
+    operating_cashflow: Dict[int, float] = field(default_factory=dict)
+    free_cashflow: Dict[int, float] = field(default_factory=dict)
+    total_assets: float = 0.0
+    total_debt: float = 0.0
+    equity: float = 0.0
+    eps: float = 0.0
+    roe: float = 0.0
+    roa: float = 0.0
+    debt_to_equity: float = 0.0
+    gross_margin: float = 0.0
+    operating_margin: float = 0.0
+    net_margin: float = 0.0
+
+
+@dataclass
+class SentimentData:
+    """Sentiment und Marktstimmung"""
+    analyst_ratings: Dict[str, int] = field(default_factory=dict)  # Buy/Hold/Sell counts
+    average_price_target: float = 0.0
+    price_target_high: float = 0.0
+    price_target_low: float = 0.0
+    recent_news: List[Dict[str, str]] = field(default_factory=list)
+    insider_transactions: List[Dict[str, Any]] = field(default_factory=list)
+    institutional_ownership: float = 0.0
+    short_interest: float = 0.0
+
+
+@dataclass
+class TechnicalIndicators:
+    """Technische Indikatoren"""
+    current_price: float = 0.0
+    week_52_high: float = 0.0
+    week_52_low: float = 0.0
+    rsi: float = 0.0
+    moving_average_50: float = 0.0
+    moving_average_200: float = 0.0
+    volume_avg_10d: int = 0
+    beta: float = 0.0
+    volatility: float = 0.0
+
+
+@dataclass
+class CompetitorAnalysis:
+    """Konkurrenzanalyse-Daten"""
+    competitors: List[str] = field(default_factory=list)
+    market_share: Dict[str, float] = field(default_factory=dict)
+    comparative_metrics: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    competitive_advantages: List[str] = field(default_factory=list)
+    competitive_risks: List[str] = field(default_factory=list)
+
+
+@dataclass
+class RiskAnalysis:
+    """Risikoanalyse"""
+    business_risks: List[str] = field(default_factory=list)
+    financial_risks: List[str] = field(default_factory=list)
+    regulatory_risks: List[str] = field(default_factory=list)
+    market_risks: List[str] = field(default_factory=list)
+    geopolitical_risks: List[str] = field(default_factory=list)
+    risk_score: float = 0.0  # 1-10 scale
+
+
+@dataclass
+class AnalysisResult:
+    """Gesamtergebnis der Analyse"""
+    company_profile: CompanyProfile
+    financial_data: FinancialData
+    sentiment_data: SentimentData
+    technical_indicators: TechnicalIndicators
+    competitor_analysis: CompetitorAnalysis
+    risk_analysis: RiskAnalysis
+    recommendation: InvestmentRecommendation = InvestmentRecommendation.HOLD
+    confidence_score: float = 0.0
+    target_allocation: float = 0.0  # Portfolio percentage
+    price_targets: Dict[str, float] = field(default_factory=dict)  # Scenario: Price
+    monitoring_points: List[str] = field(default_factory=list)
+    analysis_date: datetime = field(default_factory=datetime.now)
+    analysis_summary: str = ""
+
+
+class GrowthStockAnalyzer:
+    """
+    Hauptklasse für die Aktienanalyse
+    """
+    
+    def __init__(self, ticker: str, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialisiert den Analyzer
+        
+        Args:
+            ticker: Das Ticker-Symbol der zu analysierenden Aktie
+            config: Optionale Konfigurationsparameter
+        """
+        self.ticker = ticker.upper()
+        self.config = config or self._get_default_config()
+        self.result = AnalysisResult(
+            company_profile=CompanyProfile(ticker=self.ticker),
+            financial_data=FinancialData(),
+            sentiment_data=SentimentData(),
+            technical_indicators=TechnicalIndicators(),
+            competitor_analysis=CompetitorAnalysis(),
+            risk_analysis=RiskAnalysis()
+        )
+        
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Gibt die Standardkonfiguration zurück"""
+        return {
+            "analysis_horizon": "medium",  # short/medium/long
+            "risk_tolerance": "moderate",  # conservative/moderate/aggressive
+            "data_sources": ["web_search", "financial_apis"],
+            "currency": "USD",
+            "language": "DE",
+            "include_charts": True,
+            "export_format": "markdown"
+        }
+    
+    async def analyze(self, analysis_type: AnalysisType = AnalysisType.COMPREHENSIVE) -> AnalysisResult:
+        """
+        Führt die Hauptanalyse durch
+        
+        Args:
+            analysis_type: Art der durchzuführenden Analyse
+            
+        Returns:
+            AnalysisResult mit allen Analysedaten
+        """
+        print(f"🚀 Starte {analysis_type.value} Analyse für {self.ticker}...")
+        
+        # Schritt 1: Unternehmensprofil laden
+        await self._load_company_profile()
+        
+        # Schritt 2: Basierend auf Analysetyp entsprechende Module ausführen
+        if analysis_type in [AnalysisType.FUNDAMENTAL, AnalysisType.COMPREHENSIVE]:
+            await self._analyze_fundamentals()
+            
+        if analysis_type in [AnalysisType.SENTIMENT, AnalysisType.COMPREHENSIVE]:
+            await self._analyze_sentiment()
+            
+        if analysis_type in [AnalysisType.TECHNICAL, AnalysisType.COMPREHENSIVE]:
+            await self._analyze_technicals()
+            
+        if analysis_type in [AnalysisType.COMPETITIVE, AnalysisType.COMPREHENSIVE]:
+            await self._analyze_competition()
+        
+        # Schritt 3: Risikobewertung (immer durchführen)
+        await self._assess_risks()
+        
+        # Schritt 4: Finale Bewertung und Empfehlung
+        await self._generate_recommendation()
+        
+        # Schritt 5: Zusammenfassung erstellen
+        await self._create_summary()
+        
+        print("✅ Analyse abgeschlossen!")
+        return self.result
+    
+    async def _load_company_profile(self):
+        """Lädt das Unternehmensprofil"""
+        print(f"📊 Lade Unternehmensprofil für {self.ticker}...")
+        
+        # TODO: Implementiere Web-Suche oder API-Calls hier
+        # Beispiel-Struktur:
+        search_queries = [
+            f"{self.ticker} company profile market cap sector",
+            f"{self.ticker} hauptgeschäft produkte märkte",
+            f"{self.ticker} Unternehmensbeschreibung Geschichte"
+        ]
+        
+        # Placeholder für echte Implementierung
+        self.result.company_profile.name = f"Company {self.ticker}"
+        self.result.company_profile.sector = "Technology"
+        self.result.company_profile.industry = "Software"
+        
+    async def _analyze_fundamentals(self):
+        """Analysiert die Fundamentaldaten"""
+        print("💰 Analysiere Fundamentaldaten...")
+        
+        # Lade historische Finanzdaten
+        await self._load_financial_data()
+        
+        # Berechne Wachstumsraten
+        await self._calculate_growth_rates()
+        
+        # Bewerte Profitabilität
+        await self._assess_profitability()
+        
+        # Analysiere Bilanzstärke
+        await self._analyze_balance_sheet()
+        
+    async def _load_financial_data(self):
+        """Lädt Finanzdaten aus verschiedenen Quellen"""
+        # TODO: Implementiere Datenquellen-Integration
+        search_queries = [
+            f"{self.ticker} revenue earnings last 5 years",
+            f"{self.ticker} cash flow financial statements",
+            f"{self.ticker} balance sheet debt equity",
+            f"{self.ticker} profit margins ROE ROA"
+        ]
+        
+        # Placeholder-Daten
+        current_year = datetime.now().year
+        for i in range(5):
+            year = current_year - i
+            self.result.financial_data.revenue[year] = 1000000 * (1.1 ** (5-i))
+            
+    async def _calculate_growth_rates(self):
+        """Berechnet Wachstumsraten"""
+        revenue_data = self.result.financial_data.revenue
+        if len(revenue_data) >= 2:
+            years = sorted(revenue_data.keys())
+            first_year = years[0]
+            last_year = years[-1]
+            
+            if revenue_data[first_year] > 0:
+                years_diff = last_year - first_year
+                cagr = ((revenue_data[last_year] / revenue_data[first_year]) ** (1/years_diff) - 1) * 100
+                print(f"📈 Umsatz-CAGR: {cagr:.2f}%")
+                
+    async def _assess_profitability(self):
+        """Bewertet die Profitabilität"""
+        # Berechne und bewerte Margen
+        margins = {
+            "gross_margin": self.result.financial_data.gross_margin,
+            "operating_margin": self.result.financial_data.operating_margin,
+            "net_margin": self.result.financial_data.net_margin
+        }
+        
+        # TODO: Vergleiche mit Branchendurchschnitt
+        
+    async def _analyze_balance_sheet(self):
+        """Analysiert die Bilanz"""
+        # Bewerte Verschuldung und Liquidität
+        debt_ratio = self.result.financial_data.debt_to_equity
+        
+        if debt_ratio < 0.3:
+            strength = "Sehr starke Bilanz"
+        elif debt_ratio < 0.6:
+            strength = "Solide Bilanz"
+        elif debt_ratio < 1.0:
+            strength = "Moderate Verschuldung"
+        else:
+            strength = "Hohe Verschuldung"
+            
+        print(f"💼 Bilanzstärke: {strength}")
+        
+    async def _analyze_sentiment(self):
+        """Analysiert die Marktstimmung"""
+        print("🎯 Analysiere Marktstimmung...")
+        
+        # Sammle Analystenmeinungen
+        await self._gather_analyst_ratings()
+        
+        # Analysiere News-Sentiment
+        await self._analyze_news_sentiment()
+        
+        # Prüfe Insider-Aktivitäten
+        await self._check_insider_activity()
+        
+    async def _gather_analyst_ratings(self):
+        """Sammelt Analystenratings"""
+        search_query = f"{self.ticker} analyst ratings price target consensus"
+        
+        # TODO: Web-Suche implementieren
+        self.result.sentiment_data.analyst_ratings = {
+            "buy": 10,
+            "hold": 5,
+            "sell": 2
+        }
+        self.result.sentiment_data.average_price_target = 150.0
+        
+    async def _analyze_news_sentiment(self):
+        """Analysiert News-Sentiment"""
+        search_queries = [
+            f"{self.ticker} latest news developments",
+            f"{self.ticker} earnings announcement reaction",
+            f"{self.ticker} CEO management changes"
+        ]
+        
+        # TODO: Sentiment-Analyse der Nachrichten
+        
+    async def _check_insider_activity(self):
+        """Prüft Insider-Transaktionen"""
+        search_query = f"{self.ticker} insider trading buying selling"
+        
+        # TODO: Insider-Daten analysieren
+        
+    async def _analyze_technicals(self):
+        """Analysiert technische Indikatoren"""
+        print("📉 Analysiere technische Indikatoren...")
+        
+        # Lade Preisdaten
+        await self._load_price_data()
+        
+        # Berechne technische Indikatoren
+        await self._calculate_technical_indicators()
+        
+        # Bewerte technische Signale
+        await self._evaluate_technical_signals()
+        
+    async def _load_price_data(self):
+        """Lädt aktuelle Preisdaten"""
+        search_query = f"{self.ticker} stock price 52 week high low current"
+        
+        # TODO: Preisdaten laden
+        self.result.technical_indicators.current_price = 145.0
+        self.result.technical_indicators.week_52_high = 160.0
+        self.result.technical_indicators.week_52_low = 120.0
+        
+    async def _calculate_technical_indicators(self):
+        """Berechnet technische Indikatoren"""
+        # RSI berechnen
+        # Moving Averages berechnen
+        # Beta und Volatilität berechnen
+        pass
+        
+    async def _evaluate_technical_signals(self):
+        """Bewertet technische Signale"""
+        price = self.result.technical_indicators.current_price
+        high_52 = self.result.technical_indicators.week_52_high
+        low_52 = self.result.technical_indicators.week_52_low
+        
+        if price / low_52 < 1.1:
+            signal = "Nahe 52-Wochen-Tief - Potenzielle Kaufgelegenheit"
+        elif price / high_52 > 0.95:
+            signal = "Nahe 52-Wochen-Hoch - Vorsicht geboten"
+        else:
+            signal = "Im mittleren Bereich"
+            
+        print(f"📊 Technisches Signal: {signal}")
+        
+    async def _analyze_competition(self):
+        """Analysiert die Wettbewerbsposition"""
+        print("🏆 Analysiere Wettbewerbsposition...")
+        
+        # Identifiziere Hauptkonkurrenten
+        await self._identify_competitors()
+        
+        # Vergleiche Kennzahlen
+        await self._compare_metrics()
+        
+        # Bewerte Wettbewerbsvorteile
+        await self._assess_competitive_advantages()
+        
+    async def _identify_competitors(self):
+        """Identifiziert Hauptkonkurrenten"""
+        search_query = f"{self.ticker} competitors peer companies comparison"
+        
+        # TODO: Konkurrenten identifizieren
+        self.result.competitor_analysis.competitors = ["COMP1", "COMP2", "COMP3"]
+        
+    async def _compare_metrics(self):
+        """Vergleicht Kennzahlen mit Konkurrenten"""
+        # TODO: Vergleichsmetriken sammeln
+        pass
+        
+    async def _assess_competitive_advantages(self):
+        """Bewertet Wettbewerbsvorteile"""
+        # TODO: Moat-Analyse
+        self.result.competitor_analysis.competitive_advantages = [
+            "Starke Markenposition",
+            "Technologievorsprung",
+            "Skaleneffekte"
+        ]
+        
+    async def _assess_risks(self):
+        """Führt umfassende Risikobewertung durch"""
+        print("⚠️ Bewerte Risiken...")
+        
+        # Geschäftsrisiken
+        await self._identify_business_risks()
+        
+        # Finanzielle Risiken
+        await self._identify_financial_risks()
+        
+        # Regulatorische Risiken
+        await self._identify_regulatory_risks()
+        
+        # Marktrisiken
+        await self._identify_market_risks()
+        
+        # Geopolitische Risiken
+        await self._identify_geopolitical_risks()
+        
+        # Berechne Gesamt-Risiko-Score
+        await self._calculate_risk_score()
+        
+    async def _identify_business_risks(self):
+        """Identifiziert Geschäftsrisiken"""
+        search_query = f"{self.ticker} business risks challenges threats"
+        
+        # TODO: Risiken analysieren
+        self.result.risk_analysis.business_risks = [
+            "Starke Abhängigkeit von Schlüsselkunden",
+            "Technologischer Wandel in der Branche"
+        ]
+        
+    async def _identify_financial_risks(self):
+        """Identifiziert finanzielle Risiken"""
+        if self.result.financial_data.debt_to_equity > 1.0:
+            self.result.risk_analysis.financial_risks.append("Hohe Verschuldung")
+            
+    async def _identify_regulatory_risks(self):
+        """Identifiziert regulatorische Risiken"""
+        search_query = f"{self.ticker} regulatory risks compliance issues"
+        
+        # TODO: Regulatorische Risiken prüfen
+        
+    async def _identify_market_risks(self):
+        """Identifiziert Marktrisiken"""
+        # TODO: Marktrisiken analysieren
+        pass
+        
+    async def _identify_geopolitical_risks(self):
+        """Identifiziert geopolitische Risiken"""
+        search_query = f"{self.ticker} China exposure international risks geopolitical"
+        
+        # TODO: Geopolitische Risiken bewerten
+        
+    async def _calculate_risk_score(self):
+        """Berechnet den Gesamt-Risiko-Score"""
+        risk_count = (
+            len(self.result.risk_analysis.business_risks) +
+            len(self.result.risk_analysis.financial_risks) +
+            len(self.result.risk_analysis.regulatory_risks) +
+            len(self.result.risk_analysis.market_risks) +
+            len(self.result.risk_analysis.geopolitical_risks)
+        )
+        
+        # Normalisiere auf 1-10 Skala
+        self.result.risk_analysis.risk_score = min(10, max(1, risk_count * 0.5))
+        
+    async def _generate_recommendation(self):
+        """Generiert die finale Investmentempfehlung"""
+        print("🎯 Generiere Investment-Empfehlung...")
+        
+        # Sammle alle Signale
+        signals = await self._collect_all_signals()
+        
+        # Gewichte Signale
+        weighted_score = await self._calculate_weighted_score(signals)
+        
+        # Bestimme Empfehlung
+        if weighted_score >= 8:
+            self.result.recommendation = InvestmentRecommendation.STRONG_BUY
+            self.result.target_allocation = 10.0
+        elif weighted_score >= 6:
+            self.result.recommendation = InvestmentRecommendation.BUY
+            self.result.target_allocation = 7.0
+        elif weighted_score >= 4:
+            self.result.recommendation = InvestmentRecommendation.HOLD
+            self.result.target_allocation = 3.0
+        elif weighted_score >= 2:
+            self.result.recommendation = InvestmentRecommendation.SELL
+            self.result.target_allocation = 0.0
+        else:
+            self.result.recommendation = InvestmentRecommendation.STRONG_SELL
+            self.result.target_allocation = 0.0
+            
+        self.result.confidence_score = min(95, weighted_score * 10)
+        
+        # Setze Kursziele für verschiedene Szenarien
+        current_price = self.result.technical_indicators.current_price or 100
+        self.result.price_targets = {
+            "optimistic": current_price * 1.3,
+            "base": current_price * 1.15,
+            "pessimistic": current_price * 0.9
+        }
+        
+        # Definiere Monitoring-Punkte
+        self.result.monitoring_points = [
+            "Quartalszahlen beobachten",
+            "Marktanteilsentwicklung verfolgen",
+            "Regulatorische Änderungen im Blick behalten",
+            "Wettbewerbsdynamik überwachen"
+        ]
+        
+    async def _collect_all_signals(self) -> Dict[str, float]:
+        """Sammelt alle Analysesignale"""
+        signals = {
+            "fundamental": 5.0,  # TODO: Basierend auf echten Daten
+            "sentiment": 6.0,
+            "technical": 4.0,
+            "competitive": 5.5,
+            "risk": 10 - self.result.risk_analysis.risk_score
+        }
+        return signals
+        
+    async def _calculate_weighted_score(self, signals: Dict[str, float]) -> float:
+        """Berechnet gewichteten Score"""
+        weights = {
+            "fundamental": 0.35,
+            "sentiment": 0.20,
+            "technical": 0.15,
+            "competitive": 0.20,
+            "risk": 0.10
+        }
+        
+        total_score = sum(signals[key] * weights[key] for key in signals)
+        return total_score
+        
+    async def _create_summary(self):
+        """Erstellt die Analysezusammenfassung"""
+        self.result.analysis_summary = f"""
+        ANALYSE-ZUSAMMENFASSUNG für {self.ticker}
+        
+        Empfehlung: {self.result.recommendation.value}
+        Konfidenz: {self.result.confidence_score:.1f}%
+        Portfolio-Allokation: {self.result.target_allocation:.1f}%
+        
+        Kursziele:
+        - Optimistisch: ${self.result.price_targets.get('optimistic', 0):.2f}
+        - Basis: ${self.result.price_targets.get('base', 0):.2f}
+        - Pessimistisch: ${self.result.price_targets.get('pessimistic', 0):.2f}
+        
+        Hauptstärken:
+        {', '.join(self.result.competitor_analysis.competitive_advantages[:3])}
+        
+        Hauptrisiken:
+        {', '.join(self.result.risk_analysis.business_risks[:2])}
+        """
+        
+    def export_report(self, format: str = "markdown") -> str:
+        """
+        Exportiert den Analysebericht
+        
+        Args:
+            format: Export-Format (markdown, json, html)
+            
+        Returns:
+            Formatierter Bericht als String
+        """
+        if format == "markdown":
+            return self._export_markdown()
+        elif format == "json":
+            return self._export_json()
+        elif format == "html":
+            return self._export_html()
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+            
+    def _export_markdown(self) -> str:
+        """Exportiert als Markdown"""
+        report = f"""
+# Growth Stock Analyse: {self.ticker}
+
+## Executive Summary
+{self.result.analysis_summary}
+
+## 1. Unternehmensprofil
+- **Name**: {self.result.company_profile.name}
+- **Sektor**: {self.result.company_profile.sector}
+- **Industrie**: {self.result.company_profile.industry}
+- **Marktkapitalisierung**: ${self.result.company_profile.market_cap:,.0f}
+
+## 2. Fundamentalanalyse
+
+### Finanzkennzahlen
+- **EPS**: ${self.result.financial_data.eps:.2f}
+- **ROE**: {self.result.financial_data.roe:.1f}%
+- **ROA**: {self.result.financial_data.roa:.1f}%
+- **Debt/Equity**: {self.result.financial_data.debt_to_equity:.2f}
+
+### Margen
+- **Bruttomarge**: {self.result.financial_data.gross_margin:.1f}%
+- **Operative Marge**: {self.result.financial_data.operating_margin:.1f}%
+- **Nettomarge**: {self.result.financial_data.net_margin:.1f}%
+
+## 3. Sentiment-Analyse
+
+### Analystenratings
+- **Buy**: {self.result.sentiment_data.analyst_ratings.get('buy', 0)}
+- **Hold**: {self.result.sentiment_data.analyst_ratings.get('hold', 0)}
+- **Sell**: {self.result.sentiment_data.analyst_ratings.get('sell', 0)}
+
+### Kursziele
+- **Durchschnitt**: ${self.result.sentiment_data.average_price_target:.2f}
+- **Hoch**: ${self.result.sentiment_data.price_target_high:.2f}
+- **Tief**: ${self.result.sentiment_data.price_target_low:.2f}
+
+## 4. Technische Indikatoren
+- **Aktueller Kurs**: ${self.result.technical_indicators.current_price:.2f}
+- **52W Hoch**: ${self.result.technical_indicators.week_52_high:.2f}
+- **52W Tief**: ${self.result.technical_indicators.week_52_low:.2f}
+- **RSI**: {self.result.technical_indicators.rsi:.1f}
+
+## 5. Wettbewerbsanalyse
+
+### Hauptkonkurrenten
+{chr(10).join('- ' + comp for comp in self.result.competitor_analysis.competitors)}
+
+### Wettbewerbsvorteile
+{chr(10).join('- ' + adv for adv in self.result.competitor_analysis.competitive_advantages)}
+
+## 6. Risikoanalyse
+
+### Risiko-Score: {self.result.risk_analysis.risk_score:.1f}/10
+
+### Hauptrisiken
+**Geschäftsrisiken:**
+{chr(10).join('- ' + risk for risk in self.result.risk_analysis.business_risks)}
+
+**Finanzielle Risiken:**
+{chr(10).join('- ' + risk for risk in self.result.risk_analysis.financial_risks)}
+
+## 7. Investment-Empfehlung
+
+**Empfehlung**: {self.result.recommendation.value}
+
+**Konfidenz**: {self.result.confidence_score:.1f}%
+
+**Portfolio-Allokation**: {self.result.target_allocation:.1f}%
+
+### Kursziele
+- **Optimistisch (30% Wahrscheinlichkeit)**: ${self.result.price_targets.get('optimistic', 0):.2f}
+- **Basis (40% Wahrscheinlichkeit)**: ${self.result.price_targets.get('base', 0):.2f}
+- **Pessimistisch (30% Wahrscheinlichkeit)**: ${self.result.price_targets.get('pessimistic', 0):.2f}
+
+### Monitoring-Punkte
+{chr(10).join('- ' + point for point in self.result.monitoring_points)}
+
+---
+*Analyse erstellt am: {self.result.analysis_date.strftime('%Y-%m-%d %H:%M')}*
+        """
+        return report
+        
+    def _export_json(self) -> str:
+        """Exportiert als JSON"""
+        # Konvertiere dataclasses zu dict für JSON-Serialisierung
+        def serialize_dataclass(obj):
+            if hasattr(obj, '__dict__'):
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if isinstance(value, datetime):
+                        result[key] = value.isoformat()
+                    elif isinstance(value, Enum):
+                        result[key] = value.value
+                    elif hasattr(value, '__dict__'):
+                        result[key] = serialize_dataclass(value)
+                    else:
+                        result[key] = value
+                return result
+            return obj
+            
+        return json.dumps(serialize_dataclass(self.result), indent=2, ensure_ascii=False)
+        
+    def _export_html(self) -> str:
+        """Exportiert als HTML"""
+        # TODO: Implementiere HTML-Export mit Charts
+        pass
+
+
+class AnalysisOrchestrator:
+    """
+    Orchestriert mehrere Analysen und Batch-Verarbeitung
+    """
+    
+    def __init__(self):
+        self.analyzers = {}
+        
+    async def analyze_portfolio(self, tickers: List[str]) -> Dict[str, AnalysisResult]:
+        """
+        Analysiert ein ganzes Portfolio
+        
+        Args:
+            tickers: Liste von Ticker-Symbolen
+            
+        Returns:
+            Dictionary mit Analyseergebnissen
+        """
+        tasks = []
+        for ticker in tickers:
+            analyzer = GrowthStockAnalyzer(ticker)
+            self.analyzers[ticker] = analyzer
+            tasks.append(analyzer.analyze())
+            
+        results = await asyncio.gather(*tasks)
+        
+        return {ticker: result for ticker, result in zip(tickers, results)}
+        
+    def generate_portfolio_report(self, results: Dict[str, AnalysisResult]) -> str:
+        """Generiert einen Portfolio-Gesamtbericht"""
+        report = "# Portfolio-Analyse\n\n"
+        
+        total_allocation = 0
+        recommendations = {"buy": [], "hold": [], "sell": []}
+        
+        for ticker, result in results.items():
+            total_allocation += result.target_allocation
+            
+            if "BUY" in result.recommendation.value:
+                recommendations["buy"].append(ticker)
+            elif "SELL" in result.recommendation.value:
+                recommendations["sell"].append(ticker)
+            else:
+                recommendations["hold"].append(ticker)
+                
+        report += f"## Zusammenfassung\n"
+        report += f"- **Kaufempfehlungen**: {', '.join(recommendations['buy'])}\n"
+        report += f"- **Halten**: {', '.join(recommendations['hold'])}\n"
+        report += f"- **Verkaufsempfehlungen**: {', '.join(recommendations['sell'])}\n"
+        report += f"- **Gesamt-Allokation**: {total_allocation:.1f}%\n\n"
+        
+        for ticker, result in results.items():
+            report += f"### {ticker}\n"
+            report += f"- Empfehlung: {result.recommendation.value}\n"
+            report += f"- Allokation: {result.target_allocation:.1f}%\n"
+            report += f"- Konfidenz: {result.confidence_score:.1f}%\n\n"
+            
+        return report
+
+
+# CLI Interface für standalone Nutzung
+async def main():
+    """Hauptfunktion für CLI-Nutzung"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Growth Stock Analyzer Agent")
+    parser.add_argument("ticker", help="Ticker-Symbol der zu analysierenden Aktie")
+    parser.add_argument("--type", choices=["fundamental", "sentiment", "technical", "competitive", "comprehensive"],
+                        default="comprehensive", help="Art der Analyse")
+    parser.add_argument("--format", choices=["markdown", "json", "html"],
+                        default="markdown", help="Export-Format")
+    parser.add_argument("--output", help="Output-Datei (optional)")
+    
+    args = parser.parse_args()
+    
+    # Erstelle Analyzer
+    analyzer = GrowthStockAnalyzer(args.ticker)
+    
+    # Führe Analyse durch
+    analysis_type = AnalysisType[args.type.upper()]
+    result = await analyzer.analyze(analysis_type)
+    
+    # Exportiere Bericht
+    report = analyzer.export_report(args.format)
+    
+    # Speichere oder gebe aus
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8') as f:
+            f.write(report)
+        print(f"✅ Bericht gespeichert in: {args.output}")
+    else:
+        print(report)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

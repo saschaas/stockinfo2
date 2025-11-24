@@ -12,6 +12,7 @@ from agents.market_sentiment import MarketSentimentAgent
 from agents.stock_research import StockResearchAgent
 from agents.investor_tracking import InvestorTrackingAgent
 from agents.analysis_engine import AnalysisEngineAgent
+from backend.app.agents.growth_analysis_agent import GrowthAnalysisAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -36,6 +37,7 @@ class SupervisorAgent:
         self.research_agent = StockResearchAgent()
         self.investor_agent = InvestorTrackingAgent()
         self.analysis_agent = AnalysisEngineAgent()
+        self.growth_analysis_agent = GrowthAnalysisAgent()
 
         self.graph = self._build_graph()
 
@@ -49,6 +51,7 @@ class SupervisorAgent:
         workflow.add_node("stock_research", self._stock_research_node)
         workflow.add_node("investor_tracking", self._investor_tracking_node)
         workflow.add_node("analysis_engine", self._analysis_engine_node)
+        workflow.add_node("growth_analysis", self._growth_analysis_node)
         workflow.add_node("aggregate", self._aggregate_node)
 
         # Set entry point
@@ -63,6 +66,7 @@ class SupervisorAgent:
                 "stock_research": "stock_research",
                 "investor_tracking": "investor_tracking",
                 "analysis_engine": "analysis_engine",
+                "growth_analysis": "growth_analysis",
                 "aggregate": "aggregate",
                 "end": END,
             },
@@ -73,6 +77,7 @@ class SupervisorAgent:
         workflow.add_edge("stock_research", "supervisor")
         workflow.add_edge("investor_tracking", "supervisor")
         workflow.add_edge("analysis_engine", "supervisor")
+        workflow.add_edge("growth_analysis", "supervisor")
         workflow.add_edge("aggregate", END)
 
         return workflow.compile()
@@ -100,15 +105,30 @@ class SupervisorAgent:
 
         # Route based on task type and what's completed
         if task_type == "full_research":
-            # Full research workflow
+            # Full research workflow with comprehensive growth analysis
             if "market_data" not in results:
                 state["current_agent"] = "market_sentiment"
             elif "stock_data" not in results:
                 state["current_agent"] = "stock_research"
             elif "fund_data" not in results:
                 state["current_agent"] = "investor_tracking"
+            elif "growth_analysis" not in results:
+                state["current_agent"] = "growth_analysis"
             elif "analysis" not in results:
                 state["current_agent"] = "analysis_engine"
+            else:
+                state["current_agent"] = "aggregate"
+
+        elif task_type == "comprehensive_analysis":
+            # Comprehensive growth stock analysis (new workflow)
+            if "market_data" not in results:
+                state["current_agent"] = "market_sentiment"
+            elif "stock_data" not in results:
+                state["current_agent"] = "stock_research"
+            elif "fund_data" not in results:
+                state["current_agent"] = "investor_tracking"
+            elif "growth_analysis" not in results:
+                state["current_agent"] = "growth_analysis"
             else:
                 state["current_agent"] = "aggregate"
 
@@ -213,6 +233,68 @@ class SupervisorAgent:
 
         return state
 
+    async def _growth_analysis_node(self, state: AgentState) -> AgentState:
+        """Run comprehensive growth stock analysis with multi-factor scoring."""
+        ticker = state.get("ticker")
+        if not ticker:
+            state["error"] = "No ticker specified for growth analysis"
+            return state
+
+        try:
+            # Get fund ownership data if available
+            fund_data = state["results"].get("fund_data", {})
+            fund_ownership = fund_data.get("funds", []) if fund_data else None
+
+            # Run comprehensive growth analysis
+            result = await self.growth_analysis_agent.analyze(
+                ticker=ticker,
+                stock_data=state["results"].get("stock_data", {}),
+                market_context=state["results"].get("market_data", {}),
+                fund_ownership=fund_ownership
+            )
+
+            # Convert dataclass to dict for serialization
+            result_dict = {
+                "ticker": result.ticker,
+                "recommendation": result.recommendation.value,
+                "confidence_score": result.confidence_score,
+                "portfolio_allocation": result.portfolio_allocation,
+                "price_target_base": result.price_target_base,
+                "price_target_optimistic": result.price_target_optimistic,
+                "price_target_pessimistic": result.price_target_pessimistic,
+                "upside_potential": result.upside_potential,
+                "composite_score": result.composite_score,
+                "fundamental_score": result.fundamental_score,
+                "sentiment_score": result.sentiment_score,
+                "technical_score": result.technical_score,
+                "competitive_score": result.competitive_score,
+                "risk_score": result.risk_analysis.risk_score,
+                "risk_level": result.risk_analysis.risk_level,
+                "key_strengths": result.key_strengths,
+                "key_risks": result.key_risks,
+                "catalyst_points": result.catalyst_points,
+                "monitoring_points": result.monitoring_points,
+                "ai_summary": result.ai_summary,
+                "ai_reasoning": result.ai_reasoning,
+                "data_completeness": result.data_completeness.completeness_score,
+                "missing_data": result.data_completeness.missing_critical,
+                "data_sources": result.data_sources
+            }
+
+            state["results"]["growth_analysis"] = result_dict
+            state["messages"].append(
+                AIMessage(content=f"Growth analysis completed: {result.recommendation.value} "
+                                f"({result.confidence_score:.0f}% confidence, "
+                                f"{result.portfolio_allocation:.1f}% allocation)")
+            )
+
+        except Exception as e:
+            logger.error("Growth analysis agent failed", ticker=ticker, error=str(e))
+            state["error"] = str(e)
+            state["results"]["growth_analysis"] = {"error": str(e)}
+
+        return state
+
     def _aggregate_node(self, state: AgentState) -> AgentState:
         """Aggregate all results into final output."""
         results = state["results"]
@@ -241,6 +323,17 @@ class SupervisorAgent:
             summary["recommendation"] = results["analysis"].get("recommendation")
             summary["confidence"] = results["analysis"].get("confidence_score")
             summary["target_price"] = results["analysis"].get("target_price_6m")
+
+        if "growth_analysis" in results:
+            growth = results["growth_analysis"]
+            summary["growth_recommendation"] = growth.get("recommendation")
+            summary["growth_confidence"] = growth.get("confidence_score")
+            summary["portfolio_allocation"] = growth.get("portfolio_allocation")
+            summary["price_target_base"] = growth.get("price_target_base")
+            summary["upside_potential"] = growth.get("upside_potential")
+            summary["composite_score"] = growth.get("composite_score")
+            summary["risk_level"] = growth.get("risk_level")
+            summary["data_completeness"] = growth.get("data_completeness")
 
         state["results"]["summary"] = summary
         state["messages"].append(
@@ -313,3 +406,9 @@ async def run_fund_tracking(ticker: str | None = None) -> dict[str, Any]:
     """Run fund tracking workflow."""
     supervisor = SupervisorAgent()
     return await supervisor.run("fund_tracking", ticker)
+
+
+async def run_comprehensive_analysis(ticker: str) -> dict[str, Any]:
+    """Run comprehensive growth stock analysis workflow."""
+    supervisor = SupervisorAgent()
+    return await supervisor.run("comprehensive_analysis", ticker)

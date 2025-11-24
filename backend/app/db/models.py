@@ -214,6 +214,36 @@ class StockAnalysis(Base):
     risks: Mapped[list] = mapped_column(PortableJSON, nullable=True)
     opportunities: Mapped[list] = mapped_column(PortableJSON, nullable=True)
 
+    # Growth analysis (comprehensive multi-factor analysis)
+    portfolio_allocation: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # Suggested % of portfolio
+    price_target_base: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    price_target_optimistic: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    price_target_pessimistic: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    upside_potential: Mapped[Decimal] = mapped_column(Numeric(7, 2), nullable=True)  # % to base target
+
+    # Scoring breakdown
+    composite_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-10
+    fundamental_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-10
+    sentiment_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-10
+    technical_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-10
+    competitive_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-10
+    risk_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 1-10 (higher = riskier)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=True)  # low, moderate, high, very high
+
+    # Key insights
+    key_strengths: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    key_risks: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    catalyst_points: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    monitoring_points: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+
+    # Data quality
+    data_completeness_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=True)  # 0-100
+    missing_data_categories: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+
+    # AI qualitative analysis
+    ai_summary: Mapped[str] = mapped_column(Text, nullable=True)
+    ai_reasoning: Mapped[str] = mapped_column(Text, nullable=True)
+
     # Peer comparison
     peer_comparison: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
 

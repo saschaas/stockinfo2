@@ -118,7 +118,7 @@ def research_stock(
                 result.update(technical)
                 data_sources["technical"] = {"type": "api", "name": "yahoo_finance"}
 
-            # Step 4: Price performance (70%)
+            # Step 4: Price performance (65%)
             await set_job_progress(job_id, "running", 60, "Calculating price performance...")
 
             result.update({
@@ -126,7 +126,62 @@ def research_stock(
                 "price_change_1d": calculate_change(stock_info.get("current_price"), stock_info.get("previous_close")),
             })
 
-            # Step 5: AI Analysis (90%)
+            # Step 5: Growth Stock Analysis (80%)
+            await set_job_progress(job_id, "running", 70, "Running growth stock analysis...")
+            await update_job_status(job_id, ticker, "running", 70, "Running growth stock analysis...")
+
+            try:
+                from backend.app.agents.growth_analysis_agent import GrowthAnalysisAgent
+
+                growth_agent = GrowthAnalysisAgent()
+
+                # Prepare stock data for growth analysis
+                stock_data_for_growth = {
+                    "info": stock_info,
+                    "technicals": technical if include_technical else {},
+                    "data_sources": data_sources
+                }
+
+                growth_result = await growth_agent.analyze(
+                    ticker=ticker,
+                    stock_data=stock_data_for_growth,
+                    market_context=None,
+                    fund_ownership=None
+                )
+
+                # Store growth analysis results
+                result.update({
+                    "portfolio_allocation": growth_result.portfolio_allocation,
+                    "price_target_base": growth_result.price_target_base,
+                    "price_target_optimistic": growth_result.price_target_optimistic,
+                    "price_target_pessimistic": growth_result.price_target_pessimistic,
+                    "upside_potential": growth_result.upside_potential,
+                    "composite_score": growth_result.composite_score,
+                    "fundamental_score": growth_result.fundamental_score,
+                    "sentiment_score": growth_result.sentiment_score,
+                    "technical_score": growth_result.technical_score,
+                    "competitive_score": growth_result.competitive_score,
+                    "risk_score": growth_result.risk_analysis.risk_score,
+                    "risk_level": growth_result.risk_analysis.risk_level,
+                    "key_strengths": growth_result.key_strengths,
+                    "key_risks": growth_result.key_risks,
+                    "catalyst_points": growth_result.catalyst_points,
+                    "monitoring_points": growth_result.monitoring_points,
+                    "data_completeness_score": growth_result.data_completeness.completeness_score,
+                    "missing_data_categories": growth_result.data_completeness.missing_critical,
+                    "ai_summary": growth_result.ai_summary,
+                    "ai_reasoning": growth_result.ai_reasoning,
+                })
+
+                data_sources["growth_analysis"] = {"type": "ai", "name": "growth_analysis_agent"}
+
+                logger.info("Growth analysis completed", ticker=ticker, composite_score=growth_result.composite_score)
+
+            except Exception as e:
+                logger.warning("Growth analysis failed", ticker=ticker, error=str(e))
+                # Continue without growth analysis
+
+            # Step 6: AI Analysis (90%)
             if include_ai_analysis:
                 await set_job_progress(job_id, "running", 75, "Running AI analysis...")
                 await update_job_status(job_id, ticker, "running", 75, "Running AI analysis...")
@@ -135,7 +190,7 @@ def research_stock(
                 result.update(ai_analysis)
                 data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
 
-            # Step 6: Save to database (100%)
+            # Step 7: Save to database (100%)
             await set_job_progress(job_id, "running", 90, "Saving results...")
 
             result["data_sources"] = data_sources
