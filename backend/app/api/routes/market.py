@@ -114,3 +114,54 @@ async def refresh_market_sentiment(
         "message": "Market sentiment refresh has been queued",
         "job_id": task.id,
     }
+
+
+@router.get("/indices/history")
+async def get_indices_history(
+    days: int = Query(default=90, ge=1, le=365),
+) -> dict:
+    """Get historical data for major market indices.
+
+    Returns the last N days of price data for S&P 500, NASDAQ, and Dow Jones.
+    """
+    from backend.app.services.yahoo_finance import get_yahoo_finance_client
+
+    client = get_yahoo_finance_client()
+
+    # Map days to period parameter
+    if days <= 5:
+        period = "5d"
+    elif days <= 30:
+        period = "1mo"
+    elif days <= 90:
+        period = "3mo"
+    elif days <= 180:
+        period = "6mo"
+    else:
+        period = "1y"
+
+    indices = {
+        "^GSPC": "sp500",
+        "^IXIC": "nasdaq",
+        "^DJI": "dow",
+    }
+
+    result = {}
+    for symbol, key in indices.items():
+        try:
+            history = await client.get_historical_prices(
+                symbol,
+                period=period,
+                interval="1d",
+            )
+            result[key] = [
+                {
+                    "date": point["date"],
+                    "close": float(point["close"]) if point["close"] else None,
+                }
+                for point in history
+            ]
+        except Exception as e:
+            result[key] = []
+
+    return result

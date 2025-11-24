@@ -27,6 +27,13 @@ export async function refreshMarketSentiment() {
   return data
 }
 
+export async function fetchIndicesHistory(days: number = 90) {
+  const { data } = await api.get('/market/indices/history', {
+    params: { days },
+  })
+  return data
+}
+
 // Stock endpoints
 export async function fetchStockAnalysis(ticker: string) {
   const { data } = await api.get(`/stocks/${ticker}`)
