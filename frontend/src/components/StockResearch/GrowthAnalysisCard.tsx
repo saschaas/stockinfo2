@@ -5,6 +5,7 @@ import PriceTargets from './PriceTargets'
 import KeyInsights from './KeyInsights'
 import ScoringBreakdown from './ScoringBreakdown'
 import DataSourcesTable from './DataSourcesTable'
+import SectorComparisonCard from './SectorComparisonCard'
 
 interface GrowthAnalysisData {
   // Scoring
@@ -46,13 +47,30 @@ interface GrowthAnalysisData {
 
   // Data Sources
   data_sources?: Record<string, { type: string; name: string }>
+
+  // Sector Comparison
+  sector_comparison?: {
+    ticker: string
+    sector: string
+    analysis_date: string
+    stock_metrics: Record<string, number | null>
+    sector_averages: Record<string, number | null>
+    sector_medians: Record<string, number | null>
+    percentile_ranks: Record<string, number | null>
+    relative_strength: string
+    stocks_included: number
+    data_freshness: string
+    warning?: string
+    error?: string
+  }
 }
 
 interface GrowthAnalysisCardProps {
   data: GrowthAnalysisData
+  ticker: string
 }
 
-export default function GrowthAnalysisCard({ data }: GrowthAnalysisCardProps) {
+export default function GrowthAnalysisCard({ data, ticker }: GrowthAnalysisCardProps) {
   // Check if we have growth analysis data
   const hasGrowthAnalysis = data.composite_score !== undefined && data.composite_score !== null
 
@@ -158,6 +176,13 @@ export default function GrowthAnalysisCard({ data }: GrowthAnalysisCardProps) {
         dataSources={data.data_sources}
         missingCategories={data.missing_data_categories}
         completenessScore={data.data_completeness_score}
+        sectorComparisonAvailable={!!data.sector_comparison}
+      />
+
+      {/* Sector Comparison */}
+      <SectorComparisonCard
+        ticker={ticker}
+        sectorComparisonData={data.sector_comparison}
       />
     </div>
   )

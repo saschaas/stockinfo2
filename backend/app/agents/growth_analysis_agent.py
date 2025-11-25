@@ -267,6 +267,15 @@ class GrowthAnalysisAgent:
             "risk": 0.10
         }
 
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+        """Safely convert value to float, handling None and missing values."""
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
     async def analyze(
         self,
         ticker: str,
@@ -424,8 +433,8 @@ class GrowthAnalysisAgent:
             name=info.get("longName", info.get("shortName", "")),
             sector=info.get("sector", ""),
             industry=info.get("industry", ""),
-            market_cap=float(info.get("marketCap", 0)),
-            employees=int(info.get("fullTimeEmployees", 0)),
+            market_cap=self._safe_float(info.get("marketCap"), 0),
+            employees=int(info.get("fullTimeEmployees") or 0),
             description=info.get("longBusinessSummary", ""),
             website=info.get("website", "")
         )
@@ -437,34 +446,34 @@ class GrowthAnalysisAgent:
         financial = FinancialData()
 
         # Revenue
-        financial.revenue_current = float(info.get("totalRevenue", 0))
-        financial.revenue_yoy_growth = float(info.get("revenueGrowth", 0)) * 100 if info.get("revenueGrowth") else 0.0
+        financial.revenue_current = self._safe_float(info.get("totalRevenue", 0))
+        financial.revenue_yoy_growth = self._safe_float(info.get("revenueGrowth", 0)) * 100 if info.get("revenueGrowth") else 0.0
 
         # Margins
-        financial.gross_margin = float(info.get("grossMargins", 0)) * 100 if info.get("grossMargins") else 0.0
-        financial.operating_margin = float(info.get("operatingMargins", 0)) * 100 if info.get("operatingMargins") else 0.0
-        financial.net_margin = float(info.get("profitMargins", 0)) * 100 if info.get("profitMargins") else 0.0
+        financial.gross_margin = self._safe_float(info.get("grossMargins", 0)) * 100 if info.get("grossMargins") else 0.0
+        financial.operating_margin = self._safe_float(info.get("operatingMargins", 0)) * 100 if info.get("operatingMargins") else 0.0
+        financial.net_margin = self._safe_float(info.get("profitMargins", 0)) * 100 if info.get("profitMargins") else 0.0
 
         # Earnings
-        financial.eps = float(info.get("trailingEps", 0))
-        financial.eps_growth_yoy = float(info.get("earningsGrowth", 0)) * 100 if info.get("earningsGrowth") else 0.0
+        financial.eps = self._safe_float(info.get("trailingEps", 0))
+        financial.eps_growth_yoy = self._safe_float(info.get("earningsGrowth", 0)) * 100 if info.get("earningsGrowth") else 0.0
 
         # Cash flow
-        financial.operating_cashflow = float(info.get("operatingCashflow", 0))
-        financial.free_cashflow = float(info.get("freeCashflow", 0))
+        financial.operating_cashflow = self._safe_float(info.get("operatingCashflow", 0))
+        financial.free_cashflow = self._safe_float(info.get("freeCashflow", 0))
         if financial.revenue_current > 0:
             financial.fcf_margin = (financial.free_cashflow / financial.revenue_current) * 100
-        financial.cash_balance = float(info.get("totalCash", 0))
+        financial.cash_balance = self._safe_float(info.get("totalCash", 0))
 
         # Balance sheet
-        financial.total_debt = float(info.get("totalDebt", 0))
-        financial.equity = float(info.get("totalStockholderEquity", 0))
-        financial.debt_to_equity = float(info.get("debtToEquity", 0)) / 100 if info.get("debtToEquity") else 0.0
-        financial.current_ratio = float(info.get("currentRatio", 0))
+        financial.total_debt = self._safe_float(info.get("totalDebt", 0))
+        financial.equity = self._safe_float(info.get("totalStockholderEquity", 0))
+        financial.debt_to_equity = self._safe_float(info.get("debtToEquity", 0)) / 100 if info.get("debtToEquity") else 0.0
+        financial.current_ratio = self._safe_float(info.get("currentRatio", 0))
 
         # Returns
-        financial.roe = float(info.get("returnOnEquity", 0)) * 100 if info.get("returnOnEquity") else 0.0
-        financial.roa = float(info.get("returnOnAssets", 0)) * 100 if info.get("returnOnAssets") else 0.0
+        financial.roe = self._safe_float(info.get("returnOnEquity", 0)) * 100 if info.get("returnOnEquity") else 0.0
+        financial.roa = self._safe_float(info.get("returnOnAssets", 0)) * 100 if info.get("returnOnAssets") else 0.0
 
         return financial
 
@@ -496,14 +505,14 @@ class GrowthAnalysisAgent:
                     sentiment.analyst_consensus = "hold"
 
         # Price targets
-        sentiment.price_target_avg = float(info.get("targetMeanPrice", 0))
-        sentiment.price_target_high = float(info.get("targetHighPrice", 0))
-        sentiment.price_target_low = float(info.get("targetLowPrice", 0))
+        sentiment.price_target_avg = self._safe_float(info.get("targetMeanPrice", 0))
+        sentiment.price_target_high = self._safe_float(info.get("targetHighPrice", 0))
+        sentiment.price_target_low = self._safe_float(info.get("targetLowPrice", 0))
 
         # Ownership
-        sentiment.institutional_ownership = float(info.get("heldPercentInstitutions", 0)) * 100 if info.get("heldPercentInstitutions") else 0.0
-        sentiment.insider_ownership = float(info.get("heldPercentInsiders", 0)) * 100 if info.get("heldPercentInsiders") else 0.0
-        sentiment.short_interest = float(info.get("shortPercentOfFloat", 0)) * 100 if info.get("shortPercentOfFloat") else 0.0
+        sentiment.institutional_ownership = self._safe_float(info.get("heldPercentInstitutions", 0)) * 100 if info.get("heldPercentInstitutions") else 0.0
+        sentiment.insider_ownership = self._safe_float(info.get("heldPercentInsiders", 0)) * 100 if info.get("heldPercentInsiders") else 0.0
+        sentiment.short_interest = self._safe_float(info.get("shortPercentOfFloat", 0)) * 100 if info.get("shortPercentOfFloat") else 0.0
 
         # Fund tracking
         if fund_ownership:
@@ -525,25 +534,25 @@ class GrowthAnalysisAgent:
         indicators = TechnicalIndicators()
 
         # Price data
-        indicators.current_price = float(info.get("currentPrice", 0))
-        indicators.week_52_high = float(info.get("fiftyTwoWeekHigh", 0))
-        indicators.week_52_low = float(info.get("fiftyTwoWeekLow", 0))
+        indicators.current_price = self._safe_float(info.get("currentPrice", 0))
+        indicators.week_52_high = self._safe_float(info.get("fiftyTwoWeekHigh", 0))
+        indicators.week_52_low = self._safe_float(info.get("fiftyTwoWeekLow", 0))
 
         # Performance
-        indicators.price_change_ytd = float(info.get("52WeekChange", 0)) * 100 if info.get("52WeekChange") else 0.0
+        indicators.price_change_ytd = self._safe_float(info.get("52WeekChange", 0)) * 100 if info.get("52WeekChange") else 0.0
 
         # Technical indicators from analysis
         if technicals:
-            indicators.rsi = float(technicals.get("rsi", 0))
+            indicators.rsi = self._safe_float(technicals.get("rsi", 0))
             indicators.rsi_signal = technicals.get("rsi_signal", "neutral")
 
-            indicators.macd = float(technicals.get("macd", 0))
-            indicators.macd_signal = float(technicals.get("macd_signal", 0))
-            indicators.macd_histogram = float(technicals.get("macd_histogram", 0))
+            indicators.macd = self._safe_float(technicals.get("macd", 0))
+            indicators.macd_signal = self._safe_float(technicals.get("macd_signal", 0))
+            indicators.macd_histogram = self._safe_float(technicals.get("macd_histogram", 0))
 
-            indicators.sma_20 = float(technicals.get("sma_20", 0))
-            indicators.sma_50 = float(technicals.get("sma_50", 0))
-            indicators.sma_200 = float(technicals.get("sma_200", 0))
+            indicators.sma_20 = self._safe_float(technicals.get("sma_20", 0))
+            indicators.sma_50 = self._safe_float(technicals.get("sma_50", 0))
+            indicators.sma_200 = self._safe_float(technicals.get("sma_200", 0))
 
             if indicators.current_price > 0:
                 indicators.price_above_sma_20 = indicators.current_price > indicators.sma_20
@@ -551,7 +560,7 @@ class GrowthAnalysisAgent:
                 indicators.price_above_sma_200 = indicators.current_price > indicators.sma_200
 
         # Volatility
-        indicators.beta = float(info.get("beta", 1.0))
+        indicators.beta = self._safe_float(info.get("beta", 1.0))
 
         # Volume
         indicators.volume_avg_10d = int(info.get("averageVolume10days", 0))
@@ -569,10 +578,10 @@ class GrowthAnalysisAgent:
         if peers_data:
             analysis.peers = [p.get("ticker", "") for p in peers_data if p.get("ticker") != ticker][:5]
 
-        # Valuation comparison
-        pe = float(info.get("trailingPE", 0))
-        ps = float(info.get("priceToSalesTrailing12Months", 0))
-        peg = float(info.get("pegRatio", 0))
+        # Valuation comparison (handle None values)
+        pe = self._safe_float(info.get("trailingPE") or 0)
+        ps = self._safe_float(info.get("priceToSalesTrailing12Months") or 0)
+        peg = self._safe_float(info.get("pegRatio") or 0)
 
         analysis.pe_ratio = pe
         analysis.ps_ratio = ps
@@ -580,7 +589,7 @@ class GrowthAnalysisAgent:
 
         # Compare with peers if data available
         if peers_data:
-            peer_pes = [float(p.get("trailingPE", 0)) for p in peers_data if p.get("trailingPE")]
+            peer_pes = [self._safe_float(p.get("trailingPE") or 0) for p in peers_data if p.get("trailingPE")]
             if peer_pes and pe > 0:
                 avg_peer_pe = sum(peer_pes) / len(peer_pes)
                 if pe > avg_peer_pe * 1.2:
@@ -591,10 +600,10 @@ class GrowthAnalysisAgent:
                     analysis.pe_vs_peers = "inline"
 
         # Competitive advantages (basic inference from data)
-        if float(info.get("grossMargins", 0)) > 0.5:
+        if self._safe_float(info.get("grossMargins") or 0) > 0.5:
             analysis.competitive_advantages.append("High gross margins indicate pricing power")
 
-        if float(info.get("returnOnEquity", 0)) > 0.2:
+        if self._safe_float(info.get("returnOnEquity") or 0) > 0.2:
             analysis.competitive_advantages.append("Strong capital efficiency (ROE > 20%)")
 
         return analysis
@@ -627,11 +636,11 @@ class GrowthAnalysisAgent:
             risk.business_risks.append("Unprofitable operations")
 
         # Market risks
-        beta = float(info.get("beta", 1.0))
+        beta = self._safe_float(info.get("beta") or 1.0)
         if beta > 1.5:
             risk.market_risks.append(f"High volatility (Beta: {beta:.2f})")
 
-        short_interest = float(info.get("shortPercentOfFloat", 0))
+        short_interest = self._safe_float(info.get("shortPercentOfFloat") or 0)
         if short_interest > 0.1:
             risk.market_risks.append(f"Elevated short interest ({short_interest*100:.1f}%)")
 

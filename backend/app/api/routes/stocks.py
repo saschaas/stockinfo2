@@ -11,11 +11,15 @@ from backend.app.core.exceptions import NotFoundException
 from backend.app.db.models import StockAnalysis, StockPrice
 from backend.app.db.session import get_db
 from backend.app.schemas.stocks import (
+    SectorComparisonResponse,
+    SectorLeaderResponse,
+    SectorStatistics,
     StockAnalysisResponse,
     StockPriceHistoryResponse,
     StockResearchRequest,
     StockResearchResponse,
 )
+from backend.app.services.sector_comparison import get_sector_comparison_service
 
 router = APIRouter()
 
@@ -185,3 +189,82 @@ async def get_fund_ownership(
         "total_fund_shares": analysis.total_fund_shares,
         "funds": analysis.fund_ownership or [],
     }
+
+
+@router.get("/{ticker}/sector-comparison", response_model=SectorComparisonResponse)
+async def get_stock_sector_comparison(
+    ticker: Annotated[str, Path(min_length=1, max_length=10)],
+    lookback_days: int = Query(default=180, ge=30, le=365, description="Days to look back for sector data"),
+    db: AsyncSession = Depends(get_db),
+) -> SectorComparisonResponse:
+    """Compare stock to its sector averages.
+
+    Returns:
+    - Stock's current metrics
+    - Sector average and median values
+    - Percentile rankings showing where the stock stands in its sector
+    - Relative strength assessment
+    - Data freshness and sample size information
+    """
+    ticker = ticker.upper()
+
+    service = get_sector_comparison_service()
+    result = await service.compare_stock_to_sector(
+        ticker=ticker,
+        lookback_days=lookback_days,
+    )
+
+    return SectorComparisonResponse(**result)
+
+
+@router.get("/sectors/{sector}/stats", response_model=SectorStatistics)
+async def get_sector_statistics(
+    sector: Annotated[str, Path(min_length=1)],
+    lookback_days: int = Query(default=180, ge=30, le=365, description="Days to look back for sector data"),
+    db: AsyncSession = Depends(get_db),
+) -> SectorStatistics:
+    """Get comprehensive statistics for a sector.
+
+    Returns:
+    - Number of stocks analyzed in the sector
+    - Average values for all comparable metrics
+    - Median values (less affected by outliers)
+    - 25th and 75th percentile values
+    - Sample sizes for each metric
+    - Date range of included analyses
+    """
+    service = get_sector_comparison_service()
+    result = await service.get_sector_statistics(
+        sector=sector,
+        lookback_days=lookback_days,
+    )
+
+    return SectorStatistics(**result)
+
+
+@router.get("/sectors/{sector}/leaders", response_model=list[SectorLeaderResponse])
+async def get_sector_leaders(
+    sector: Annotated[str, Path(min_length=1)],
+    metric: str = Query(default="composite_score", description="Metric to rank by"),
+    limit: int = Query(default=10, ge=1, le=50, description="Number of top stocks to return"),
+    lookback_days: int = Query(default=180, ge=30, le=365, description="Days to look back for sector data"),
+    db: AsyncSession = Depends(get_db),
+) -> list[SectorLeaderResponse]:
+    """Get top performing stocks in a sector by specific metric.
+
+    Available metrics:
+    - composite_score: Overall score combining all factors (default)
+    - fundamental_score: Financial health and valuation
+    - technical_score: Technical indicators
+    - pe_ratio: Price to earnings ratio
+    - risk_score: Risk assessment (lower is better)
+    """
+    service = get_sector_comparison_service()
+    result = await service.get_sector_leaders(
+        sector=sector,
+        metric=metric,
+        limit=limit,
+        lookback_days=lookback_days,
+    )
+
+    return [SectorLeaderResponse(**stock) for stock in result]

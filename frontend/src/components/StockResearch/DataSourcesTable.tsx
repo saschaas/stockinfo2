@@ -7,12 +7,14 @@ interface DataSourcesTableProps {
   dataSources?: Record<string, DataSource>
   missingCategories?: string[]
   completenessScore?: number
+  sectorComparisonAvailable?: boolean
 }
 
 export default function DataSourcesTable({
   dataSources,
   missingCategories,
-  completenessScore
+  completenessScore,
+  sectorComparisonAvailable
 }: DataSourcesTableProps) {
   if (!dataSources) {
     return null
@@ -64,10 +66,10 @@ export default function DataSourcesTable({
     },
     {
       category: 'Peer Comparison',
-      fields: ['Similar Companies', 'Industry Averages', 'Competitive Positioning'],
-      source: null,
-      available: false,
-      note: 'Not available from current data sources'
+      fields: ['Sector Averages', 'Percentile Rankings', 'Valuation Metrics', 'Performance Comparison'],
+      source: sectorComparisonAvailable ? { type: 'analysis', name: 'sector_comparison' } : null,
+      available: !!sectorComparisonAvailable,
+      note: sectorComparisonAvailable ? 'Comparison with sector peers based on recent analyses' : 'Not available from current data sources'
     },
     {
       category: 'Growth Analysis',
@@ -95,8 +97,9 @@ export default function DataSourcesTable({
 
   const getSourceBadge = (source: DataSource) => {
     const isAPI = source.type === 'api'
-    const bgColor = isAPI ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-    const icon = isAPI ? '🌐' : '🤖'
+    const isAnalysis = source.type === 'analysis'
+    const bgColor = isAPI ? 'bg-blue-100 text-blue-800' : isAnalysis ? 'bg-teal-100 text-teal-800' : 'bg-purple-100 text-purple-800'
+    const icon = isAPI ? '🌐' : isAnalysis ? '📊' : '🤖'
 
     return (
       <div className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${bgColor}`}>
@@ -150,6 +153,10 @@ export default function DataSourcesTable({
           <div className="flex items-center">
             <span className="mr-1">🌐</span>
             <span>Direct API</span>
+          </div>
+          <div className="flex items-center">
+            <span className="mr-1">📊</span>
+            <span>Analysis</span>
           </div>
           <div className="flex items-center">
             <span className="mr-1">🤖</span>
@@ -251,6 +258,7 @@ export default function DataSourcesTable({
         <ul className="space-y-1">
           <li>• <strong>Yahoo Finance</strong> - Stock prices, technical indicators, basic company info</li>
           <li>• <strong>Alpha Vantage</strong> - Fundamental data, financial statements</li>
+          <li>• <strong>Sector Comparison</strong> - Peer analysis using historical stock data from database</li>
           <li>• <strong>Ollama (AI)</strong> - Stock analysis, recommendations, sentiment analysis</li>
           <li>• <strong>Growth Analysis Agent (AI)</strong> - Multi-factor scoring, price targets, risk assessment</li>
         </ul>

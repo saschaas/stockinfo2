@@ -71,6 +71,13 @@ export async function fetchFundOwnership(ticker: string) {
   return data
 }
 
+export async function fetchSectorComparison(ticker: string, lookbackDays: number = 180) {
+  const { data } = await api.get(`/stocks/${ticker}/sector-comparison`, {
+    params: { lookback_days: lookbackDays },
+  })
+  return data
+}
+
 // Fund endpoints
 export async function fetchFunds(category?: string, activeOnly: boolean = true, fundsOnly: boolean = true) {
   const { data } = await api.get('/funds', {

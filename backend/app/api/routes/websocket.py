@@ -214,7 +214,7 @@ async def get_job_result(job_id: str) -> dict:
                     except (TypeError, ValueError):
                         return None
 
-                return {
+                result = {
                     "ticker": analysis.ticker,
                     "company_name": analysis.company_name,
                     "sector": analysis.sector,
@@ -253,6 +253,24 @@ async def get_job_result(job_id: str) -> dict:
                     "ai_summary": analysis.ai_summary,
                     "ai_reasoning": analysis.ai_reasoning,
                 }
+
+                # Add sector comparison if sector is available
+                if analysis.sector:
+                    try:
+                        from backend.app.services.sector_comparison import get_sector_comparison_service
+                        sector_service = get_sector_comparison_service()
+                        sector_comp = await sector_service.compare_stock_to_sector(
+                            ticker=analysis.ticker,
+                            sector=analysis.sector,
+                            lookback_days=180
+                        )
+                        result["sector_comparison"] = sector_comp
+                        logger.debug("Added sector comparison to job result", ticker=analysis.ticker)
+                    except Exception as e:
+                        logger.warning("Failed to add sector comparison to job result", ticker=analysis.ticker, error=str(e))
+                        result["sector_comparison"] = None
+
+                return result
     except Exception as e:
         logger.error("Failed to get job result", job_id=job_id, error=str(e))
 

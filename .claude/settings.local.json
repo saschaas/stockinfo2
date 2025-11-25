@@ -45,7 +45,9 @@
       "Bash(dos2unix:*)",
       "Bash(docker images:*)",
       "Bash(docker cp:*)",
-      "Bash(docker rmi:*)"
+      "Bash(docker rmi:*)",
+      "WebFetch(domain:www.alphavantage.co)",
+      "WebFetch(domain:ranaroussi.github.io)"
     ],
     "deny": [],
     "ask": []

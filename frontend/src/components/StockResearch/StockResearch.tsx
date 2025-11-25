@@ -225,7 +225,7 @@ export default function StockResearch() {
 
                   {/* Growth Analysis Section */}
                   <div className="mt-8 pt-8 border-t">
-                    <GrowthAnalysisCard data={job.result} />
+                    <GrowthAnalysisCard data={job.result} ticker={job.ticker} />
                   </div>
                 </div>
               )}

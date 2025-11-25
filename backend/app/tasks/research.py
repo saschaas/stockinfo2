@@ -199,12 +199,32 @@ def research_stock(
                 result.update(ai_analysis)
                 data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
 
-            # Step 7: Save to database (100%)
+            # Step 7: Save to database (90%)
             await set_job_progress(job_id, "running", 90, "Saving results...")
 
             result["data_sources"] = data_sources
             analysis_id = await save_analysis_to_db(result)
             result["analysis_id"] = analysis_id
+
+            # Step 8: Add sector comparison (95%)
+            if result.get("sector"):
+                await set_job_progress(job_id, "running", 95, "Calculating sector comparison...")
+                await update_job_status(job_id, ticker, "running", 95, "Calculating sector comparison...")
+
+                try:
+                    from backend.app.services.sector_comparison import get_sector_comparison_service
+                    sector_service = get_sector_comparison_service()
+                    sector_comp = await sector_service.compare_stock_to_sector(
+                        ticker=ticker,
+                        sector=result["sector"],
+                        lookback_days=180
+                    )
+                    result["sector_comparison"] = sector_comp
+                    logger.info("Added sector comparison", ticker=ticker, sector=result["sector"])
+                except Exception as e:
+                    logger.warning("Failed to add sector comparison", ticker=ticker, error=str(e))
+                    # Don't fail the entire job if sector comparison fails
+                    result["sector_comparison"] = None
 
             # Complete
             await set_job_progress(job_id, "completed", 100, "Research completed")

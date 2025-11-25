@@ -1,7 +1,7 @@
 """Pydantic schemas for stock research."""
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -184,3 +184,43 @@ class StockPriceHistoryResponse(BaseModel):
 
     ticker: str
     prices: list[dict[str, Any]]
+
+
+class SectorStatistics(BaseModel):
+    """Sector-wide statistics."""
+
+    sector: str
+    stock_count: int
+    analysis_date_range: dict[str, str]
+    averages: dict[str, Optional[float]]
+    medians: dict[str, Optional[float]]
+    percentiles: dict[str, dict[str, Optional[float]]]
+    sample_sizes: dict[str, int]
+    warning: Optional[str] = None
+
+
+class SectorComparisonResponse(BaseModel):
+    """Response schema for stock sector comparison."""
+
+    ticker: str
+    sector: str
+    analysis_date: str
+    stock_metrics: dict[str, Optional[float]]
+    sector_averages: dict[str, Optional[float]]
+    sector_medians: dict[str, Optional[float]]
+    percentile_ranks: dict[str, Optional[float]]
+    relative_strength: str
+    stocks_included: int
+    data_freshness: str
+    warning: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SectorLeaderResponse(BaseModel):
+    """Individual sector leader stock."""
+
+    ticker: str
+    company_name: Optional[str]
+    analysis_date: str
+    composite_score: Optional[float]
+    market_cap: Optional[int]
