@@ -4,6 +4,7 @@ import { startStockResearch } from '../../services/api'
 import { useResearchStore } from '../../stores/researchStore'
 import ProgressTracker from '../ProgressTracker/ProgressTracker'
 import DataSourceBadge from '../DataSourceBadge/DataSourceBadge'
+import GrowthAnalysisCard from './GrowthAnalysisCard'
 
 export default function StockResearch() {
   const [ticker, setTicker] = useState('')
@@ -220,6 +221,11 @@ export default function StockResearch() {
                         </ul>
                       </div>
                     )}
+                  </div>
+
+                  {/* Growth Analysis Section */}
+                  <div className="mt-8 pt-8 border-t">
+                    <GrowthAnalysisCard data={job.result} />
                   </div>
                 </div>
               )}

@@ -231,6 +231,27 @@ async def get_job_result(job_id: str) -> dict:
                     "sma_20": to_float(analysis.sma_20),
                     "sma_50": to_float(analysis.sma_50),
                     "data_sources": analysis.data_sources,
+                    # Growth Analysis fields
+                    "portfolio_allocation": to_float(analysis.portfolio_allocation),
+                    "price_target_base": to_float(analysis.price_target_base),
+                    "price_target_optimistic": to_float(analysis.price_target_optimistic),
+                    "price_target_pessimistic": to_float(analysis.price_target_pessimistic),
+                    "upside_potential": to_float(analysis.upside_potential),
+                    "composite_score": to_float(analysis.composite_score),
+                    "fundamental_score": to_float(analysis.fundamental_score),
+                    "sentiment_score": to_float(analysis.sentiment_score),
+                    "technical_score": to_float(analysis.technical_score),
+                    "competitive_score": to_float(analysis.competitive_score),
+                    "risk_score": to_float(analysis.risk_score),
+                    "risk_level": analysis.risk_level,
+                    "key_strengths": analysis.key_strengths,
+                    "key_risks": analysis.key_risks,
+                    "catalyst_points": analysis.catalyst_points,
+                    "monitoring_points": analysis.monitoring_points,
+                    "data_completeness_score": to_float(analysis.data_completeness_score),
+                    "missing_data_categories": analysis.missing_data_categories,
+                    "ai_summary": analysis.ai_summary,
+                    "ai_reasoning": analysis.ai_reasoning,
                 }
     except Exception as e:
         logger.error("Failed to get job result", job_id=job_id, error=str(e))
