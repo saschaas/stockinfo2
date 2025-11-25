@@ -80,11 +80,17 @@ class YahooFinanceClient:
                 "ev_to_revenue": self._safe_decimal(info.get("enterpriseToRevenue")),
                 "ev_to_ebitda": self._safe_decimal(info.get("enterpriseToEbitda")),
 
+                # Original field names for backward compatibility
+                "trailingPE": self._safe_decimal(info.get("trailingPE")),
+                "priceToBook": self._safe_decimal(info.get("priceToBook")),
+                "priceToSalesTrailing12Months": self._safe_decimal(info.get("priceToSalesTrailing12Months")),
+
                 # Fundamentals
                 "eps": self._safe_decimal(info.get("trailingEps")),
                 "forward_eps": self._safe_decimal(info.get("forwardEps")),
                 "book_value": self._safe_decimal(info.get("bookValue")),
                 "revenue": info.get("totalRevenue"),
+                "totalRevenue": info.get("totalRevenue"),  # Original field name
                 "gross_profit": info.get("grossProfits"),
                 "ebitda": info.get("ebitda"),
                 "net_income": info.get("netIncomeToCommon"),
@@ -92,6 +98,10 @@ class YahooFinanceClient:
                 "operating_cash_flow": info.get("operatingCashflow"),
                 "total_debt": info.get("totalDebt"),
                 "total_cash": info.get("totalCash"),
+
+                # Original field names for cash flow
+                "freeCashflow": info.get("freeCashflow"),
+                "operatingCashflow": info.get("operatingCashflow"),
 
                 # Margins and ratios
                 "profit_margin": self._safe_decimal(info.get("profitMargins")),
@@ -103,8 +113,14 @@ class YahooFinanceClient:
                 "current_ratio": self._safe_decimal(info.get("currentRatio")),
                 "quick_ratio": self._safe_decimal(info.get("quickRatio")),
 
+                # Original field names for backward compatibility with Growth Analysis Agent
+                "profitMargins": self._safe_decimal(info.get("profitMargins")),
+                "operatingMargins": self._safe_decimal(info.get("operatingMargins")),
+                "grossMargins": self._safe_decimal(info.get("grossMargins")),
+
                 # Growth
                 "revenue_growth": self._safe_decimal(info.get("revenueGrowth")),
+                "revenueGrowth": self._safe_decimal(info.get("revenueGrowth")),  # Original field name
                 "earnings_growth": self._safe_decimal(info.get("earningsGrowth")),
 
                 # Dividends

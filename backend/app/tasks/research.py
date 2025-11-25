@@ -126,6 +126,14 @@ def research_stock(
                 "price_change_1d": calculate_change(stock_info.get("current_price"), stock_info.get("previous_close")),
             })
 
+            # Step 4.5: Fetch analyst recommendations (65%)
+            recommendations = None
+            try:
+                recommendations = await yf_client.get_recommendations(ticker)
+                logger.info("Fetched analyst recommendations", ticker=ticker, count=len(recommendations))
+            except Exception as e:
+                logger.warning("Failed to fetch analyst recommendations", ticker=ticker, error=str(e))
+
             # Step 5: Growth Stock Analysis (80%)
             await set_job_progress(job_id, "running", 70, "Running growth stock analysis...")
             await update_job_status(job_id, ticker, "running", 70, "Running growth stock analysis...")
@@ -139,6 +147,7 @@ def research_stock(
                 stock_data_for_growth = {
                     "info": stock_info,
                     "technicals": technical if include_technical else {},
+                    "recommendations": recommendations if recommendations else None,
                     "data_sources": data_sources
                 }
 

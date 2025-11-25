@@ -24,43 +24,64 @@ export default function DataSourcesTable({
       category: 'Stock Information',
       fields: ['Ticker', 'Company Name', 'Sector', 'Industry', 'Market Cap'],
       source: dataSources.stock_info,
-      available: !!dataSources.stock_info
+      available: !!dataSources.stock_info,
+      note: null
     },
     {
       category: 'Price Data',
       fields: ['Current Price', 'Historical Prices'],
       source: dataSources.stock_info,
-      available: !!dataSources.stock_info
+      available: !!dataSources.stock_info,
+      note: null
     },
     {
       category: 'Technical Indicators',
       fields: ['RSI', 'SMA 20', 'SMA 50', 'MACD', 'Bollinger Bands'],
       source: dataSources.technical,
-      available: !!dataSources.technical
+      available: !!dataSources.technical,
+      note: null
     },
     {
       category: 'Fundamental Metrics',
       fields: ['P/E Ratio', 'Revenue', 'EPS', 'Profit Margin', 'ROE'],
       source: dataSources.fundamentals,
-      available: !!dataSources.fundamentals
+      available: !!dataSources.fundamentals,
+      note: null
     },
     {
       category: 'Financial Data',
       fields: ['Balance Sheet', 'Income Statement', 'Cash Flow'],
       source: dataSources.fundamentals,
-      available: !!dataSources.fundamentals
+      available: !!dataSources.fundamentals,
+      note: null
+    },
+    {
+      category: 'Analyst Coverage',
+      fields: ['Analyst Recommendations', 'Target Prices', 'Upgrades/Downgrades'],
+      source: dataSources.stock_info,
+      available: !!dataSources.stock_info,
+      note: 'Available when analysts cover the stock'
+    },
+    {
+      category: 'Peer Comparison',
+      fields: ['Similar Companies', 'Industry Averages', 'Competitive Positioning'],
+      source: null,
+      available: false,
+      note: 'Not available from current data sources'
     },
     {
       category: 'Growth Analysis',
       fields: ['Multi-Factor Scoring', 'Price Targets', 'Risk Assessment', 'Portfolio Allocation'],
       source: dataSources.growth_analysis,
-      available: !!dataSources.growth_analysis
+      available: !!dataSources.growth_analysis,
+      note: null
     },
     {
       category: 'AI Analysis',
       fields: ['Recommendation', 'Investment Thesis', 'Key Insights', 'Risk/Opportunity Analysis'],
       source: dataSources.ai_analysis,
-      available: !!dataSources.ai_analysis
+      available: !!dataSources.ai_analysis,
+      note: null
     }
   ]
 
@@ -170,6 +191,11 @@ export default function DataSourcesTable({
                         <div key={fidx} className="text-xs">• {field}</div>
                       ))}
                     </div>
+                    {item.note && (
+                      <div className="mt-2 text-xs italic text-gray-500">
+                        {item.note}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     {item.available && item.source ? (
@@ -184,8 +210,8 @@ export default function DataSourcesTable({
                         ✓ Available
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        ✗ Missing
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        ✗ Not Available
                       </span>
                     )}
                   </td>
