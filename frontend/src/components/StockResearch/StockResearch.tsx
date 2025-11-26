@@ -5,6 +5,8 @@ import { useResearchStore } from '../../stores/researchStore'
 import ProgressTracker from '../ProgressTracker/ProgressTracker'
 import DataSourceBadge from '../DataSourceBadge/DataSourceBadge'
 import GrowthAnalysisCard from './GrowthAnalysisCard'
+import TechnicalAnalysisChart from './TechnicalAnalysisChart'
+import TechnicalIndicatorsPanel from './TechnicalIndicatorsPanel'
 
 export default function StockResearch() {
   const [ticker, setTicker] = useState('')
@@ -128,6 +130,14 @@ export default function StockResearch() {
                       label={key}
                     />
                   ))}
+                </div>
+              )}
+
+              {/* Technical Analysis Results - Displayed automatically when available */}
+              {job.status === 'completed' && job.result?.technical_analysis && (
+                <div className="mt-6 space-y-6">
+                  <TechnicalAnalysisChart data={job.result.technical_analysis} />
+                  <TechnicalIndicatorsPanel data={job.result.technical_analysis} />
                 </div>
               )}
 

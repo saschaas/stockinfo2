@@ -109,14 +109,45 @@ def research_stock(
                 data_sources["fundamentals"] = {"type": "api", "name": "yahoo_finance"}
 
             # Step 3: Technical analysis (60%)
+            technical_analysis_result = None
             if include_technical:
-                await set_job_progress(job_id, "running", 50, "Calculating technical indicators...")
-                await update_job_status(job_id, ticker, "running", 50, "Calculating technical indicators...")
+                await set_job_progress(job_id, "running", 50, "Running comprehensive technical analysis...")
+                await update_job_status(job_id, ticker, "running", 50, "Running comprehensive technical analysis...")
 
-                prices = await yf_client.get_historical_prices(ticker, period="3mo", interval="1d")
-                technical = calculate_technical_indicators(prices)
-                result.update(technical)
-                data_sources["technical"] = {"type": "api", "name": "yahoo_finance"}
+                try:
+                    from backend.app.agents.technical_analysis_agent import TechnicalAnalysisAgent
+
+                    # Fetch 6 months of historical data for comprehensive analysis
+                    prices = await yf_client.get_historical_prices(ticker, period="6mo", interval="1d")
+                    current_price = stock_info.get("current_price")
+
+                    tech_agent = TechnicalAnalysisAgent()
+                    technical_analysis_result = await tech_agent.analyze(
+                        ticker=ticker,
+                        price_data=prices,
+                        current_price=current_price
+                    )
+
+                    # Store basic technical indicators for backward compatibility
+                    technical = {
+                        "rsi": technical_analysis_result.momentum.rsi,
+                        "sma_20": technical_analysis_result.trend.sma_20,
+                        "sma_50": technical_analysis_result.trend.sma_50,
+                        "bollinger_upper": technical_analysis_result.volatility.bb_upper,
+                        "bollinger_lower": technical_analysis_result.volatility.bb_lower,
+                    }
+                    result.update(technical)
+                    data_sources["technical"] = {"type": "api", "name": "yahoo_finance"}
+
+                    logger.info("Technical analysis completed", ticker=ticker, signal=technical_analysis_result.overall_signal)
+
+                except Exception as e:
+                    logger.warning("Comprehensive technical analysis failed, using basic indicators", ticker=ticker, error=str(e))
+                    # Fallback to basic technical indicators
+                    prices = await yf_client.get_historical_prices(ticker, period="3mo", interval="1d")
+                    technical = calculate_technical_indicators(prices)
+                    result.update(technical)
+                    data_sources["technical"] = {"type": "api", "name": "yahoo_finance"}
 
             # Step 4: Price performance (65%)
             await set_job_progress(job_id, "running", 60, "Calculating price performance...")
@@ -199,7 +230,70 @@ def research_stock(
                 result.update(ai_analysis)
                 data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
 
-            # Step 7: Save to database (90%)
+            # Step 7: Add comprehensive technical analysis to result
+            if technical_analysis_result:
+                # Helper to clean NaN values and Decimals for JSON serialization
+                def clean_nan(obj):
+                    import math
+                    from decimal import Decimal
+                    if isinstance(obj, dict):
+                        return {k: clean_nan(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [clean_nan(item) for item in obj]
+                    elif isinstance(obj, Decimal):
+                        return float(obj)
+                    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                        return None
+                    return obj
+
+                # Serialize the technical analysis result for JSON response
+                ta = technical_analysis_result
+                result["technical_analysis"] = clean_nan({
+                    "analysis_date": ta.analysis_date.isoformat(),
+                    "current_price": ta.current_price,
+                    # Trend
+                    "trend_direction": ta.trend.trend_direction,
+                    "sma_20": ta.trend.sma_20,
+                    "sma_50": ta.trend.sma_50,
+                    "sma_200": ta.trend.sma_200,
+                    "adx": ta.trend.adx,
+                    "adx_signal": ta.trend.adx_signal,
+                    # Momentum
+                    "rsi": ta.momentum.rsi,
+                    "rsi_signal": ta.momentum.rsi_signal,
+                    "macd": ta.momentum.macd,
+                    "macd_signal": ta.momentum.macd_signal,
+                    "macd_histogram": ta.momentum.macd_histogram,
+                    "stoch_k": ta.momentum.stoch_k,
+                    "stoch_d": ta.momentum.stoch_d,
+                    "roc": ta.momentum.roc,
+                    # Volatility
+                    "bollinger_upper": ta.volatility.bb_upper,
+                    "bollinger_middle": ta.volatility.bb_middle,
+                    "bollinger_lower": ta.volatility.bb_lower,
+                    "atr": ta.volatility.atr,
+                    # Volume
+                    "obv": ta.volume.obv,
+                    "obv_trend": ta.volume.obv_trend,
+                    # Support/Resistance
+                    "support_levels": ta.support_resistance.support_levels,
+                    "resistance_levels": ta.support_resistance.resistance_levels,
+                    "nearest_support": ta.support_resistance.nearest_support,
+                    "nearest_resistance": ta.support_resistance.nearest_resistance,
+                    "support_distance_pct": ta.support_resistance.support_distance_pct,
+                    "resistance_distance_pct": ta.support_resistance.resistance_distance_pct,
+                    # Patterns
+                    "patterns": ta.patterns.patterns,
+                    # Overall
+                    "composite_technical_score": ta.composite_technical_score,
+                    "overall_signal": ta.overall_signal,
+                    "signal_confidence": ta.signal_confidence,
+                    # Chart data
+                    "chart_data": ta.chart_data,
+                })
+                logger.info("Added comprehensive technical analysis to result", ticker=ticker, signal=ta.overall_signal)
+
+            # Step 8: Save to database (90%)
             await set_job_progress(job_id, "running", 90, "Saving results...")
 
             result["data_sources"] = data_sources
@@ -226,9 +320,10 @@ def research_stock(
                     # Don't fail the entire job if sector comparison fails
                     result["sector_comparison"] = None
 
-            # Complete
-            await set_job_progress(job_id, "completed", 100, "Research completed")
-            await update_job_status(job_id, ticker, "completed", 100, "Research completed")
+            # Complete - clean result for JSON serialization
+            cleaned_result = clean_nan(result)
+            await set_job_progress(job_id, "completed", 100, "Research completed", result=cleaned_result)
+            await update_job_status(job_id, ticker, "completed", 100, "Research completed", result_data=cleaned_result)
 
             logger.info("Stock research completed", ticker=ticker, job_id=job_id)
             return result
@@ -250,6 +345,7 @@ async def update_job_status(
     progress: int,
     current_step: str,
     error_suggestion: str | None = None,
+    result_data: dict | None = None,
 ) -> None:
     """Update research job status in database."""
     from datetime import datetime
@@ -270,6 +366,8 @@ async def update_job_status(
                 job.completed_at = datetime.utcnow()
             if error_suggestion:
                 job.error_suggestion = error_suggestion
+            if result_data:
+                job.result_data = result_data
         else:
             job = ResearchJob(
                 job_id=job_id,
@@ -278,6 +376,7 @@ async def update_job_status(
                 progress=progress,
                 current_step=current_step,
                 input_data={"ticker": ticker},
+                result_data=result_data,
                 started_at=datetime.utcnow() if status == "running" else None,
             )
             session.add(job)

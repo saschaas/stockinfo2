@@ -252,6 +252,8 @@ async def get_job_result(job_id: str) -> dict:
                     "missing_data_categories": analysis.missing_data_categories,
                     "ai_summary": analysis.ai_summary,
                     "ai_reasoning": analysis.ai_reasoning,
+                    # Technical Analysis
+                    "technical_analysis": analysis.technical_analysis,
                 }
 
                 # Add sector comparison if sector is available

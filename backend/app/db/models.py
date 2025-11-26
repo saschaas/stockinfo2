@@ -247,6 +247,9 @@ class StockAnalysis(Base):
     # Peer comparison
     peer_comparison: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
 
+    # Technical analysis (comprehensive)
+    technical_analysis: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
+
     # Data provenance
     data_sources: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

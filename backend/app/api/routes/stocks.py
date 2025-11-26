@@ -18,6 +18,8 @@ from backend.app.schemas.stocks import (
     StockPriceHistoryResponse,
     StockResearchRequest,
     StockResearchResponse,
+    TechnicalAnalysisRequest,
+    TechnicalAnalysisResponse,
 )
 from backend.app.services.sector_comparison import get_sector_comparison_service
 
@@ -268,3 +270,43 @@ async def get_sector_leaders(
     )
 
     return [SectorLeaderResponse(**stock) for stock in result]
+
+
+@router.post("/{ticker}/technical-analysis", response_model=TechnicalAnalysisResponse)
+async def start_technical_analysis(
+    ticker: Annotated[str, Path(min_length=1, max_length=10)],
+    request: TechnicalAnalysisRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TechnicalAnalysisResponse:
+    """Start a technical analysis job for a stock.
+
+    This will:
+    1. Fetch historical price data
+    2. Calculate 11 technical indicators optimized for growth stocks
+    3. Analyze trend, momentum, volatility, and volume
+    4. Detect support/resistance levels and chart patterns
+    5. Generate trading signals with confidence scores
+
+    Returns a job ID that can be used to track progress via WebSocket.
+
+    Technical Indicators:
+    - Trend: SMA (20/50/200), EMA (12/26), ADX
+    - Momentum: RSI, MACD, Stochastic, ROC
+    - Volatility: Bollinger Bands (2.5σ for growth stocks), ATR
+    - Volume: OBV, Volume Analysis
+    - Support/Resistance: Pivot Points, auto-detected levels
+    """
+    from backend.app.tasks.technical_analysis import analyze_stock_technical
+
+    # Use ticker from path, but allow period override from request
+    task = analyze_stock_technical.delay(
+        ticker=ticker.upper(),
+        period=request.period,
+    )
+
+    return TechnicalAnalysisResponse(
+        job_id=task.id,
+        ticker=ticker.upper(),
+        status="queued",
+        message=f"Technical analysis job queued for {ticker.upper()}",
+    )

@@ -72,8 +72,16 @@ export async function fetchFundOwnership(ticker: string) {
 }
 
 export async function fetchSectorComparison(ticker: string, lookbackDays: number = 180) {
-  const { data } = await api.get(`/stocks/${ticker}/sector-comparison`, {
+  const { data} = await api.get(`/stocks/${ticker}/sector-comparison`, {
     params: { lookback_days: lookbackDays },
+  })
+  return data
+}
+
+export async function startTechnicalAnalysis(ticker: string, period: string = '6mo') {
+  const { data } = await api.post(`/stocks/${ticker}/technical-analysis`, {
+    ticker,
+    period,
   })
   return data
 }

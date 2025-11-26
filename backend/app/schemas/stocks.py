@@ -224,3 +224,114 @@ class SectorLeaderResponse(BaseModel):
     analysis_date: str
     composite_score: Optional[float]
     market_cap: Optional[int]
+
+
+class TechnicalAnalysisRequest(BaseModel):
+    """Request schema for technical analysis."""
+
+    ticker: str = Field(..., min_length=1, max_length=10)
+    period: str = Field(default="6mo", description="Data period: 1mo, 3mo, 6mo, 1y, 2y")
+
+    @field_validator("ticker")
+    @classmethod
+    def uppercase_ticker(cls, v: str) -> str:
+        return v.upper().strip()
+
+
+class TechnicalAnalysisResponse(BaseModel):
+    """Response schema for technical analysis job."""
+
+    job_id: str
+    ticker: str
+    status: str
+    message: str
+
+
+class TechnicalAnalysisResult(BaseModel):
+    """Complete technical analysis result."""
+
+    ticker: str
+    analysis_date: datetime
+    current_price: float
+
+    # Trend analysis
+    trend_direction: str
+    trend_strength_score: float
+    sma_20: float
+    sma_50: float
+    sma_200: float
+    adx: float
+    adx_signal: str
+    price_above_sma_20: bool
+    price_above_sma_50: bool
+    price_above_sma_200: bool
+    golden_cross: bool
+    death_cross: bool
+
+    # Momentum analysis
+    rsi: float
+    rsi_signal: str
+    macd: float
+    macd_signal: float
+    macd_histogram: float
+    macd_cross: Optional[str]
+    stoch_k: float
+    stoch_d: float
+    stoch_signal: str
+    roc: float
+    roc_signal: str
+    momentum_score: float
+
+    # Volatility analysis
+    bb_upper: float
+    bb_middle: float
+    bb_lower: float
+    bb_width: float
+    bb_signal: str
+    price_position: str
+    atr: float
+    atr_percent: float
+    volatility_level: str
+    volatility_score: float
+
+    # Volume analysis
+    current_volume: int
+    avg_volume_20d: int
+    volume_ratio: float
+    volume_signal: str
+    obv: float
+    obv_trend: str
+    volume_score: float
+
+    # Support/Resistance
+    pivot: float
+    resistance_1: float
+    resistance_2: float
+    resistance_3: float
+    support_1: float
+    support_2: float
+    support_3: float
+    support_levels: list[float]
+    resistance_levels: list[float]
+    nearest_support: Optional[float]
+    nearest_resistance: Optional[float]
+    support_distance_pct: float
+    resistance_distance_pct: float
+
+    # Chart patterns
+    patterns: list[str]
+    trend_channel: Optional[str]
+    consolidation: bool
+    breakout_signal: Optional[str]
+
+    # Overall scoring
+    trend_score: float
+    composite_technical_score: float
+    overall_signal: str
+    signal_confidence: float
+
+    # Chart data
+    chart_data: dict[str, Any]
+
+    # Data sources
+    data_sources: dict[str, Any]

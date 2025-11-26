@@ -1,0 +1,33 @@
+1. Recherche-Ergebnisse: Beste Indikatoren für Growth Stocks
+Basierend auf Backtesting-Studien (100 Jahre Dow Jones Daten) und aktuellen Best Practices sind dies die aussagekräftigsten Indikatoren:
+Höchste Zuverlässigkeit
+IndikatorWin-RateEinsatzRSI (14)~97%Überkauft/Überverkauft, DivergenzenBollinger BandsSehr hochDynamische Support/Resistance, VolatilitätMACD~52% Signale, aber hohe ReturnsMomentum, Trendrichtung
+Für Growth Stocks besonders relevant
+RSI misst Geschwindigkeit und Größe von Preisänderungen. Werte unter 30 zeigen überverkaufte Bedingungen an, über 70 überkaufte. Charles Schwab ADX über 25 deutet auf einen starken Trend hin, über 40 auf einen sehr starken - besonders wichtig für Growth Stocks mit starkem Momentum. Charles Schwab
+Empfohlene Kombination
+Die Kombination von MACD und RSI kann tiefere Einblicke in potenzielle Marktbewegungen geben. Ein Backtest mit beiden Indikatoren plus Mean-Reversion-Filter zeigte eine 73% Win-Rate über 235 Trades. Quantified Strategies
+
+2.  Python-Tools für die Umsetzung
+Technische Analyse:
+pandas-ta: 150+ Indikatoren, nutzt numba und numpy für Performance, pandas für Einfachheit Pandas-ta
+TA-Lib: In C/C++ geschrieben, seit 2001 stabil, auch für Python verfügbar TA-Lib
+
+Visualisierung:
+Plotly: Interaktive Candlestick-Charts mit Zoom, Hover-Tooltips Plotly
+mplfinance: Beste Library für schnelle statische Candlestick-Charts mit dedizierter plot()-Funktion
+
+3. Implementierte Features
+11 Indikatoren mit gewichteter Bewertung:
+
+Trend: SMA (20/50/200), EMA, ADX
+Momentum: RSI, MACD, Stochastic, ROC
+Volatilität: Bollinger Bands, ATR
+Volumen: OBV, Volume Analysis
+Support/Resistance: Pivot Points
+
+Spezielle Growth Stock Konfiguration:
+Breitere RSI-Grenzen (25/75 statt 30/70)
+Breitere Bollinger Bands (2.5σ statt 2σ)
+Höhere Momentum-Gewichtung
+Kürzere Moving Averages
+

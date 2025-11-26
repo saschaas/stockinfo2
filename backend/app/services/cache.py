@@ -202,6 +202,7 @@ async def set_job_progress(
     status: str,
     progress: int,
     current_step: str,
+    result: dict | None = None,
 ) -> bool:
     """Set job progress in Redis for WebSocket polling."""
     client = await get_redis_client()
@@ -209,13 +210,16 @@ async def set_job_progress(
         return False
 
     try:
-        data = json.dumps({
+        data = {
             "status": status,
             "progress": progress,
             "current_step": current_step,
-        })
+        }
+        if result is not None:
+            data["result"] = result
+
         # Store with 1 hour TTL
-        await client.setex(f"job_progress:{job_id}", 3600, data)
+        await client.setex(f"job_progress:{job_id}", 3600, json.dumps(data))
         return True
     except Exception as e:
         logger.warning("Failed to set job progress", job_id=job_id, error=str(e))
