@@ -1,0 +1,205 @@
+{
+    "module_name": "technical_risk_score_engine",
+    "version": "1.0.0",
+    "description": "Computes a 0–100 technical risk score for a stock based on market structure, momentum, volatility, overextension, and volume confirmation.",
+  
+    "inputs": {
+      "ticker": "string",
+      "price": "float",
+      "ohlcv": {
+        "open": "array<float>",
+        "high": "array<float>",
+        "low": "array<float>",
+        "close": "array<float>",
+        "volume": "array<float>",
+        "timestamps": "array<int>"
+      },
+      "indicators": {
+        "EMA20": "float",
+        "EMA50": "float",
+        "EMA200": "float",
+        "MACD": "float",
+        "MACD_signal": "float",
+        "MACD_hist": "float",
+        "RSI14": "float",
+        "ATR14": "float",
+        "bollinger": {
+          "middle": "float",
+          "upper": "float",
+          "lower": "float",
+          "std": "float"
+        },
+        "ADX14": "float",
+        "avg_volume_20": "float"
+      },
+      "support_resistance": {
+        "nearest_support": "float",
+        "nearest_resistance": "float",
+        "stop_level": "float"
+      }
+    },
+  
+    "outputs": {
+      "risk_score": "float",
+      "risk_level": "string", 
+      "subscores": {
+        "market_structure": "float",
+        "momentum": "float",
+        "overextension_penalty": "float",
+        "volatility_penalty": "float",
+        "volume_confirmation": "float"
+      },
+      "explanation": "string"
+    },
+  
+    "scoring_formula": {
+      "final_score": "0.40 * market_structure + 0.20 * momentum - 0.15 * overextension_penalty - 0.15 * volatility_penalty + 0.20 * volume_confirmation",
+      "range": "0 to 100"
+    },
+  
+    "subscore_definitions": {
+  
+      "market_structure": {
+        "weight": 0.40,
+        "components": {
+          "support_proximity": {
+            "metric": "distance from price to nearest support in %",
+            "scoring_table": {
+              "0-2": 40,
+              "2-5": 30,
+              "5-8": 20,
+              "8-12": 10,
+              "12+": 0
+            }
+          },
+          "resistance_distance": {
+            "metric": "distance from price to nearest resistance in %",
+            "scoring_table": {
+              "10+": 40,
+              "7-10": 30,
+              "4-7": 20,
+              "2-4": 10,
+              "0-2": 0
+            }
+          },
+          "trend_alignment": {
+            "EMA50_above_EMA200": 10,
+            "MACD_above_zero": 5,
+            "ADX_above_20": 5
+          }
+        },
+        "max_score": 100
+      },
+  
+      "momentum": {
+        "weight": 0.20,
+        "components": {
+          "MACD_momentum": {
+            "conditions": {
+              "hist_positive_rising": 10,
+              "hist_positive": 7,
+              "hist_negative_rising": 4,
+              "else": 0
+            }
+          },
+          "RSI_direction": {
+            "conditions": {
+              "40-60_rising": 10,
+              "<40_rising": 7,
+              ">60_rising": 5,
+              "else": 0
+            }
+          }
+        },
+        "max_score": 20
+      },
+  
+      "overextension_penalty": {
+        "weight": -0.15,
+        "components": {
+          "RSI_overbought": {
+            ">80": 100,
+            "70-80": 60,
+            "else": 0
+          },
+          "bollinger_penalty": {
+            "above_upper_band": 60,
+            "above_mid_plus_std": 30,
+            "else": 0
+          },
+          "distance_above_EMA20": {
+            ">8": 100,
+            "5-8": 50,
+            "2-5": 20,
+            "else": 0
+          }
+        },
+        "aggregation": {
+          "rsi_weight": 0.5,
+          "bollinger_weight": 0.3,
+          "ema_distance_weight": 0.2
+        },
+        "max_penalty": 100
+      },
+  
+      "volatility_penalty": {
+        "weight": -0.15,
+        "components": {
+          "ATR_volatility_pct": {
+            ">6": 100,
+            "4-6": 60,
+            "2-4": 30,
+            "else": 0
+          },
+          "stop_distance_pct": {
+            ">8": 100,
+            "5-8": 60,
+            "3-5": 30,
+            "else": 0
+          }
+        },
+        "aggregation": {
+          "atr_weight": 0.6,
+          "stop_weight": 0.4
+        },
+        "max_penalty": 100
+      },
+  
+      "volume_confirmation": {
+        "weight": 0.20,
+        "components": {
+          "volume_ratio": {
+            ">=2.0": 20,
+            "1.5-2.0": 15,
+            "1.0-1.5": 10,
+            "0.8-1.0": 5,
+            "<0.8": 0
+          }
+        },
+        "max_score": 20
+      }
+    },
+  
+    "risk_level_thresholds": {
+      "low_risk": "score >= 80",
+      "medium_risk": "60 <= score < 80",
+      "elevated_risk": "40 <= score < 60",
+      "high_risk": "score < 40"
+    },
+  
+    "explanation_template": "At the current price, the risk score is {{risk_score}} ({{risk_level}}). Market structure contributes {{market_structure}} points, momentum contributes {{momentum}} points, volume confirmation adds {{volume_confirmation}} points, while overextension and volatility apply penalties of {{overextension_penalty}} and {{volatility_penalty}}. Overall, this reflects {{summary_reasoning}}.",
+  
+    "validation_rules": {
+      "requires_support_below_price": true,
+      "requires_resistance_above_price": true,
+      "ohlcv_min_length": 50,
+      "indicator_null_checks": true
+    },
+  
+    "error_handling": {
+      "missing_data": "return null with error message",
+      "division_by_zero": "default safe fallback",
+      "indicator_failure": "skip indicator and adjust weighting"
+    }
+  }
+  

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import Plot from 'react-plotly.js'
 import type { TechnicalAnalysisData } from '../../types/technical-analysis'
+import type { RiskAssessmentData } from '../../types/risk-assessment'
 
 interface TechnicalAnalysisChartProps {
   data: TechnicalAnalysisData
+  riskAssessment?: RiskAssessmentData
 }
 
-export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartProps) {
+export default function TechnicalAnalysisChart({ data, riskAssessment }: TechnicalAnalysisChartProps) {
   const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
     if (value === undefined || value === null || isNaN(value)) return 'N/A'
     return value.toFixed(decimals)
@@ -215,37 +217,157 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
     height: 600,
     plot_bgcolor: '#f9fafb',
     paper_bgcolor: 'white',
-    // Add horizontal line annotation for current price
-    shapes: currentPrice ? [{
-      type: 'line',
-      xref: 'paper',
-      x0: 0,
-      x1: 1,
-      yref: 'y',
-      y0: currentPrice,
-      y1: currentPrice,
-      line: {
-        color: '#000000',
-        width: 1,
-        dash: 'dot',
-      },
-    }] : [],
-    annotations: currentPrice ? [{
-      x: 1.02,
-      y: currentPrice,
-      xref: 'paper',
-      yref: 'y',
-      text: `$${currentPrice.toFixed(2)}`,
-      showarrow: false,
-      font: {
-        size: 10,
-        color: '#000000',
-      },
-      bgcolor: '#fef3c7',
-      bordercolor: '#f59e0b',
-      borderwidth: 1,
-      borderpad: 2,
-    }] : [],
+    // Add horizontal line annotations for current price and trading levels
+    shapes: [
+      // Current price line
+      ...(currentPrice ? [{
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 1,
+        yref: 'y',
+        y0: currentPrice,
+        y1: currentPrice,
+        line: {
+          color: '#000000',
+          width: 1,
+          dash: 'dot',
+        },
+      }] : []),
+      // Entry level line
+      ...(riskAssessment?.risk_reward?.suggested_entry ? [{
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 1,
+        yref: 'y',
+        y0: riskAssessment.risk_reward.suggested_entry,
+        y1: riskAssessment.risk_reward.suggested_entry,
+        line: {
+          color: '#6366f1',
+          width: 1.5,
+          dash: 'dash',
+        },
+      }] : []),
+      // Stop loss line
+      ...(riskAssessment?.risk_reward?.suggested_stop ? [{
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 1,
+        yref: 'y',
+        y0: riskAssessment.risk_reward.suggested_stop,
+        y1: riskAssessment.risk_reward.suggested_stop,
+        line: {
+          color: '#ef4444',
+          width: 1.5,
+          dash: 'dash',
+        },
+      }] : []),
+      // Target price line
+      ...(riskAssessment?.risk_reward?.suggested_target ? [{
+        type: 'line',
+        xref: 'paper',
+        x0: 0,
+        x1: 1,
+        yref: 'y',
+        y0: riskAssessment.risk_reward.suggested_target,
+        y1: riskAssessment.risk_reward.suggested_target,
+        line: {
+          color: '#22c55e',
+          width: 1.5,
+          dash: 'dash',
+        },
+      }] : []),
+    ],
+    annotations: [
+      // Current price annotation
+      ...(currentPrice ? [{
+        x: 1.02,
+        y: currentPrice,
+        xref: 'paper',
+        yref: 'y',
+        text: `$${currentPrice.toFixed(2)}`,
+        showarrow: false,
+        font: {
+          size: 10,
+          color: '#000000',
+        },
+        bgcolor: '#fef3c7',
+        bordercolor: '#f59e0b',
+        borderwidth: 1,
+        borderpad: 2,
+      }] : []),
+      // Entry level annotation with arrow
+      ...(riskAssessment?.risk_reward?.suggested_entry ? [{
+        x: 0,
+        y: riskAssessment.risk_reward.suggested_entry,
+        xref: 'paper',
+        yref: 'y',
+        text: `Entry $${riskAssessment.risk_reward.suggested_entry.toFixed(2)}`,
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 1,
+        arrowwidth: 2,
+        arrowcolor: '#6366f1',
+        ax: -40,
+        ay: 0,
+        font: {
+          size: 9,
+          color: '#ffffff',
+        },
+        bgcolor: '#6366f1',
+        bordercolor: '#4f46e5',
+        borderwidth: 1,
+        borderpad: 2,
+      }] : []),
+      // Stop loss annotation with arrow
+      ...(riskAssessment?.risk_reward?.suggested_stop ? [{
+        x: 0,
+        y: riskAssessment.risk_reward.suggested_stop,
+        xref: 'paper',
+        yref: 'y',
+        text: `Stop $${riskAssessment.risk_reward.suggested_stop.toFixed(2)}`,
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 1,
+        arrowwidth: 2,
+        arrowcolor: '#ef4444',
+        ax: -40,
+        ay: 0,
+        font: {
+          size: 9,
+          color: '#ffffff',
+        },
+        bgcolor: '#ef4444',
+        bordercolor: '#dc2626',
+        borderwidth: 1,
+        borderpad: 2,
+      }] : []),
+      // Target price annotation with arrow
+      ...(riskAssessment?.risk_reward?.suggested_target ? [{
+        x: 0,
+        y: riskAssessment.risk_reward.suggested_target,
+        xref: 'paper',
+        yref: 'y',
+        text: `Target $${riskAssessment.risk_reward.suggested_target.toFixed(2)}`,
+        showarrow: true,
+        arrowhead: 2,
+        arrowsize: 1,
+        arrowwidth: 2,
+        arrowcolor: '#22c55e',
+        ax: -50,
+        ay: 0,
+        font: {
+          size: 9,
+          color: '#ffffff',
+        },
+        bgcolor: '#22c55e',
+        bordercolor: '#16a34a',
+        borderwidth: 1,
+        borderpad: 2,
+      }] : []),
+    ],
   }
 
   const config: any = {
@@ -329,6 +451,46 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
           </p>
         </div>
       </div>
+
+      {/* Trading Levels from Risk Assessment */}
+      {riskAssessment?.risk_reward && (
+        <div className="grid grid-cols-3 gap-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <div>
+            <p className="text-xs text-indigo-600 font-medium">Entry Level</p>
+            <p className="text-lg font-bold text-indigo-700">
+              ${safeToFixed(riskAssessment.risk_reward.suggested_entry, 2)}
+              {currentPrice && riskAssessment.risk_reward.suggested_entry && (
+                <span className="text-xs ml-1 text-indigo-500">
+                  ({((riskAssessment.risk_reward.suggested_entry - currentPrice) / currentPrice * 100) >= 0 ? '+' : ''}
+                  {safeToFixed((riskAssessment.risk_reward.suggested_entry - currentPrice) / currentPrice * 100, 1)}%)
+                </span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-red-600 font-medium">Stop Loss</p>
+            <p className="text-lg font-bold text-red-600">
+              ${safeToFixed(riskAssessment.risk_reward.suggested_stop, 2)}
+              {currentPrice && riskAssessment.risk_reward.suggested_stop && (
+                <span className="text-xs ml-1">
+                  ({safeToFixed((riskAssessment.risk_reward.suggested_stop - currentPrice) / currentPrice * 100, 1)}%)
+                </span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-green-600 font-medium">Target</p>
+            <p className="text-lg font-bold text-green-600">
+              ${safeToFixed(riskAssessment.risk_reward.suggested_target, 2)}
+              {currentPrice && riskAssessment.risk_reward.suggested_target && (
+                <span className="text-xs ml-1">
+                  (+{safeToFixed((riskAssessment.risk_reward.suggested_target - currentPrice) / currentPrice * 100, 1)}%)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Toggle Controls */}
       <div className="flex flex-wrap gap-2 py-2">

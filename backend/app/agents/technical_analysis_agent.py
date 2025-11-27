@@ -60,6 +60,8 @@ class MomentumAnalysis:
     rsi: float = 50.0
     rsi_signal: str = "neutral"  # "oversold", "neutral", "overbought"
     rsi_divergence: Optional[str] = None  # "bullish", "bearish", None
+    rsi_weighted_signal: str = "neutral"  # Trend-context adjusted signal
+    rsi_weight: float = 1.0  # Weight applied based on trend context
 
     # MACD
     macd: float = 0.0
@@ -150,6 +152,48 @@ class ChartPatterns:
 
 
 @dataclass
+class TimeframeAnalysis:
+    """Analysis for a single timeframe"""
+    timeframe: str  # "daily", "60min", "5min"
+    trend_direction: str = "neutral"  # "bullish", "bearish", "neutral"
+    trend_strength: float = 0.0  # 0-10
+    ema_200_trend: str = "neutral"  # Based on price position relative to 200-EMA
+    momentum_signal: str = "neutral"  # "bullish", "bearish", "neutral"
+    entry_signal: Optional[str] = None  # "buy", "sell", None
+
+
+@dataclass
+class MultiTimeframeAnalysis:
+    """Multi-timeframe strategy analysis for swing trading"""
+    # Primary trend (Daily) - defines overall bias
+    primary_trend: Optional[TimeframeAnalysis] = None
+    # Confirmation (60-min) - validates alignment with primary
+    confirmation_trend: Optional[TimeframeAnalysis] = None
+    # Execution (5-min) - for entry/exit timing
+    execution_trend: Optional[TimeframeAnalysis] = None
+
+    # Composite signals
+    trend_alignment: str = "neutral"  # "aligned_bullish", "aligned_bearish", "mixed"
+    signal_quality: str = "low"  # "high", "medium", "low"
+    recommended_action: str = "hold"  # "buy", "sell", "hold"
+    confidence: float = 0.0  # 0-100
+
+
+@dataclass
+class BetaAnalysis:
+    """Beta calculation relative to benchmark (NASDAQ)"""
+    beta: float = 1.0  # Stock's beta relative to benchmark
+    benchmark: str = "^IXIC"  # NASDAQ Composite
+    correlation: float = 0.0  # Correlation with benchmark
+    alpha: float = 0.0  # Jensen's alpha
+    r_squared: float = 0.0  # R-squared of the regression
+
+    # Risk interpretation
+    volatility_vs_market: str = "average"  # "low", "average", "high", "very_high"
+    risk_profile: str = "moderate"  # "conservative", "moderate", "aggressive", "very_aggressive"
+
+
+@dataclass
 class TechnicalAnalysisResult:
     """Complete technical analysis output"""
     ticker: str
@@ -163,6 +207,12 @@ class TechnicalAnalysisResult:
     volume: VolumeAnalysis = field(default_factory=VolumeAnalysis)
     support_resistance: SupportResistanceAnalysis = field(default_factory=SupportResistanceAnalysis)
     patterns: ChartPatterns = field(default_factory=ChartPatterns)
+
+    # Multi-timeframe analysis
+    multi_timeframe: MultiTimeframeAnalysis = field(default_factory=MultiTimeframeAnalysis)
+
+    # Beta/Risk analysis
+    beta_analysis: BetaAnalysis = field(default_factory=BetaAnalysis)
 
     # Overall scoring (0-10)
     trend_score: float = 0.0
@@ -224,15 +274,21 @@ class TechnicalAnalysisAgent:
         self,
         ticker: str,
         price_data: List[Dict[str, Any]],
-        current_price: Optional[float] = None
+        current_price: Optional[float] = None,
+        price_data_60min: Optional[List[Dict[str, Any]]] = None,
+        price_data_5min: Optional[List[Dict[str, Any]]] = None,
+        benchmark_data: Optional[List[Dict[str, Any]]] = None,
     ) -> TechnicalAnalysisResult:
         """
         Perform comprehensive technical analysis
 
         Args:
             ticker: Stock ticker symbol
-            price_data: Historical OHLCV data (list of dicts with keys: date, open, high, low, close, volume)
+            price_data: Historical OHLCV data - Daily (list of dicts with keys: date, open, high, low, close, volume)
             current_price: Current price (optional, will use latest close if not provided)
+            price_data_60min: 60-minute OHLCV data for multi-timeframe analysis (optional)
+            price_data_5min: 5-minute OHLCV data for multi-timeframe analysis (optional)
+            benchmark_data: Benchmark (NASDAQ) daily price data for Beta calculation (optional)
 
         Returns:
             TechnicalAnalysisResult with complete technical analysis
@@ -271,8 +327,8 @@ class TechnicalAnalysisAgent:
         result.trend = self._analyze_trend(df, result.current_price)
         result.trend_score = result.trend.trend_strength_score
 
-        # Step 3: Analyze momentum
-        result.momentum = self._analyze_momentum(df, result.current_price)
+        # Step 3: Analyze momentum (with trend context for RSI)
+        result.momentum = self._analyze_momentum(df, result.current_price, result.trend)
         result.momentum_score = result.momentum.momentum_score
 
         # Step 4: Analyze volatility
@@ -289,16 +345,29 @@ class TechnicalAnalysisAgent:
         # Step 7: Detect chart patterns
         result.patterns = self._detect_patterns(df)
 
-        # Step 8: Calculate composite score
+        # Step 8: Multi-timeframe analysis (if data available)
+        if price_data_60min or price_data_5min:
+            result.multi_timeframe = self._analyze_multi_timeframe(
+                df,  # Daily data
+                price_data_60min,
+                price_data_5min,
+                result.current_price
+            )
+
+        # Step 9: Beta calculation (if benchmark data available)
+        if benchmark_data:
+            result.beta_analysis = self._calculate_beta(df, benchmark_data)
+
+        # Step 10: Calculate composite score
         result.composite_technical_score = self._calculate_composite_score(result)
 
-        # Step 9: Generate trading signal
+        # Step 11: Generate trading signal
         result.overall_signal, result.signal_confidence = self._generate_signal(result)
 
-        # Step 10: Prepare chart data
+        # Step 12: Prepare chart data
         result.chart_data = self._prepare_chart_data(df, result)
 
-        # Step 11: Track data sources
+        # Step 13: Track data sources
         result.data_sources = {
             "price_data": {"type": "input", "name": "historical_prices"},
             "indicators": {"type": "calculation", "name": "pandas_ta"},
@@ -524,8 +593,13 @@ class TechnicalAnalysisAgent:
 
         return trend
 
-    def _analyze_momentum(self, df: pd.DataFrame, current_price: float) -> MomentumAnalysis:
-        """Analyze momentum indicators"""
+    def _analyze_momentum(
+        self,
+        df: pd.DataFrame,
+        current_price: float,
+        trend_analysis: Optional[TrendAnalysis] = None
+    ) -> MomentumAnalysis:
+        """Analyze momentum indicators with trend-context conditional weighting"""
         momentum = MomentumAnalysis()
 
         try:
@@ -540,6 +614,36 @@ class TechnicalAnalysisAgent:
                 momentum.rsi_signal = "overbought"
             else:
                 momentum.rsi_signal = "neutral"
+
+            # RSI Conditional Weighting based on Trend Context
+            # If long-term trend is strongly bullish, RSI overbought should not auto-trigger sell
+            # Assets in strong uptrends can remain overbought for extended periods
+            momentum.rsi_weight = 1.0  # Default full weight
+            momentum.rsi_weighted_signal = momentum.rsi_signal
+
+            if trend_analysis:
+                is_strong_uptrend = (
+                    trend_analysis.price_above_sma_200 and
+                    trend_analysis.price_above_sma_50 and
+                    trend_analysis.trend_direction == "bullish" and
+                    trend_analysis.adx > 25  # Strong trend
+                )
+                is_strong_downtrend = (
+                    not trend_analysis.price_above_sma_200 and
+                    not trend_analysis.price_above_sma_50 and
+                    trend_analysis.trend_direction == "bearish" and
+                    trend_analysis.adx > 25  # Strong trend
+                )
+
+                # In strong uptrend, reduce weight of overbought signal
+                if is_strong_uptrend and momentum.rsi_signal == "overbought":
+                    momentum.rsi_weight = 0.3  # Reduce overbought weight to 30%
+                    momentum.rsi_weighted_signal = "neutral_in_uptrend"  # Override signal
+
+                # In strong downtrend, reduce weight of oversold signal (may stay oversold)
+                elif is_strong_downtrend and momentum.rsi_signal == "oversold":
+                    momentum.rsi_weight = 0.3  # Reduce oversold weight to 30%
+                    momentum.rsi_weighted_signal = "neutral_in_downtrend"
 
             # MACD
             momentum.macd = self._safe_float(latest.get('MACD_12_26_9', 0))
@@ -571,16 +675,20 @@ class TechnicalAnalysisAgent:
             else:
                 momentum.roc_signal = "neutral"
 
-            # Calculate momentum score (0-10)
+            # Calculate momentum score (0-10) with RSI conditional weighting
             score = 5.0
 
-            # RSI (30%)
+            # RSI (30%) - Apply conditional weighting
+            rsi_contribution = 0.0
             if momentum.rsi_signal == "oversold":
-                score += 1.5
+                rsi_contribution = 1.5
             elif momentum.rsi_signal == "overbought":
-                score -= 1.5
+                rsi_contribution = -1.5
             elif 40 < momentum.rsi < 60:
-                score += 0.3
+                rsi_contribution = 0.3
+
+            # Apply weight based on trend context
+            score += rsi_contribution * momentum.rsi_weight
 
             # MACD (35%)
             if momentum.macd_cross == "bullish":
@@ -970,3 +1078,270 @@ class TechnicalAnalysisAgent:
         except Exception as e:
             logger.error("Error preparing chart data", error=str(e))
             return {}
+
+    def _analyze_single_timeframe(
+        self,
+        price_data: List[Dict[str, Any]],
+        timeframe: str,
+        current_price: float
+    ) -> Optional[TimeframeAnalysis]:
+        """Analyze a single timeframe for multi-timeframe strategy"""
+        try:
+            df = self._prepare_dataframe(price_data)
+            if df is None or len(df) < 20:
+                return None
+
+            # Calculate EMAs
+            df['EMA_20'] = df['close'].ewm(span=20, adjust=False).mean()
+            df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
+            df['EMA_200'] = df['close'].ewm(span=200, adjust=False).mean() if len(df) >= 200 else df['close']
+
+            # Calculate RSI
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+
+            latest = df.iloc[-1]
+
+            analysis = TimeframeAnalysis(timeframe=timeframe)
+
+            # EMA 200 trend (defines overall bias)
+            ema_200 = self._safe_float(latest.get('EMA_200', 0))
+            if ema_200 > 0:
+                if current_price > ema_200:
+                    analysis.ema_200_trend = "bullish"
+                else:
+                    analysis.ema_200_trend = "bearish"
+
+            # Trend direction based on EMA alignment
+            ema_20 = self._safe_float(latest.get('EMA_20', 0))
+            ema_50 = self._safe_float(latest.get('EMA_50', 0))
+
+            if ema_20 > ema_50 > ema_200 and ema_200 > 0:
+                analysis.trend_direction = "bullish"
+                analysis.trend_strength = 8.0
+            elif ema_20 < ema_50 < ema_200 and ema_200 > 0:
+                analysis.trend_direction = "bearish"
+                analysis.trend_strength = 2.0
+            elif ema_20 > ema_50:
+                analysis.trend_direction = "bullish"
+                analysis.trend_strength = 6.0
+            elif ema_20 < ema_50:
+                analysis.trend_direction = "bearish"
+                analysis.trend_strength = 4.0
+            else:
+                analysis.trend_direction = "neutral"
+                analysis.trend_strength = 5.0
+
+            # Momentum signal from RSI
+            rsi = self._safe_float(latest.get('RSI', 50))
+            if rsi < 30:
+                analysis.momentum_signal = "oversold"
+            elif rsi > 70:
+                analysis.momentum_signal = "overbought"
+            elif rsi < 45:
+                analysis.momentum_signal = "bearish"
+            elif rsi > 55:
+                analysis.momentum_signal = "bullish"
+            else:
+                analysis.momentum_signal = "neutral"
+
+            # Entry signal for execution timeframe
+            if timeframe == "5min":
+                # Look for short-term reversal or continuation patterns
+                if analysis.trend_direction == "bullish" and rsi < 40:
+                    analysis.entry_signal = "buy"
+                elif analysis.trend_direction == "bearish" and rsi > 60:
+                    analysis.entry_signal = "sell"
+
+            return analysis
+
+        except Exception as e:
+            logger.error(f"Error analyzing {timeframe} timeframe", error=str(e))
+            return None
+
+    def _analyze_multi_timeframe(
+        self,
+        df_daily: pd.DataFrame,
+        price_data_60min: Optional[List[Dict[str, Any]]],
+        price_data_5min: Optional[List[Dict[str, Any]]],
+        current_price: float
+    ) -> MultiTimeframeAnalysis:
+        """
+        Multi-Timeframe Strategy Analysis for swing trading
+
+        Primary Trend (Daily): Defines overall market trend via 200-EMA
+        Confirmation (60-min): Validates alignment with primary trend
+        Execution (5-min): Entry/exit timing refinement
+        """
+        mtf = MultiTimeframeAnalysis()
+
+        try:
+            # Analyze Daily (Primary Trend)
+            daily_prices = []
+            for idx, row in df_daily.iterrows():
+                daily_prices.append({
+                    'date': idx,
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'volume': row['volume']
+                })
+
+            mtf.primary_trend = self._analyze_single_timeframe(
+                daily_prices, "daily", current_price
+            )
+
+            # Analyze 60-minute (Confirmation)
+            if price_data_60min:
+                mtf.confirmation_trend = self._analyze_single_timeframe(
+                    price_data_60min, "60min", current_price
+                )
+
+            # Analyze 5-minute (Execution)
+            if price_data_5min:
+                mtf.execution_trend = self._analyze_single_timeframe(
+                    price_data_5min, "5min", current_price
+                )
+
+            # Determine trend alignment
+            trends = []
+            if mtf.primary_trend:
+                trends.append(mtf.primary_trend.trend_direction)
+            if mtf.confirmation_trend:
+                trends.append(mtf.confirmation_trend.trend_direction)
+            if mtf.execution_trend:
+                trends.append(mtf.execution_trend.trend_direction)
+
+            if all(t == "bullish" for t in trends) and len(trends) >= 2:
+                mtf.trend_alignment = "aligned_bullish"
+            elif all(t == "bearish" for t in trends) and len(trends) >= 2:
+                mtf.trend_alignment = "aligned_bearish"
+            else:
+                mtf.trend_alignment = "mixed"
+
+            # Determine signal quality
+            if len(trends) >= 3 and mtf.trend_alignment != "mixed":
+                mtf.signal_quality = "high"
+                mtf.confidence = 85.0
+            elif len(trends) >= 2 and mtf.trend_alignment != "mixed":
+                mtf.signal_quality = "medium"
+                mtf.confidence = 65.0
+            else:
+                mtf.signal_quality = "low"
+                mtf.confidence = 40.0
+
+            # Generate recommended action
+            if mtf.trend_alignment == "aligned_bullish" and mtf.signal_quality in ["high", "medium"]:
+                # Check if we have a good entry point
+                if mtf.execution_trend and mtf.execution_trend.entry_signal == "buy":
+                    mtf.recommended_action = "buy"
+                else:
+                    mtf.recommended_action = "hold_bullish"
+            elif mtf.trend_alignment == "aligned_bearish" and mtf.signal_quality in ["high", "medium"]:
+                if mtf.execution_trend and mtf.execution_trend.entry_signal == "sell":
+                    mtf.recommended_action = "sell"
+                else:
+                    mtf.recommended_action = "hold_bearish"
+            else:
+                mtf.recommended_action = "hold"
+
+        except Exception as e:
+            logger.error("Error in multi-timeframe analysis", error=str(e))
+
+        return mtf
+
+    def _calculate_beta(
+        self,
+        df_stock: pd.DataFrame,
+        benchmark_data: List[Dict[str, Any]]
+    ) -> BetaAnalysis:
+        """
+        Calculate Beta relative to benchmark (NASDAQ)
+
+        Beta measures systematic risk:
+        - Beta > 1: More volatile than market
+        - Beta < 1: Less volatile than market
+        - Beta = 1: Same volatility as market
+        """
+        beta_analysis = BetaAnalysis()
+
+        try:
+            # Prepare benchmark DataFrame
+            df_benchmark = self._prepare_dataframe(benchmark_data)
+            if df_benchmark is None or len(df_benchmark) < 30:
+                logger.warning("Insufficient benchmark data for beta calculation")
+                return beta_analysis
+
+            # Align the two dataframes by date
+            # Get common dates
+            common_dates = df_stock.index.intersection(df_benchmark.index)
+            if len(common_dates) < 30:
+                logger.warning("Insufficient overlapping data for beta calculation")
+                return beta_analysis
+
+            stock_aligned = df_stock.loc[common_dates, 'close']
+            benchmark_aligned = df_benchmark.loc[common_dates, 'close']
+
+            # Calculate returns
+            stock_returns = stock_aligned.pct_change().dropna()
+            benchmark_returns = benchmark_aligned.pct_change().dropna()
+
+            # Align returns
+            aligned_idx = stock_returns.index.intersection(benchmark_returns.index)
+            stock_returns = stock_returns.loc[aligned_idx]
+            benchmark_returns = benchmark_returns.loc[aligned_idx]
+
+            if len(stock_returns) < 20:
+                logger.warning("Insufficient return data for beta calculation")
+                return beta_analysis
+
+            # Calculate Beta using covariance / variance
+            covariance = np.cov(stock_returns, benchmark_returns)[0, 1]
+            variance = np.var(benchmark_returns)
+
+            if variance > 0:
+                beta_analysis.beta = covariance / variance
+            else:
+                beta_analysis.beta = 1.0
+
+            # Calculate correlation
+            beta_analysis.correlation = np.corrcoef(stock_returns, benchmark_returns)[0, 1]
+
+            # Calculate R-squared
+            beta_analysis.r_squared = beta_analysis.correlation ** 2
+
+            # Calculate Alpha (Jensen's Alpha)
+            # Using simple approach: alpha = avg(stock_return) - beta * avg(benchmark_return)
+            avg_stock_return = stock_returns.mean()
+            avg_benchmark_return = benchmark_returns.mean()
+            beta_analysis.alpha = avg_stock_return - (beta_analysis.beta * avg_benchmark_return)
+
+            # Interpret volatility vs market
+            if beta_analysis.beta < 0.5:
+                beta_analysis.volatility_vs_market = "low"
+                beta_analysis.risk_profile = "conservative"
+            elif beta_analysis.beta < 1.0:
+                beta_analysis.volatility_vs_market = "below_average"
+                beta_analysis.risk_profile = "moderate"
+            elif beta_analysis.beta < 1.5:
+                beta_analysis.volatility_vs_market = "above_average"
+                beta_analysis.risk_profile = "aggressive"
+            else:
+                beta_analysis.volatility_vs_market = "high"
+                beta_analysis.risk_profile = "very_aggressive"
+
+            logger.info(
+                "Beta calculated",
+                beta=round(beta_analysis.beta, 2),
+                correlation=round(beta_analysis.correlation, 2),
+                r_squared=round(beta_analysis.r_squared, 2)
+            )
+
+        except Exception as e:
+            logger.error("Error calculating beta", error=str(e))
+
+        return beta_analysis

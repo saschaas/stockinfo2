@@ -24,6 +24,8 @@ export interface TechnicalAnalysisData {
   // Momentum Analysis
   rsi: number
   rsi_signal: 'oversold' | 'neutral' | 'overbought'
+  rsi_weighted_signal: string  // Trend-context adjusted signal
+  rsi_weight: number  // Weight applied based on trend context
   macd: number
   macd_signal: number
   macd_histogram: number
@@ -83,11 +85,46 @@ export interface TechnicalAnalysisData {
   overall_signal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell'
   signal_confidence: number
 
+  // Multi-timeframe Analysis
+  multi_timeframe: MultiTimeframeAnalysis
+
+  // Beta Analysis
+  beta_analysis: BetaAnalysis
+
   // Chart Data
   chart_data: ChartData
 
   // Data Sources
   data_sources: Record<string, { type: string; name: string }>
+}
+
+export interface TimeframeAnalysis {
+  timeframe: string  // "daily", "60min", "5min"
+  trend_direction: 'bullish' | 'bearish' | 'neutral'
+  trend_strength: number
+  ema_200_trend: string
+  momentum_signal: string
+  entry_signal?: string | null
+}
+
+export interface MultiTimeframeAnalysis {
+  primary_trend: TimeframeAnalysis | null  // Daily
+  confirmation_trend: TimeframeAnalysis | null  // 60-min
+  execution_trend: TimeframeAnalysis | null  // 5-min
+  trend_alignment: 'aligned_bullish' | 'aligned_bearish' | 'mixed'
+  signal_quality: 'high' | 'medium' | 'low'
+  recommended_action: string
+  confidence: number
+}
+
+export interface BetaAnalysis {
+  beta: number
+  benchmark: string
+  correlation: number
+  alpha: number
+  r_squared: number
+  volatility_vs_market: 'low' | 'below_average' | 'average' | 'above_average' | 'high'
+  risk_profile: 'conservative' | 'moderate' | 'aggressive' | 'very_aggressive'
 }
 
 export interface ChartData {

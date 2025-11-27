@@ -117,15 +117,42 @@ def research_stock(
                 try:
                     from backend.app.agents.technical_analysis_agent import TechnicalAnalysisAgent
 
-                    # Fetch 6 months of historical data for comprehensive analysis
-                    prices = await yf_client.get_historical_prices(ticker, period="6mo", interval="1d")
+                    # Fetch daily data (1 year for proper indicator calculation)
+                    prices = await yf_client.get_historical_prices(ticker, period="1y", interval="1d")
                     current_price = stock_info.get("current_price")
+
+                    # Fetch 60-minute data for multi-timeframe analysis (last 5 days)
+                    prices_60min = None
+                    try:
+                        prices_60min = await yf_client.get_historical_prices(ticker, period="5d", interval="60m")
+                        logger.info("Fetched 60-minute data", ticker=ticker, data_points=len(prices_60min))
+                    except Exception as e:
+                        logger.warning("Failed to fetch 60-minute data", ticker=ticker, error=str(e))
+
+                    # Fetch 5-minute data for execution timing (last 1 day)
+                    prices_5min = None
+                    try:
+                        prices_5min = await yf_client.get_historical_prices(ticker, period="1d", interval="5m")
+                        logger.info("Fetched 5-minute data", ticker=ticker, data_points=len(prices_5min))
+                    except Exception as e:
+                        logger.warning("Failed to fetch 5-minute data", ticker=ticker, error=str(e))
+
+                    # Fetch NASDAQ benchmark data for Beta calculation
+                    benchmark_data = None
+                    try:
+                        benchmark_data = await yf_client.get_historical_prices("^IXIC", period="1y", interval="1d")
+                        logger.info("Fetched NASDAQ benchmark data", data_points=len(benchmark_data))
+                    except Exception as e:
+                        logger.warning("Failed to fetch NASDAQ benchmark data", error=str(e))
 
                     tech_agent = TechnicalAnalysisAgent()
                     technical_analysis_result = await tech_agent.analyze(
                         ticker=ticker,
                         price_data=prices,
-                        current_price=current_price
+                        current_price=current_price,
+                        price_data_60min=prices_60min,
+                        price_data_5min=prices_5min,
+                        benchmark_data=benchmark_data,
                     )
 
                     # Store basic technical indicators for backward compatibility
@@ -221,7 +248,7 @@ def research_stock(
                 logger.warning("Growth analysis failed", ticker=ticker, error=str(e))
                 # Continue without growth analysis
 
-            # Step 6: AI Analysis (90%)
+            # Step 6: AI Analysis (75%)
             if include_ai_analysis:
                 await set_job_progress(job_id, "running", 75, "Running AI analysis...")
                 await update_job_status(job_id, ticker, "running", 75, "Running AI analysis...")
@@ -230,21 +257,22 @@ def research_stock(
                 result.update(ai_analysis)
                 data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
 
+            # Helper to clean NaN values and Decimals for JSON serialization
+            def clean_nan(obj):
+                import math
+                from decimal import Decimal
+                if isinstance(obj, dict):
+                    return {k: clean_nan(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [clean_nan(item) for item in obj]
+                elif isinstance(obj, Decimal):
+                    return float(obj)
+                elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                    return None
+                return obj
+
             # Step 7: Add comprehensive technical analysis to result
             if technical_analysis_result:
-                # Helper to clean NaN values and Decimals for JSON serialization
-                def clean_nan(obj):
-                    import math
-                    from decimal import Decimal
-                    if isinstance(obj, dict):
-                        return {k: clean_nan(v) for k, v in obj.items()}
-                    elif isinstance(obj, list):
-                        return [clean_nan(item) for item in obj]
-                    elif isinstance(obj, Decimal):
-                        return float(obj)
-                    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
-                        return None
-                    return obj
 
                 # Serialize the technical analysis result for JSON response
                 ta = technical_analysis_result
@@ -277,6 +305,8 @@ def research_stock(
                     # Momentum
                     "rsi": ta.momentum.rsi,
                     "rsi_signal": ta.momentum.rsi_signal,
+                    "rsi_weighted_signal": ta.momentum.rsi_weighted_signal,
+                    "rsi_weight": ta.momentum.rsi_weight,
                     "macd": ta.momentum.macd,
                     "macd_signal": ta.momentum.macd_signal,
                     "macd_histogram": ta.momentum.macd_histogram,
@@ -327,12 +357,189 @@ def research_stock(
                     "overall_signal": ta.overall_signal,
                     "signal_confidence": ta.signal_confidence,
 
+                    # Multi-timeframe analysis
+                    "multi_timeframe": {
+                        "primary_trend": {
+                            "timeframe": ta.multi_timeframe.primary_trend.timeframe,
+                            "trend_direction": ta.multi_timeframe.primary_trend.trend_direction,
+                            "trend_strength": ta.multi_timeframe.primary_trend.trend_strength,
+                            "ema_200_trend": ta.multi_timeframe.primary_trend.ema_200_trend,
+                            "momentum_signal": ta.multi_timeframe.primary_trend.momentum_signal,
+                            "entry_signal": ta.multi_timeframe.primary_trend.entry_signal,
+                        } if ta.multi_timeframe.primary_trend else None,
+                        "confirmation_trend": {
+                            "timeframe": ta.multi_timeframe.confirmation_trend.timeframe,
+                            "trend_direction": ta.multi_timeframe.confirmation_trend.trend_direction,
+                            "trend_strength": ta.multi_timeframe.confirmation_trend.trend_strength,
+                            "ema_200_trend": ta.multi_timeframe.confirmation_trend.ema_200_trend,
+                            "momentum_signal": ta.multi_timeframe.confirmation_trend.momentum_signal,
+                            "entry_signal": ta.multi_timeframe.confirmation_trend.entry_signal,
+                        } if ta.multi_timeframe.confirmation_trend else None,
+                        "execution_trend": {
+                            "timeframe": ta.multi_timeframe.execution_trend.timeframe,
+                            "trend_direction": ta.multi_timeframe.execution_trend.trend_direction,
+                            "trend_strength": ta.multi_timeframe.execution_trend.trend_strength,
+                            "ema_200_trend": ta.multi_timeframe.execution_trend.ema_200_trend,
+                            "momentum_signal": ta.multi_timeframe.execution_trend.momentum_signal,
+                            "entry_signal": ta.multi_timeframe.execution_trend.entry_signal,
+                        } if ta.multi_timeframe.execution_trend else None,
+                        "trend_alignment": ta.multi_timeframe.trend_alignment,
+                        "signal_quality": ta.multi_timeframe.signal_quality,
+                        "recommended_action": ta.multi_timeframe.recommended_action,
+                        "confidence": ta.multi_timeframe.confidence,
+                    },
+
+                    # Beta analysis
+                    "beta_analysis": {
+                        "beta": ta.beta_analysis.beta,
+                        "benchmark": ta.beta_analysis.benchmark,
+                        "correlation": ta.beta_analysis.correlation,
+                        "alpha": ta.beta_analysis.alpha,
+                        "r_squared": ta.beta_analysis.r_squared,
+                        "volatility_vs_market": ta.beta_analysis.volatility_vs_market,
+                        "risk_profile": ta.beta_analysis.risk_profile,
+                    },
+
                     # Chart data
                     "chart_data": ta.chart_data,
                 })
                 logger.info("Added comprehensive technical analysis to result", ticker=ticker, signal=ta.overall_signal)
 
-            # Step 8: Save to database (90%)
+            # Step 8: Risk Assessment (85%)
+            risk_assessment_result = None
+            await set_job_progress(job_id, "running", 85, "Running risk assessment...")
+            await update_job_status(job_id, ticker, "running", 85, "Running risk assessment...")
+
+            try:
+                from backend.app.agents.risk_assessment_agent import RiskAssessmentAgent
+
+                risk_agent = RiskAssessmentAgent()
+
+                # Prepare growth analysis data for risk assessment
+                growth_data_for_risk = None
+                if 'composite_score' in result:
+                    growth_data_for_risk = {
+                        "composite_score": result.get("composite_score"),
+                        "fundamental_score": result.get("fundamental_score"),
+                        "sentiment_score": result.get("sentiment_score"),
+                        "technical_score": result.get("technical_score"),
+                        "competitive_score": result.get("competitive_score"),
+                        "risk_score": result.get("risk_score"),
+                        "risk_level": result.get("risk_level"),
+                        "upside_potential": result.get("upside_potential"),
+                        "key_strengths": result.get("key_strengths", []),
+                        "key_risks": result.get("key_risks", []),
+                        "data_completeness_score": result.get("data_completeness_score"),
+                    }
+
+                # Get technical analysis data (already serialized format)
+                tech_data_for_risk = result.get("technical_analysis")
+
+                risk_assessment_result = await risk_agent.analyze(
+                    ticker=ticker,
+                    technical_analysis=tech_data_for_risk,
+                    growth_analysis=growth_data_for_risk,
+                    stock_info=stock_info,
+                )
+
+                logger.info(
+                    "Risk assessment completed",
+                    ticker=ticker,
+                    risk_score=risk_assessment_result.risk_score,
+                    decision=risk_assessment_result.investment_decision
+                )
+
+            except Exception as e:
+                logger.warning("Risk assessment failed", ticker=ticker, error=str(e))
+                import traceback
+                logger.warning("Risk assessment traceback", traceback=traceback.format_exc())
+
+            # Step 8b: Add risk assessment to result
+            if risk_assessment_result:
+                ra = risk_assessment_result
+                result["risk_assessment"] = clean_nan({
+                    # Basic info
+                    "ticker": ra.ticker,
+                    "assessment_date": ra.assessment_date.isoformat(),
+                    "current_price": ra.current_price,
+
+                    # Main Risk Score
+                    "risk_score": ra.risk_score,
+                    "risk_level": ra.risk_level,
+
+                    # Weighted subscores
+                    "market_structure_weighted": ra.market_structure_weighted,
+                    "momentum_weighted": ra.momentum_weighted,
+                    "overextension_penalty_weighted": ra.overextension_penalty_weighted,
+                    "volatility_penalty_weighted": ra.volatility_penalty_weighted,
+                    "volume_confirmation_weighted": ra.volume_confirmation_weighted,
+
+                    # Subscore breakdown
+                    "subscore_breakdown": {
+                        # Market structure
+                        "support_proximity_score": ra.subscore_breakdown.support_proximity_score,
+                        "resistance_distance_score": ra.subscore_breakdown.resistance_distance_score,
+                        "trend_alignment_score": ra.subscore_breakdown.trend_alignment_score,
+                        "market_structure_total": ra.subscore_breakdown.market_structure_total,
+                        # Momentum
+                        "macd_momentum_score": ra.subscore_breakdown.macd_momentum_score,
+                        "rsi_direction_score": ra.subscore_breakdown.rsi_direction_score,
+                        "momentum_total": ra.subscore_breakdown.momentum_total,
+                        # Overextension
+                        "rsi_overbought_penalty": ra.subscore_breakdown.rsi_overbought_penalty,
+                        "bollinger_penalty": ra.subscore_breakdown.bollinger_penalty,
+                        "ema_distance_penalty": ra.subscore_breakdown.ema_distance_penalty,
+                        "overextension_total": ra.subscore_breakdown.overextension_total,
+                        # Volatility
+                        "atr_volatility_penalty": ra.subscore_breakdown.atr_volatility_penalty,
+                        "stop_distance_penalty": ra.subscore_breakdown.stop_distance_penalty,
+                        "volatility_total": ra.subscore_breakdown.volatility_total,
+                        # Volume
+                        "volume_ratio_score": ra.subscore_breakdown.volume_ratio_score,
+                        "volume_total": ra.subscore_breakdown.volume_total,
+                    },
+
+                    # MFTA
+                    "mfta_multiplier": ra.mfta_multiplier,
+                    "mfta_alignment": ra.mfta_alignment,
+                    "pre_mfta_score": ra.pre_mfta_score,
+
+                    # Risk/Reward Analysis
+                    "risk_reward": {
+                        "current_price": ra.risk_reward.current_price,
+                        "nearest_support": ra.risk_reward.nearest_support,
+                        "nearest_resistance": ra.risk_reward.nearest_resistance,
+                        "risk_distance_pct": ra.risk_reward.risk_distance_pct,
+                        "reward_distance_pct": ra.risk_reward.reward_distance_pct,
+                        "risk_reward_ratio": ra.risk_reward.risk_reward_ratio,
+                        "is_favorable": ra.risk_reward.is_favorable,
+                        "suggested_entry": ra.risk_reward.suggested_entry,
+                        "suggested_stop": ra.risk_reward.suggested_stop,
+                        "suggested_target": ra.risk_reward.suggested_target,
+                    },
+
+                    # Investment Decision
+                    "investment_decision": ra.investment_decision,
+                    "decision_confidence": ra.decision_confidence,
+                    "entry_quality": ra.entry_quality,
+
+                    # Key Factors
+                    "bullish_factors": ra.bullish_factors,
+                    "bearish_factors": ra.bearish_factors,
+                    "key_risks": ra.key_risks,
+
+                    # Analysis
+                    "summary": ra.summary,
+                    "detailed_analysis": ra.detailed_analysis,
+                    "position_sizing_suggestion": ra.position_sizing_suggestion,
+
+                    # Data Sources
+                    "data_sources": ra.data_sources,
+                })
+                data_sources["risk_assessment"] = {"type": "agent", "name": "risk_assessment_agent"}
+                logger.info("Added risk assessment to result", ticker=ticker, decision=ra.investment_decision)
+
+            # Step 9: Save to database (90%)
             await set_job_progress(job_id, "running", 90, "Saving results...")
 
             result["data_sources"] = data_sources

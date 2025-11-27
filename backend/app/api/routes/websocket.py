@@ -175,11 +175,22 @@ async def get_job_status(job_id: str) -> dict:
 
 
 async def get_job_result(job_id: str) -> dict:
-    """Get job result (analysis) from database."""
+    """Get job result (analysis) from Redis cache or database."""
     from sqlalchemy import select
     from backend.app.db.session import async_session_factory
     from backend.app.db.models import ResearchJob, StockAnalysis
+    from backend.app.services.cache import get_job_progress
 
+    # First try to get from Redis cache (has complete result including risk_assessment)
+    try:
+        redis_data = await get_job_progress(job_id)
+        if redis_data and redis_data.get("status") == "completed" and redis_data.get("result"):
+            logger.debug("Returning job result from Redis cache", job_id=job_id)
+            return redis_data["result"]
+    except Exception as e:
+        logger.warning("Failed to get job result from Redis", job_id=job_id, error=str(e))
+
+    # Fallback to database
     try:
         async with async_session_factory() as session:
             # Get job to find ticker

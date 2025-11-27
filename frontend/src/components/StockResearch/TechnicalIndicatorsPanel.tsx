@@ -54,6 +54,84 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
     return signal.replace(/_/g, ' ').toUpperCase()
   }
 
+  // RSI Mini Chart Component
+  const RSIMiniChart = () => {
+    const rsiData = data.chart_data?.indicators?.rsi
+    if (!rsiData || rsiData.length === 0) return null
+
+    // Get last 30 RSI values
+    const rsiArr = rsiData.slice(-30).filter((v: number | null) => v !== null) as number[]
+    if (rsiArr.length === 0) return null
+
+    const width = 280
+    const height = 50
+    const padding = 4
+
+    // RSI is always 0-100
+    const minVal = 0
+    const maxVal = 100
+    const range = maxVal - minVal
+
+    const getY = (val: number) => {
+      return height - padding - ((val - minVal) / range) * (height - 2 * padding)
+    }
+
+    const getX = (idx: number, total: number) => {
+      return padding + (idx / (total - 1)) * (width - 2 * padding)
+    }
+
+    // Create SVG path
+    const rsiPath = rsiArr.map((val, idx) => {
+      const x = getX(idx, rsiArr.length)
+      const y = getY(val)
+      return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`
+    }).join(' ')
+
+    // Get Y positions for threshold lines
+    const y30 = getY(30)
+    const y70 = getY(70)
+    const y50 = getY(50)
+
+    return (
+      <div className="mt-3">
+        <div className="text-xs text-gray-500 mb-1">RSI History (Last 30 periods)</div>
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="bg-gray-100 rounded">
+          {/* Overbought zone (above 70) */}
+          <rect x={padding} y={padding} width={width - 2 * padding} height={y70 - padding} fill="#fee2e2" opacity="0.5" />
+
+          {/* Oversold zone (below 30) */}
+          <rect x={padding} y={y30} width={width - 2 * padding} height={height - padding - y30} fill="#dcfce7" opacity="0.5" />
+
+          {/* 70 line (overbought threshold) */}
+          <line x1={padding} y1={y70} x2={width - padding} y2={y70} stroke="#ef4444" strokeWidth="1" strokeDasharray="4,2" />
+
+          {/* 50 line (neutral) */}
+          <line x1={padding} y1={y50} x2={width - padding} y2={y50} stroke="#9ca3af" strokeWidth="1" strokeDasharray="2,2" />
+
+          {/* 30 line (oversold threshold) */}
+          <line x1={padding} y1={y30} x2={width - padding} y2={y30} stroke="#22c55e" strokeWidth="1" strokeDasharray="4,2" />
+
+          {/* RSI line */}
+          <path d={rsiPath} fill="none" stroke="#6366f1" strokeWidth="2" />
+
+          {/* Current value dot */}
+          <circle
+            cx={getX(rsiArr.length - 1, rsiArr.length)}
+            cy={getY(rsiArr[rsiArr.length - 1])}
+            r="3"
+            fill={rsiArr[rsiArr.length - 1] > 70 ? '#ef4444' : rsiArr[rsiArr.length - 1] < 30 ? '#22c55e' : '#6366f1'}
+            stroke="white"
+            strokeWidth="1"
+          />
+        </svg>
+        <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <span>30 days ago</span>
+          <span>Today</span>
+        </div>
+      </div>
+    )
+  }
+
   // RSI Gauge Component
   const RSIGauge = ({ value }: { value: number | undefined }) => {
     if (value === undefined || value === null || isNaN(value)) {
@@ -64,6 +142,10 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
     let color = 'bg-yellow-500'
     if (value < 25) color = 'bg-green-500'
     else if (value > 75) color = 'bg-red-500'
+
+    // Check if RSI signal is trend-adjusted
+    const isAdjusted = data.rsi_weight !== undefined && data.rsi_weight < 1.0
+    const weightedSignal = data.rsi_weighted_signal
 
     return (
       <div className="space-y-2">
@@ -99,6 +181,21 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             {formatSignal(data.rsi_signal)}
           </span>
         </div>
+
+        {/* Trend-Adjusted Signal Notice */}
+        {isAdjusted && (
+          <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+            <div className="text-xs text-blue-700">
+              <span className="font-medium">Trend-Adjusted:</span> RSI signal weight reduced to {Math.round((data.rsi_weight || 1) * 100)}%
+              {weightedSignal === 'neutral_in_uptrend' && (
+                <span> - Strong uptrend detected, overbought may persist</span>
+              )}
+              {weightedSignal === 'neutral_in_downtrend' && (
+                <span> - Strong downtrend detected, oversold may persist</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -159,6 +256,8 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             <p className="text-xs text-gray-600 mt-2">
               Growth stock thresholds: Oversold &lt; 25, Overbought &gt; 75
             </p>
+            {/* RSI History Mini Chart */}
+            <RSIMiniChart />
           </div>
 
           {/* MACD */}
@@ -354,6 +453,249 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
           </div>
         </div>
       </div>
+
+      {/* Multi-Timeframe Analysis */}
+      {data.multi_timeframe && (
+        <div className="border-t border-gray-200 pt-6">
+          <h4 className="text-lg font-semibold text-gray-900 mb-4">Multi-Timeframe Analysis</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            {/* Primary Trend (Daily) */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="font-medium text-gray-700">Daily (Primary)</h5>
+                {data.multi_timeframe.primary_trend && (
+                  <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.multi_timeframe.primary_trend.trend_direction)}`}>
+                    {data.multi_timeframe.primary_trend.trend_direction.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {data.multi_timeframe.primary_trend ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">200-EMA Trend:</span>
+                    <span className={data.multi_timeframe.primary_trend.ema_200_trend === 'bullish' ? 'text-green-600' : 'text-red-600'}>
+                      {data.multi_timeframe.primary_trend.ema_200_trend}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Strength:</span>
+                    <span>{safeToFixed(data.multi_timeframe.primary_trend.trend_strength, 1)}/10</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Data not available</p>
+              )}
+            </div>
+
+            {/* Confirmation Trend (60-min) */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="font-medium text-gray-700">60-min (Confirm)</h5>
+                {data.multi_timeframe.confirmation_trend && (
+                  <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.multi_timeframe.confirmation_trend.trend_direction)}`}>
+                    {data.multi_timeframe.confirmation_trend.trend_direction.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {data.multi_timeframe.confirmation_trend ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Momentum:</span>
+                    <span className={data.multi_timeframe.confirmation_trend.momentum_signal === 'bullish' ? 'text-green-600' : data.multi_timeframe.confirmation_trend.momentum_signal === 'bearish' ? 'text-red-600' : 'text-gray-600'}>
+                      {data.multi_timeframe.confirmation_trend.momentum_signal}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Strength:</span>
+                    <span>{safeToFixed(data.multi_timeframe.confirmation_trend.trend_strength, 1)}/10</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Data not available</p>
+              )}
+            </div>
+
+            {/* Execution Trend (5-min) */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="font-medium text-gray-700">5-min (Execute)</h5>
+                {data.multi_timeframe.execution_trend && (
+                  <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.multi_timeframe.execution_trend.trend_direction)}`}>
+                    {data.multi_timeframe.execution_trend.trend_direction.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {data.multi_timeframe.execution_trend ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Entry Signal:</span>
+                    <span className={data.multi_timeframe.execution_trend.entry_signal === 'buy' ? 'text-green-600 font-medium' : data.multi_timeframe.execution_trend.entry_signal === 'sell' ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                      {data.multi_timeframe.execution_trend.entry_signal || 'None'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Momentum:</span>
+                    <span>{data.multi_timeframe.execution_trend.momentum_signal}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Data not available</p>
+              )}
+            </div>
+          </div>
+
+          {/* MTF Summary */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <span className="text-sm text-blue-700">Trend Alignment:</span>
+                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                  data.multi_timeframe.trend_alignment === 'aligned_bullish' ? 'bg-green-100 text-green-800' :
+                  data.multi_timeframe.trend_alignment === 'aligned_bearish' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {data.multi_timeframe.trend_alignment.replace(/_/g, ' ').toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-blue-700">Signal Quality:</span>
+                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                  data.multi_timeframe.signal_quality === 'high' ? 'bg-green-100 text-green-800' :
+                  data.multi_timeframe.signal_quality === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {data.multi_timeframe.signal_quality.toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-blue-700">Recommendation:</span>
+                <span className={`ml-2 px-2 py-1 rounded text-xs font-bold ${
+                  data.multi_timeframe.recommended_action === 'buy' ? 'bg-green-500 text-white' :
+                  data.multi_timeframe.recommended_action === 'sell' ? 'bg-red-500 text-white' :
+                  data.multi_timeframe.recommended_action.includes('bullish') ? 'bg-green-100 text-green-800' :
+                  data.multi_timeframe.recommended_action.includes('bearish') ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {data.multi_timeframe.recommended_action.replace(/_/g, ' ').toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-blue-700">Confidence:</span>
+                <span className="ml-2 font-bold text-blue-900">{safeToFixed(data.multi_timeframe.confidence, 0)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Beta / Risk Analysis */}
+      {data.beta_analysis && (
+        <div className="border-t border-gray-200 pt-6">
+          <h4 className="text-lg font-semibold text-gray-900 mb-4">Risk Assessment (Beta)</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h5 className="font-medium text-gray-700 mb-3">Beta Analysis</h5>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Beta (vs {data.beta_analysis.benchmark}):</span>
+                  <span className={`text-2xl font-bold ${
+                    data.beta_analysis.beta > 1.5 ? 'text-red-600' :
+                    data.beta_analysis.beta > 1 ? 'text-orange-600' :
+                    data.beta_analysis.beta > 0.5 ? 'text-green-600' :
+                    'text-blue-600'
+                  }`}>
+                    {safeToFixed(data.beta_analysis.beta, 2)}
+                  </span>
+                </div>
+
+                {/* Beta scale visualization */}
+                <div className="relative">
+                  <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="absolute inset-0 flex">
+                      <div className="w-1/4 bg-blue-100" />
+                      <div className="w-1/4 bg-green-100" />
+                      <div className="w-1/4 bg-orange-100" />
+                      <div className="w-1/4 bg-red-100" />
+                    </div>
+                    <div
+                      className="absolute top-0 bottom-0 w-1 bg-gray-900 z-10"
+                      style={{ left: `${Math.min(Math.max(data.beta_analysis.beta / 2 * 100, 0), 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0</span>
+                    <span>0.5</span>
+                    <span>1.0</span>
+                    <span>1.5</span>
+                    <span>2.0+</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Correlation:</span>
+                    <span className="ml-2 font-medium">{safeToFixed(data.beta_analysis.correlation, 2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">R-Squared:</span>
+                    <span className="ml-2 font-medium">{safeToFixed(data.beta_analysis.r_squared * 100, 1)}%</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Alpha:</span>
+                    <span className={`ml-2 font-medium ${(data.beta_analysis.alpha || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {(data.beta_analysis.alpha || 0) >= 0 ? '+' : ''}{safeToFixed(data.beta_analysis.alpha * 100, 2)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h5 className="font-medium text-gray-700 mb-3">Risk Profile</h5>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Volatility vs Market:</span>
+                  <span className={`px-2 py-1 rounded text-xs font-medium border ${
+                    data.beta_analysis.volatility_vs_market === 'high' ? 'bg-red-100 text-red-800 border-red-300' :
+                    data.beta_analysis.volatility_vs_market === 'above_average' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                    data.beta_analysis.volatility_vs_market === 'below_average' ? 'bg-green-100 text-green-800 border-green-300' :
+                    data.beta_analysis.volatility_vs_market === 'low' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                    'bg-gray-100 text-gray-800 border-gray-300'
+                  }`}>
+                    {data.beta_analysis.volatility_vs_market.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Risk Profile:</span>
+                  <span className={`px-2 py-1 rounded text-xs font-medium border ${
+                    data.beta_analysis.risk_profile === 'very_aggressive' ? 'bg-red-100 text-red-800 border-red-300' :
+                    data.beta_analysis.risk_profile === 'aggressive' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                    data.beta_analysis.risk_profile === 'moderate' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                    'bg-green-100 text-green-800 border-green-300'
+                  }`}>
+                    {data.beta_analysis.risk_profile.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-100">
+                  <p className="text-xs text-blue-700">
+                    {data.beta_analysis.beta > 1.5 ? (
+                      'High Beta: Stock is significantly more volatile than the market. Expect amplified moves in both directions.'
+                    ) : data.beta_analysis.beta > 1 ? (
+                      'Above Market Beta: Stock tends to move more than the market. Higher risk but higher potential returns.'
+                    ) : data.beta_analysis.beta > 0.5 ? (
+                      'Moderate Beta: Stock moves roughly in line with the market. Balanced risk profile.'
+                    ) : (
+                      'Low Beta: Stock is less volatile than the market. More defensive but may underperform in rallies.'
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,9 +1,47 @@
 
-  What's needed for full UI display:
-  - React components to visualize the scoring breakdown
-  - Charts for multi-factor analysis (radar/spider chart)
-  - Risk indicators and portfolio allocation display
-  - Key insights panels
-  - Data quality badges
+The follwoing functions should be implemented or added to existing functions:
 
-  The backend is 100% complete and operational. The data is flowing through the entire pipeline and is available via the API. Frontend implementation is optional and can be added whenever needed.
+1. Multi-Timeframe Strategy for Signal Robustness:
+The tool should analyze data across three distinct time horizons tailored to the intended strategy (e.g., swing trading):
+
+Primary Trend (Context): The longest timeframe (Daily charts) is used to define the overall market trend, often confirmed by the 200-period EMA. This determines the overall bias (long or short).   
+
+Confirmation (Signal Validation): An intermediate timeframe (60-minute charts) is used to confirm that the local trade setup aligns with the dominant primary trend.   
+
+Execution (Entry Refinement): The shortest timeframe (5-minute charts) is used to pinpoint precise entry and exit points, leveraging volatility and momentum indicators.   
+
+
+2. Contextual Risk Assessment (Beta)
+To assess the stock's systematic risk within the broader market context, the tool should calculate the stock's Beta relative to a benchmark index (NASDAQ). A Beta greater than 1 suggests the stock is more volatile than the market, while a Beta less than 1 suggests lower volatility. This metric informs the final recommendation's risk profile.   
+
+
+3. Relative Strength Index (RSI)
+Interpretation and Conditional Weighting: 
+ - Overbought:RSI > 70 suggests the asset price may have risen too quickly, signaling a potential reversal.
+ - Oversold: RSI < 30 suggests the asset price may have dropped too far, signaling a likely bounce.
+The tool must apply conditional weighting to RSI signals. If the long-term trend (e.g., 200-EMA) is strongly bullish, an RSI reading above 70 should not automatically generate a "Strong Sell" signal, as assets in robust trends can remain overbought for extended periods.28 Instead, the TAA assigns a reduced or neutral weight to the "overbought" condition in a strong uptrend environment, preventing premature exit and ensuring that short-term momentum signals do not override the dominant trend context.
+
+Can you also add a small graph to the RSI Card to better visualize the values. But Keep also the existing visualization as is.
+
+
+
+3. Multi-Timeframe Confirmation Filtering (MFTA Multiplier)
+Reliable trading signals must be confirmed across different timeframes. The tool should use a rigorous Multi-Timeframe Analysis (MFTA) confirmation mechanism that modifies the final WTS score.   
+
+The decision-making process includes an MFTA Alignment Rule: if the short-term entry signal aligns with the long-term primary trend context (e.g., bullish crossover on 60-minute confirmed by price above 200-EMA on the Daily chart), the TAA applies a positive WTS Multiplier (e.g., 1.2x) to amplify the final score. Conversely, if the execution signal contradicts the primary trend, a penalizing multiplier (e.g., 0.5x) is applied, actively dampening the signal’s confidence and generally preventing trades against the dominant direction. 
+
+
+Can you please now add another Agent to the tool. It will be the Risk assessment and result Agent. This Agent must take all the provided data from the stock Research and  analyse all the results from the different Cards to get a view on an Investment decision and the Risk we would face when buying at the current Price. 
+Please make sure to first make an overview of the available metrics from the stock Research and the results provided from this stock Research part on the different Topics. Please understand the structure of the tol to include this Agent in the best way. This Agent should be run after the stock Research and the Underlying Analysis has finished. 
+Use the following files as a starting Point to develop this Agent: 
+- scoring agent draft.md
+- scoring values.json
+
+Be sure to plan the implementation in Detail before starting to code.
+The UI displaying the results should Change as follows:
+1. Keep the Chart at the top with all Information in it.
+2. The results of the Agent should be displayed below the graph.
+2.1 A high Level summary of the most important results should be displayd in card. The detailed results should be hidden.
+2.2 If the users wants to see all Details of the results there should be the possibility to Show the results with a toogle button.
+2. The rest of the results from the stock Research and the first Analysis should be hidden in a toggle filed that can be expanded if needed by the user.
+When a new Research is started all Cards should be collapsed.
