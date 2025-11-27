@@ -58,7 +58,9 @@
       "Bash(del run_migration.py 2)",
       "mcp__playwright__browser_run_code",
       "Bash(del \"D:\\Docs\\Coding\\stockinfo2\\PLAN_risk_assessment_agent.md\")",
-      "Bash(del /f \"D:\\Docs\\Coding\\stockinfo2\\PLAN_risk_assessment_agent.md\")"
+      "Bash(del /f \"D:\\Docs\\Coding\\stockinfo2\\PLAN_risk_assessment_agent.md\")",
+      "Bash(del \"D:\\Docs\\Coding\\stockinfo2\\PLAN_sidebar_feature.md\")",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

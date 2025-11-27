@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-interface ResearchJob {
+export interface ResearchJob {
   id: string
   ticker: string
   status: 'pending' | 'running' | 'completed' | 'failed'
@@ -9,6 +9,7 @@ interface ResearchJob {
   result?: any
   error?: string
   suggestion?: string
+  createdAt: Date  // Timestamp when job was created
 }
 
 interface ResearchStore {

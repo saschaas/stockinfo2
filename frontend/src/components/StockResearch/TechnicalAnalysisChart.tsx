@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import Plot from 'react-plotly.js'
 import type { TechnicalAnalysisData } from '../../types/technical-analysis'
 import type { RiskAssessmentData } from '../../types/risk-assessment'
@@ -14,14 +13,15 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
     return value.toFixed(decimals)
   }
 
-  const [showIndicators, setShowIndicators] = useState({
+  // All indicators are always visible
+  const showIndicators = {
     sma20: true,
     sma50: true,
     sma200: true,
     bollinger: true,
     supportResistance: true,
     volume: true,
-  })
+  }
 
   const chartData = data.chart_data
 
@@ -186,6 +186,8 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       font: { size: 18, weight: 600 },
       x: 0.5,
       xanchor: 'center',
+      y: 0.98,
+      yanchor: 'top',
     },
     xaxis: {
       title: 'Date',
@@ -209,11 +211,11 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
     legend: {
       orientation: 'h',
       yanchor: 'bottom',
-      y: 1.02,
+      y: 1.08,
       xanchor: 'center',
       x: 0.5,
     },
-    margin: { l: 50, r: 80, t: 80, b: 50 },
+    margin: { l: 50, r: 80, t: 120, b: 50 },
     height: 600,
     plot_bgcolor: '#f9fafb',
     paper_bgcolor: 'white',
@@ -491,70 +493,6 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
           </div>
         </div>
       )}
-
-      {/* Toggle Controls */}
-      <div className="flex flex-wrap gap-2 py-2">
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, sma20: !prev.sma20 }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.sma20
-              ? 'bg-yellow-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          SMA 20
-        </button>
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, sma50: !prev.sma50 }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.sma50
-              ? 'bg-orange-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          SMA 50
-        </button>
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, sma200: !prev.sma200 }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.sma200
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          SMA 200
-        </button>
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, bollinger: !prev.bollinger }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.bollinger
-              ? 'bg-gray-600 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Bollinger Bands
-        </button>
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, supportResistance: !prev.supportResistance }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.supportResistance
-              ? 'bg-indigo-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Support/Resistance
-        </button>
-        <button
-          onClick={() => setShowIndicators(prev => ({ ...prev, volume: !prev.volume }))}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            showIndicators.volume
-              ? 'bg-teal-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          Volume
-        </button>
-      </div>
 
       {/* Chart */}
       <div className="w-full">
