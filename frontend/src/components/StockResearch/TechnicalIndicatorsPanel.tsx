@@ -1,4 +1,5 @@
 import type { TechnicalAnalysisData } from '../../types/technical-analysis'
+import MACDCard from './MACDCard'
 
 interface TechnicalIndicatorsPanelProps {
   data: TechnicalAnalysisData
@@ -161,32 +162,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
           </div>
 
           {/* MACD */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="font-medium text-gray-700 mb-3">MACD</h5>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">MACD Line:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.macd, 2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Signal Line:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.macd_signal, 2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Histogram:</span>
-                <span className={`font-semibold ${data.macd_histogram >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {safeToFixed(data.macd_histogram, 2)}
-                </span>
-              </div>
-              {data.macd_cross && (
-                <div className="mt-2">
-                  <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.macd_cross)}`}>
-                    {formatSignal(data.macd_cross)} CROSSOVER
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+          <MACDCard data={data} />
 
           {/* Rate of Change (ROC) */}
           <div className="bg-gray-50 p-4 rounded-lg">
