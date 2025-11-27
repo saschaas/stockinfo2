@@ -31,22 +31,19 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
     )
   }
 
-  // Candlestick trace
-  const candlestick: any = {
-    type: 'candlestick',
+  // Main price line (black, bold)
+  const priceLine: any = {
+    type: 'scatter',
+    mode: 'lines',
     x: chartData.dates,
-    open: chartData.ohlcv.open,
-    high: chartData.ohlcv.high,
-    low: chartData.ohlcv.low,
-    close: chartData.ohlcv.close,
-    name: data.ticker,
-    increasing: { line: { color: '#10b981' } },
-    decreasing: { line: { color: '#ef4444' } },
+    y: chartData.ohlcv.close,
+    name: data.ticker || 'Price',
+    line: { color: '#000000', width: 2.5 },
     yaxis: 'y',
     xaxis: 'x',
   }
 
-  const traces: any[] = [candlestick]
+  const traces: any[] = [priceLine]
 
   // Moving Averages
   if (showIndicators.sma20 && chartData.moving_averages.sma_20) {
@@ -56,7 +53,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
       x: chartData.dates,
       y: chartData.moving_averages.sma_20,
       name: 'SMA 20',
-      line: { color: '#3b82f6', width: 1.5 },
+      line: { color: '#eab308', width: 1.5 },  // Yellow
       yaxis: 'y',
     })
   }
@@ -68,7 +65,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
       x: chartData.dates,
       y: chartData.moving_averages.sma_50,
       name: 'SMA 50',
-      line: { color: '#f59e0b', width: 1.5 },
+      line: { color: '#f97316', width: 1.5 },  // Orange
       yaxis: 'y',
     })
   }
@@ -80,7 +77,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
       x: chartData.dates,
       y: chartData.moving_averages.sma_200,
       name: 'SMA 200',
-      line: { color: '#8b5cf6', width: 2 },
+      line: { color: '#a855f7', width: 1.5 },  // Purple
       yaxis: 'y',
     })
   }
@@ -123,7 +120,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
 
   // Support and Resistance Lines
   if (showIndicators.supportResistance) {
-    // Resistance levels (red horizontal lines)
+    // Resistance levels (red solid horizontal lines)
     data.resistance_levels.forEach((level, idx) => {
       traces.push({
         type: 'scatter',
@@ -131,14 +128,14 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
         x: [chartData.dates[0], chartData.dates[chartData.dates.length - 1]],
         y: [level, level],
         name: `Resistance ${idx + 1}`,
-        line: { color: '#ef4444', width: 1, dash: 'dash' },
+        line: { color: '#ef4444', width: 1.5 },  // Red solid
         yaxis: 'y',
         showlegend: idx === 0,
         legendgroup: 'resistance',
       })
     })
 
-    // Support levels (green horizontal lines)
+    // Support levels (blue solid horizontal lines)
     data.support_levels.forEach((level, idx) => {
       traces.push({
         type: 'scatter',
@@ -146,7 +143,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
         x: [chartData.dates[0], chartData.dates[chartData.dates.length - 1]],
         y: [level, level],
         name: `Support ${idx + 1}`,
-        line: { color: '#10b981', width: 1, dash: 'dash' },
+        line: { color: '#3b82f6', width: 1.5 },  // Blue solid
         yaxis: 'y',
         showlegend: idx === 0,
         legendgroup: 'support',
@@ -173,10 +170,20 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
     })
   }
 
+  // Get ticker name with fallback
+  const tickerName = data.ticker || 'Stock'
+
+  // Safely get current price as a number
+  const currentPrice = typeof data.current_price === 'number' && !isNaN(data.current_price)
+    ? data.current_price
+    : null
+
   const layout: any = {
     title: {
-      text: `${data.ticker} - Technical Analysis`,
+      text: `${tickerName} - Technical Analysis`,
       font: { size: 18, weight: 600 },
+      x: 0.5,
+      xanchor: 'center',
     },
     xaxis: {
       title: 'Date',
@@ -201,13 +208,44 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
       orientation: 'h',
       yanchor: 'bottom',
       y: 1.02,
-      xanchor: 'right',
-      x: 1,
+      xanchor: 'center',
+      x: 0.5,
     },
     margin: { l: 50, r: 80, t: 80, b: 50 },
     height: 600,
     plot_bgcolor: '#f9fafb',
     paper_bgcolor: 'white',
+    // Add horizontal line annotation for current price
+    shapes: currentPrice ? [{
+      type: 'line',
+      xref: 'paper',
+      x0: 0,
+      x1: 1,
+      yref: 'y',
+      y0: currentPrice,
+      y1: currentPrice,
+      line: {
+        color: '#000000',
+        width: 1,
+        dash: 'dot',
+      },
+    }] : [],
+    annotations: currentPrice ? [{
+      x: 1.02,
+      y: currentPrice,
+      xref: 'paper',
+      yref: 'y',
+      text: `$${currentPrice.toFixed(2)}`,
+      showarrow: false,
+      font: {
+        size: 10,
+        color: '#000000',
+      },
+      bgcolor: '#fef3c7',
+      bordercolor: '#f59e0b',
+      borderwidth: 1,
+      borderpad: 2,
+    }] : [],
   }
 
   const config: any = {
@@ -298,7 +336,7 @@ export default function TechnicalAnalysisChart({ data }: TechnicalAnalysisChartP
           onClick={() => setShowIndicators(prev => ({ ...prev, sma20: !prev.sma20 }))}
           className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
             showIndicators.sma20
-              ? 'bg-blue-500 text-white'
+              ? 'bg-yellow-500 text-white'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           }`}
         >

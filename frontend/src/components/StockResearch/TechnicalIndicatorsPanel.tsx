@@ -7,8 +7,18 @@ interface TechnicalIndicatorsPanelProps {
 export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPanelProps) {
   // Helper functions
   const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
-    if (value === undefined || value === null || isNaN(value)) return 'N/A'
-    return value.toFixed(decimals)
+    if (value === undefined || value === null) return 'N/A'
+    const num = typeof value === 'number' ? value : Number(value)
+    if (isNaN(num)) return 'N/A'
+    return num.toFixed(decimals)
+  }
+
+  // Format volume in millions
+  const formatVolume = (value: number | undefined | null): string => {
+    if (value === undefined || value === null) return 'N/A'
+    const num = typeof value === 'number' ? value : Number(value)
+    if (isNaN(num)) return 'N/A'
+    return (num / 1000000).toFixed(2) + 'M'
   }
 
   const getSignalBadgeColor = (signal: string) => {
@@ -178,26 +188,6 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             </div>
           </div>
 
-          {/* Stochastic Oscillator */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="font-medium text-gray-700 mb-3">Stochastic Oscillator</h5>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">%K:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.stoch_k, 1)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">%D:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.stoch_d, 1)}</span>
-              </div>
-              <div className="mt-2">
-                <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.stoch_signal)}`}>
-                  {formatSignal(data.stoch_signal)}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* Rate of Change (ROC) */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h5 className="font-medium text-gray-700 mb-3">Rate of Change (ROC)</h5>
@@ -227,7 +217,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">SMA 20:</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">${data.sma_20.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">${safeToFixed(data.sma_20, 2)}</span>
                   <span className={`text-xs ${data.price_above_sma_20 ? 'text-green-600' : 'text-red-600'}`}>
                     {data.price_above_sma_20 ? '↑' : '↓'}
                   </span>
@@ -236,7 +226,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">SMA 50:</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">${data.sma_50.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">${safeToFixed(data.sma_50, 2)}</span>
                   <span className={`text-xs ${data.price_above_sma_50 ? 'text-green-600' : 'text-red-600'}`}>
                     {data.price_above_sma_50 ? '↑' : '↓'}
                   </span>
@@ -245,7 +235,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">SMA 200:</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">${data.sma_200.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">${safeToFixed(data.sma_200, 2)}</span>
                   <span className={`text-xs ${data.price_above_sma_200 ? 'text-green-600' : 'text-red-600'}`}>
                     {data.price_above_sma_200 ? '↑' : '↓'}
                   </span>
@@ -292,57 +282,6 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
         </div>
       </div>
 
-      {/* Volatility Indicators */}
-      <div className="border-t border-gray-200 pt-6">
-        <h4 className="text-lg font-semibold text-gray-900 mb-4">Volatility Indicators</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="font-medium text-gray-700 mb-3">Bollinger Bands (2.5σ)</h5>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Upper:</span>
-                <span className="font-semibold text-gray-900">${safeToFixed(data.bb_upper, 2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Middle:</span>
-                <span className="font-semibold text-gray-900">${safeToFixed(data.bb_middle, 2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Lower:</span>
-                <span className="font-semibold text-gray-900">${safeToFixed(data.bb_lower, 2)}</span>
-              </div>
-              <div className="mt-2 pt-2 border-t border-gray-300">
-                <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.bb_signal)}`}>
-                  {formatSignal(data.bb_signal)}
-                </span>
-                <span className="ml-2 text-xs text-gray-600">
-                  Price: {formatSignal(data.price_position)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="font-medium text-gray-700 mb-3">ATR (Average True Range)</h5>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">ATR:</span>
-                <span className="font-semibold text-gray-900">${safeToFixed(data.atr, 2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">ATR %:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.atr_percent, 2)}%</span>
-              </div>
-              <div className="mt-2">
-                <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.volatility_level)}`}>
-                  {formatSignal(data.volatility_level)} VOLATILITY
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Volume Indicators */}
       <div className="border-t border-gray-200 pt-6">
         <h4 className="text-lg font-semibold text-gray-900 mb-4">Volume Indicators</h4>
@@ -352,15 +291,15 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Current:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.current_volume ? data.current_volume / 1000000 : undefined, 2)}M</span>
+                <span className="font-semibold text-gray-900">{formatVolume(data.current_volume)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">20-Day Avg:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.avg_volume_20d ? data.avg_volume_20d / 1000000 : undefined, 2)}M</span>
+                <span className="font-semibold text-gray-900">{formatVolume(data.avg_volume_20d)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Ratio:</span>
-                <span className={`font-semibold ${data.volume_ratio > 1.5 ? 'text-green-600' : data.volume_ratio < 0.5 ? 'text-red-600' : 'text-gray-900'}`}>
+                <span className={`font-semibold ${(data.volume_ratio ?? 0) > 1.5 ? 'text-green-600' : (data.volume_ratio ?? 0) < 0.5 ? 'text-red-600' : 'text-gray-900'}`}>
                   {safeToFixed(data.volume_ratio, 2)}x
                 </span>
               </div>
@@ -377,7 +316,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">OBV:</span>
-                <span className="font-semibold text-gray-900">{safeToFixed(data.obv ? data.obv / 1000000 : undefined, 1)}M</span>
+                <span className="font-semibold text-gray-900">{formatVolume(data.obv)}</span>
               </div>
               <div className="mt-2">
                 <span className={`px-2 py-1 rounded text-xs font-medium border ${getSignalBadgeColor(data.obv_trend)}`}>

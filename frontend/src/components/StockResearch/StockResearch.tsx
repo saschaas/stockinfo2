@@ -8,6 +8,12 @@ import GrowthAnalysisCard from './GrowthAnalysisCard'
 import TechnicalAnalysisChart from './TechnicalAnalysisChart'
 import TechnicalIndicatorsPanel from './TechnicalIndicatorsPanel'
 
+// Helper function to safely format numbers
+const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
+  if (value === undefined || value === null || typeof value !== 'number' || isNaN(value)) return 'N/A'
+  return value.toFixed(decimals)
+}
+
 export default function StockResearch() {
   const [ticker, setTicker] = useState('')
   const { addJob, jobs } = useResearchStore()
@@ -162,7 +168,7 @@ export default function StockResearch() {
                     </div>
                     {job.result.confidence_score && (
                       <div className="text-sm text-gray-600">
-                        Confidence: {(job.result.confidence_score * 100).toFixed(0)}%
+                        Confidence: {safeToFixed(job.result.confidence_score * 100, 0)}%
                       </div>
                     )}
                   </div>
@@ -172,7 +178,7 @@ export default function StockResearch() {
                     {job.result.current_price && (
                       <div className="bg-white border rounded-lg p-3">
                         <div className="text-xs text-gray-500">Price</div>
-                        <div className="text-lg font-semibold">${job.result.current_price.toFixed(2)}</div>
+                        <div className="text-lg font-semibold">${safeToFixed(job.result.current_price, 2)}</div>
                       </div>
                     )}
                     {job.result.pe_ratio && (
@@ -184,13 +190,13 @@ export default function StockResearch() {
                     {job.result.rsi && (
                       <div className="bg-white border rounded-lg p-3">
                         <div className="text-xs text-gray-500">RSI (14)</div>
-                        <div className="text-lg font-semibold">{job.result.rsi.toFixed(1)}</div>
+                        <div className="text-lg font-semibold">{safeToFixed(job.result.rsi, 1)}</div>
                       </div>
                     )}
                     {job.result.sma_20 && (
                       <div className="bg-white border rounded-lg p-3">
                         <div className="text-xs text-gray-500">SMA 20</div>
-                        <div className="text-lg font-semibold">${job.result.sma_20.toFixed(2)}</div>
+                        <div className="text-lg font-semibold">${safeToFixed(job.result.sma_20, 2)}</div>
                       </div>
                     )}
                   </div>

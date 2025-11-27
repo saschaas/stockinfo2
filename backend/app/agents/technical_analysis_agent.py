@@ -14,6 +14,7 @@ are the most reliable indicators for growth stock analysis.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Dict, List, Optional, Any, Tuple
 import logging
 
@@ -257,8 +258,11 @@ class TechnicalAnalysisAgent:
             logger.warning("Failed to prepare dataframe", ticker=ticker)
             return result
 
-        # Get current price
-        result.current_price = current_price or self._safe_float(df['close'].iloc[-1])
+        # Get current price - ensure it's a float (not Decimal)
+        if current_price is not None:
+            result.current_price = self._safe_float(current_price)
+        else:
+            result.current_price = self._safe_float(df['close'].iloc[-1])
 
         # Step 1: Calculate all indicators
         df = self._calculate_indicators(df)
@@ -320,14 +324,25 @@ class TechnicalAnalysisAgent:
                 logger.error("Missing required columns", columns=df.columns.tolist())
                 return None
 
-            # Convert to numeric
-            for col in required:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Convert to float - handle Decimal types explicitly
+            def to_float(val):
+                if val is None:
+                    return np.nan
+                if isinstance(val, Decimal):
+                    return float(val)
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return np.nan
 
-            # Sort by date if date column exists
+            for col in required:
+                df[col] = df[col].apply(to_float)
+
+            # Sort by date if date column exists and set as index
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'])
                 df = df.sort_values('date')
+                df = df.set_index('date')
 
             # Drop rows with NaN values
             df = df.dropna(subset=required)
@@ -675,12 +690,14 @@ class TechnicalAnalysisAgent:
         try:
             latest = df.iloc[-1]
 
-            # Current volume
-            volume.current_volume = int(latest.get('volume', 0))
+            # Current volume - handle NaN properly
+            current_vol = latest['volume'] if 'volume' in latest.index else 0
+            volume.current_volume = int(current_vol) if pd.notna(current_vol) else 0
 
             # Average volume
             if len(df) >= 20:
-                volume.avg_volume_20d = int(df['volume'].tail(20).mean())
+                avg_vol = df['volume'].tail(20).mean()
+                volume.avg_volume_20d = int(avg_vol) if pd.notna(avg_vol) else 0
                 if volume.avg_volume_20d > 0:
                     volume.volume_ratio = volume.current_volume / volume.avg_volume_20d
 
@@ -693,8 +710,9 @@ class TechnicalAnalysisAgent:
                     else:
                         volume.volume_signal = "normal"
 
-            # OBV
-            volume.obv = self._safe_float(latest.get('OBV', 0))
+            # OBV - access directly from the row
+            obv_val = latest['OBV'] if 'OBV' in latest.index else 0
+            volume.obv = self._safe_float(obv_val)
 
             # OBV trend
             if len(df) >= 20:
@@ -741,18 +759,20 @@ class TechnicalAnalysisAgent:
         try:
             latest = df.iloc[-1]
 
-            # Pivot Points (Classic)
-            high = self._safe_float(latest['high'])
-            low = self._safe_float(latest['low'])
-            close = self._safe_float(latest['close'])
+            # Pivot Points (Classic) - use direct column access
+            high = self._safe_float(latest['high'] if 'high' in latest.index else 0)
+            low = self._safe_float(latest['low'] if 'low' in latest.index else 0)
+            close = self._safe_float(latest['close'] if 'close' in latest.index else 0)
 
-            sr.pivot = (high + low + close) / 3
-            sr.resistance_1 = (2 * sr.pivot) - low
-            sr.support_1 = (2 * sr.pivot) - high
-            sr.resistance_2 = sr.pivot + (high - low)
-            sr.support_2 = sr.pivot - (high - low)
-            sr.resistance_3 = high + 2 * (sr.pivot - low)
-            sr.support_3 = low - 2 * (high - sr.pivot)
+            # Only calculate if we have valid data
+            if high > 0 and low > 0 and close > 0:
+                sr.pivot = (high + low + close) / 3
+                sr.resistance_1 = (2 * sr.pivot) - low
+                sr.support_1 = (2 * sr.pivot) - high
+                sr.resistance_2 = sr.pivot + (high - low)
+                sr.support_2 = sr.pivot - (high - low)
+                sr.resistance_3 = high + 2 * (sr.pivot - low)
+                sr.support_3 = low - 2 * (high - sr.pivot)
 
             # Auto-detect support/resistance from swing points
             if len(df) >= 20:
@@ -896,29 +916,41 @@ class TechnicalAnalysisAgent:
         return signal, round(confidence, 1)
 
     def _prepare_chart_data(self, df: pd.DataFrame, result: TechnicalAnalysisResult) -> Dict[str, Any]:
-        """Prepare data for chart visualization"""
+        """Prepare data for chart visualization
+
+        Uses 1 year of data for calculating trendlines/indicators,
+        but limits the display to 6 months (~130 trading days).
+        """
         try:
-            # Limit to last 200 days for chart
-            df_chart = df.tail(200).copy()
+            # Use last 252 trading days (1 year) for calculations
+            df_full = df.tail(252).copy()
+
+            # Limit display to last 130 trading days (~6 months)
+            df_chart = df_full.tail(130).copy()
+
+            # Convert NaN values to None for proper JSON serialization
+            def clean_series(series):
+                """Convert series to list with NaN replaced by None"""
+                return [None if pd.isna(v) else float(v) for v in series]
 
             chart_data = {
                 "dates": df_chart.index.strftime('%Y-%m-%d').tolist() if hasattr(df_chart.index, 'strftime') else list(range(len(df_chart))),
                 "ohlcv": {
-                    "open": df_chart['open'].tolist(),
-                    "high": df_chart['high'].tolist(),
-                    "low": df_chart['low'].tolist(),
-                    "close": df_chart['close'].tolist(),
-                    "volume": df_chart['volume'].tolist(),
+                    "open": clean_series(df_chart['open']),
+                    "high": clean_series(df_chart['high']),
+                    "low": clean_series(df_chart['low']),
+                    "close": clean_series(df_chart['close']),
+                    "volume": clean_series(df_chart['volume']),
                 },
                 "moving_averages": {
-                    "sma_20": df_chart.get('SMA_20', pd.Series()).tolist(),
-                    "sma_50": df_chart.get('SMA_50', pd.Series()).tolist(),
-                    "sma_200": df_chart.get('SMA_200', pd.Series()).tolist(),
+                    "sma_20": clean_series(df_chart.get('SMA_20', pd.Series())),
+                    "sma_50": clean_series(df_chart.get('SMA_50', pd.Series())),
+                    "sma_200": clean_series(df_chart.get('SMA_200', pd.Series())),
                 },
                 "bollinger_bands": {
-                    "upper": df_chart.get('BBU_20_2.5', pd.Series()).tolist(),
-                    "middle": df_chart.get('BBM_20_2.5', pd.Series()).tolist(),
-                    "lower": df_chart.get('BBL_20_2.5', pd.Series()).tolist(),
+                    "upper": clean_series(df_chart.get('BBU_20_2.5', pd.Series())),
+                    "middle": clean_series(df_chart.get('BBM_20_2.5', pd.Series())),
+                    "lower": clean_series(df_chart.get('BBL_20_2.5', pd.Series())),
                 },
                 "support_resistance": {
                     "support_levels": result.support_resistance.support_levels,
@@ -926,10 +958,10 @@ class TechnicalAnalysisAgent:
                     "pivot": result.support_resistance.pivot,
                 },
                 "indicators": {
-                    "rsi": df_chart.get('RSI_14', pd.Series()).tolist(),
-                    "macd": df_chart.get('MACD_12_26_9', pd.Series()).tolist(),
-                    "macd_signal": df_chart.get('MACDs_12_26_9', pd.Series()).tolist(),
-                    "macd_histogram": df_chart.get('MACDh_12_26_9', pd.Series()).tolist(),
+                    "rsi": clean_series(df_chart.get('RSI_14', pd.Series())),
+                    "macd": clean_series(df_chart.get('MACD_12_26_9', pd.Series())),
+                    "macd_signal": clean_series(df_chart.get('MACDs_12_26_9', pd.Series())),
+                    "macd_histogram": clean_series(df_chart.get('MACDh_12_26_9', pd.Series())),
                 }
             }
 

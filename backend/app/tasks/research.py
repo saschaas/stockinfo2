@@ -249,45 +249,84 @@ def research_stock(
                 # Serialize the technical analysis result for JSON response
                 ta = technical_analysis_result
                 result["technical_analysis"] = clean_nan({
+                    # Basic info
+                    "ticker": ta.ticker,
                     "analysis_date": ta.analysis_date.isoformat(),
                     "current_price": ta.current_price,
+
+                    # Scores
+                    "trend_score": ta.trend_score,
+                    "momentum_score": ta.momentum_score,
+                    "volatility_score": ta.volatility_score,
+                    "volume_score": ta.volume_score,
+                    "composite_technical_score": ta.composite_technical_score,
+
                     # Trend
                     "trend_direction": ta.trend.trend_direction,
                     "sma_20": ta.trend.sma_20,
                     "sma_50": ta.trend.sma_50,
                     "sma_200": ta.trend.sma_200,
+                    "price_above_sma_20": ta.trend.price_above_sma_20,
+                    "price_above_sma_50": ta.trend.price_above_sma_50,
+                    "price_above_sma_200": ta.trend.price_above_sma_200,
+                    "golden_cross": ta.trend.golden_cross,
+                    "death_cross": ta.trend.death_cross,
                     "adx": ta.trend.adx,
                     "adx_signal": ta.trend.adx_signal,
+
                     # Momentum
                     "rsi": ta.momentum.rsi,
                     "rsi_signal": ta.momentum.rsi_signal,
                     "macd": ta.momentum.macd,
                     "macd_signal": ta.momentum.macd_signal,
                     "macd_histogram": ta.momentum.macd_histogram,
+                    "macd_cross": ta.momentum.macd_cross,
                     "stoch_k": ta.momentum.stoch_k,
                     "stoch_d": ta.momentum.stoch_d,
+                    "stoch_signal": ta.momentum.stoch_signal,
                     "roc": ta.momentum.roc,
+                    "roc_signal": ta.momentum.roc_signal,
+
                     # Volatility
-                    "bollinger_upper": ta.volatility.bb_upper,
-                    "bollinger_middle": ta.volatility.bb_middle,
-                    "bollinger_lower": ta.volatility.bb_lower,
+                    "bb_upper": ta.volatility.bb_upper,
+                    "bb_middle": ta.volatility.bb_middle,
+                    "bb_lower": ta.volatility.bb_lower,
+                    "bb_signal": ta.volatility.bb_signal,
+                    "price_position": ta.volatility.price_position,
                     "atr": ta.volatility.atr,
+                    "atr_percent": ta.volatility.atr_percent,
+                    "volatility_level": ta.volatility.volatility_level,
+
                     # Volume
+                    "current_volume": ta.volume.current_volume,
+                    "avg_volume_20d": ta.volume.avg_volume_20d,
+                    "volume_ratio": ta.volume.volume_ratio,
+                    "volume_signal": ta.volume.volume_signal,
                     "obv": ta.volume.obv,
                     "obv_trend": ta.volume.obv_trend,
+
                     # Support/Resistance
+                    "pivot": ta.support_resistance.pivot,
+                    "resistance_1": ta.support_resistance.resistance_1,
+                    "resistance_2": ta.support_resistance.resistance_2,
+                    "resistance_3": ta.support_resistance.resistance_3,
+                    "support_1": ta.support_resistance.support_1,
+                    "support_2": ta.support_resistance.support_2,
+                    "support_3": ta.support_resistance.support_3,
                     "support_levels": ta.support_resistance.support_levels,
                     "resistance_levels": ta.support_resistance.resistance_levels,
                     "nearest_support": ta.support_resistance.nearest_support,
                     "nearest_resistance": ta.support_resistance.nearest_resistance,
                     "support_distance_pct": ta.support_resistance.support_distance_pct,
                     "resistance_distance_pct": ta.support_resistance.resistance_distance_pct,
+
                     # Patterns
                     "patterns": ta.patterns.patterns,
-                    # Overall
-                    "composite_technical_score": ta.composite_technical_score,
+
+                    # Overall signal
                     "overall_signal": ta.overall_signal,
                     "signal_confidence": ta.signal_confidence,
+
                     # Chart data
                     "chart_data": ta.chart_data,
                 })

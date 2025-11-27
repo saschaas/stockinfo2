@@ -29,13 +29,13 @@ def run_async(coro):
 def analyze_stock_technical(
     self,
     ticker: str,
-    period: str = "6mo",
+    period: str = "1y",
 ) -> dict[str, Any]:
     """Perform technical analysis on a stock.
 
     Args:
         ticker: Stock ticker symbol
-        period: Data period (1mo, 3mo, 6mo, 1y, 2y)
+        period: Data period (1mo, 3mo, 6mo, 1y, 2y). Defaults to 1y for SMA 200.
 
     Returns:
         Technical analysis results
