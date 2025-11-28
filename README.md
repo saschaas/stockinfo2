@@ -68,6 +68,10 @@ AI-Powered Stock Research Tool with fund tracking and comprehensive analysis.
 4. **Pull Ollama model**
    ```bash
    docker exec stockinfo-ollama ollama pull llama3.2
+   docker exec stockinfo-ollama ollama pull deepseek-ocr
+   docker exec stockinfo-ollama ollama pull mistral
+   docker exec stockinfo-ollama ollama pull gpt-oss
+   docker exec stockinfo-ollama ollama pull phi4-reasoning
    ```
 
 5. **Access the application**

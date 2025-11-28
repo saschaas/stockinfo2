@@ -3,6 +3,7 @@
 from datetime import date
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from backend.app.core.exceptions import NotFoundException
 from backend.app.db.models import StockAnalysis, StockPrice
 from backend.app.db.session import get_db
 from backend.app.schemas.stocks import (
+    OllamaModelResponse,
     SectorComparisonResponse,
     SectorLeaderResponse,
     SectorStatistics,
@@ -24,6 +26,87 @@ from backend.app.schemas.stocks import (
 from backend.app.services.sector_comparison import get_sector_comparison_service
 
 router = APIRouter()
+logger = structlog.get_logger(__name__)
+
+
+@router.get("/models/available", response_model=OllamaModelResponse)
+async def get_available_models() -> OllamaModelResponse:
+    """Get list of available Ollama models for AI analysis.
+
+    Returns the list of models currently available in the Ollama server
+    that can be used for stock research analysis.
+    """
+    import os
+    from ollama import Client
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    default_model = settings.ollama_model
+
+    # Use OLLAMA_BASE_URL from settings, or OLLAMA_HOST env var as fallback
+    ollama_url = settings.ollama_base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+    try:
+        # Create client with explicit host
+        client = Client(host=ollama_url)
+
+        # Get list of models from Ollama
+        response = client.list()
+        models = []
+
+        # Handle both dict and object response formats
+        model_list = response.get("models", []) if isinstance(response, dict) else getattr(response, "models", [])
+
+        for model in model_list:
+            # Handle both dict and object access
+            if isinstance(model, dict):
+                model_name = model.get("name", "") or model.get("model", "")
+                size = model.get("size", 0)
+                modified_at = model.get("modified_at", "")
+            else:
+                model_name = getattr(model, "name", "") or getattr(model, "model", "")
+                size = getattr(model, "size", 0)
+                modified_at = getattr(model, "modified_at", "")
+
+            # Strip the ":latest" suffix for cleaner display
+            display_name = model_name.replace(":latest", "") if model_name.endswith(":latest") else model_name
+
+            # Handle modified_at which may be a datetime object
+            if hasattr(modified_at, "isoformat"):
+                modified_at = modified_at.isoformat()
+
+            models.append({
+                "name": model_name,
+                "display_name": display_name,
+                "size": size,
+                "modified_at": str(modified_at) if modified_at else "",
+            })
+
+        # Sort models alphabetically by display name
+        models.sort(key=lambda x: x["display_name"].lower())
+
+        # Check if default model is in the list, if not add a warning
+        model_names = [m["name"] for m in models]
+        default_available = any(
+            default_model in name or name.startswith(default_model)
+            for name in model_names
+        )
+
+        return OllamaModelResponse(
+            models=models,
+            default_model=default_model,
+            default_available=default_available,
+        )
+
+    except Exception as e:
+        logger.error("Failed to fetch Ollama models", error=str(e), ollama_url=ollama_url)
+        # Return empty list with default model info
+        return OllamaModelResponse(
+            models=[],
+            default_model=default_model,
+            default_available=False,
+            error=f"Failed to connect to Ollama: {str(e)}",
+        )
 
 
 @router.get("/{ticker}", response_model=StockAnalysisResponse)
@@ -115,12 +198,13 @@ async def start_stock_research(
     """
     from backend.app.tasks.research import research_stock
 
-    # Send task to Celery
+    # Send task to Celery with optional model selection
     task = research_stock.delay(
         ticker=request.ticker.upper(),
         include_peers=True,
         include_technical=True,
         include_ai_analysis=True,
+        llm_model=request.llm_model,
     )
 
     return StockResearchResponse(

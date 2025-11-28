@@ -253,10 +253,22 @@ class GrowthAnalysisAgent:
     to generate investment recommendations and portfolio allocations.
     """
 
-    def __init__(self):
-        """Initialize the analysis agent"""
+    def __init__(self, llm_model: str | None = None):
+        """Initialize the analysis agent
+
+        Args:
+            llm_model: Optional Ollama model to use for AI analysis.
+                      If None, uses the default from settings.
+        """
+        import os
+        from ollama import Client
+
         self.settings = settings
-        self.model = settings.ollama_model
+        self.model = llm_model if llm_model else settings.ollama_model
+
+        # Use OLLAMA_BASE_URL from settings, or OLLAMA_HOST env var as fallback
+        ollama_url = settings.ollama_base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.ollama_client = Client(host=ollama_url)
 
         # Scoring weights
         self.weights = {
@@ -1033,7 +1045,7 @@ Respond with JSON:
 
 Respond ONLY with valid JSON."""
 
-            response = ollama.chat(
+            response = self.ollama_client.chat(
                 model=self.model,
                 messages=[
                     {

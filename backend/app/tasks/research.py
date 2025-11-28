@@ -36,6 +36,7 @@ def research_stock(
     include_peers: bool = True,
     include_technical: bool = True,
     include_ai_analysis: bool = True,
+    llm_model: str | None = None,
 ) -> dict[str, Any]:
     """Perform comprehensive stock research.
 
@@ -44,6 +45,7 @@ def research_stock(
         include_peers: Include peer comparison
         include_technical: Include technical analysis
         include_ai_analysis: Include AI-powered analysis
+        llm_model: Optional Ollama model to use for AI analysis (defaults to settings.ollama_model)
 
     Returns:
         Research results
@@ -199,7 +201,7 @@ def research_stock(
             try:
                 from backend.app.agents.growth_analysis_agent import GrowthAnalysisAgent
 
-                growth_agent = GrowthAnalysisAgent()
+                growth_agent = GrowthAnalysisAgent(llm_model=llm_model)
 
                 # Prepare stock data for growth analysis
                 stock_data_for_growth = {
@@ -253,9 +255,9 @@ def research_stock(
                 await set_job_progress(job_id, "running", 75, "Running AI analysis...")
                 await update_job_status(job_id, ticker, "running", 75, "Running AI analysis...")
 
-                ai_analysis = await run_ai_analysis(ticker, result)
+                ai_analysis = await run_ai_analysis(ticker, result, llm_model=llm_model)
                 result.update(ai_analysis)
-                data_sources["ai_analysis"] = {"type": "ai", "name": "ollama"}
+                data_sources["ai_analysis"] = {"type": "ai", "name": "ollama", "model": llm_model or "default"}
 
             # Helper to clean NaN values and Decimals for JSON serialization
             def clean_nan(obj):
@@ -710,13 +712,25 @@ def calculate_change(current: Any, previous: Any) -> Decimal | None:
         return None
 
 
-async def run_ai_analysis(ticker: str, data: dict) -> dict[str, Any]:
-    """Run AI analysis on stock data."""
-    import ollama
+async def run_ai_analysis(ticker: str, data: dict, llm_model: str | None = None) -> dict[str, Any]:
+    """Run AI analysis on stock data.
+
+    Args:
+        ticker: Stock ticker symbol
+        data: Stock data dictionary
+        llm_model: Optional Ollama model to use (defaults to settings.ollama_model)
+    """
+    import os
+    from ollama import Client
     import json
     from backend.app.config import get_settings
 
     settings = get_settings()
+    model_to_use = llm_model if llm_model else settings.ollama_model
+
+    # Use OLLAMA_BASE_URL from settings, or OLLAMA_HOST env var as fallback
+    ollama_url = settings.ollama_base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    client = Client(host=ollama_url)
 
     context = f"""
     Analyze the following stock data for {ticker} and provide an investment recommendation.
@@ -756,8 +770,9 @@ async def run_ai_analysis(ticker: str, data: dict) -> dict[str, Any]:
     """
 
     try:
-        response = ollama.chat(
-            model=settings.ollama_model,
+        logger.info("Running AI analysis", ticker=ticker, model=model_to_use, ollama_url=ollama_url)
+        response = client.chat(
+            model=model_to_use,
             messages=[
                 {
                     "role": "system",
@@ -774,7 +789,7 @@ async def run_ai_analysis(ticker: str, data: dict) -> dict[str, Any]:
             return json.loads(content[start:end])
 
     except Exception as e:
-        logger.error("AI analysis failed", error=str(e))
+        logger.error("AI analysis failed", error=str(e), model=model_to_use, ollama_url=ollama_url)
 
     return {
         "recommendation": "hold",

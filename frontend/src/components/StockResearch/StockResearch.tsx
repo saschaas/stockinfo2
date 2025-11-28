@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { startStockResearch } from '../../services/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { startStockResearch, fetchAvailableModels } from '../../services/api'
 import { useResearchStore } from '../../stores/researchStore'
 import JobProgressManager from '../JobProgressManager/JobProgressManager'
 import DataSourceBadge from '../DataSourceBadge/DataSourceBadge'
@@ -51,7 +51,29 @@ interface CollapsedSections {
 
 export default function StockResearch() {
   const [ticker, setTicker] = useState('')
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const { addJob, jobs, activeJob, setActiveJob } = useResearchStore()
+
+  // Fetch available Ollama models on component mount
+  const { data: modelsData, isLoading: modelsLoading } = useQuery({
+    queryKey: ['ollama-models'],
+    queryFn: fetchAvailableModels,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: 1,
+  })
+
+  // Set default model when data loads
+  useEffect(() => {
+    if (modelsData?.default_model && !selectedModel) {
+      // Find the full model name that matches the default
+      const defaultModel = modelsData.models.find(
+        m => m.name === modelsData.default_model ||
+             m.name.startsWith(modelsData.default_model) ||
+             m.display_name === modelsData.default_model
+      )
+      setSelectedModel(defaultModel?.name || modelsData.default_model)
+    }
+  }, [modelsData, selectedModel])
 
   // Track collapsed state per job
   const [collapsedStates, setCollapsedStates] = useState<Record<string, CollapsedSections>>({})
@@ -83,7 +105,9 @@ export default function StockResearch() {
   }
 
   const mutation = useMutation({
-    mutationFn: (ticker: string) => startStockResearch(ticker),
+    mutationFn: (ticker: string) => startStockResearch(ticker, {
+      llm_model: selectedModel || undefined,
+    }),
     onSuccess: (data) => {
       addJob({
         id: data.job_id,
@@ -157,6 +181,35 @@ export default function StockResearch() {
                 className="input"
                 maxLength={10}
               />
+            </div>
+            <div className="w-48">
+              <label htmlFor="llm-model" className="block text-sm font-medium text-gray-700 mb-2">
+                AI Model
+              </label>
+              <select
+                id="llm-model"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="input"
+                disabled={modelsLoading}
+              >
+                {modelsLoading ? (
+                  <option value="">Loading models...</option>
+                ) : modelsData?.error ? (
+                  <option value="">Ollama unavailable</option>
+                ) : modelsData?.models.length === 0 ? (
+                  <option value="">No models found</option>
+                ) : (
+                  modelsData?.models.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.display_name}
+                    </option>
+                  ))
+                )}
+              </select>
+              {modelsData?.error && (
+                <p className="text-xs text-danger-600 mt-1">{modelsData.error}</p>
+              )}
             </div>
             <div className="flex items-end">
               <button

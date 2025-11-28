@@ -51,11 +51,32 @@ export async function startStockResearch(ticker: string, options?: {
   include_peers?: boolean
   include_technical?: boolean
   include_ai_analysis?: boolean
+  llm_model?: string
 }) {
   const { data } = await api.post('/stocks/research', {
     ticker,
     ...options,
   })
+  return data
+}
+
+// Ollama models endpoint
+export interface OllamaModel {
+  name: string
+  display_name: string
+  size: number
+  modified_at: string
+}
+
+export interface OllamaModelsResponse {
+  models: OllamaModel[]
+  default_model: string
+  default_available: boolean
+  error?: string
+}
+
+export async function fetchAvailableModels(): Promise<OllamaModelsResponse> {
+  const { data } = await api.get('/stocks/models/available')
   return data
 }
 

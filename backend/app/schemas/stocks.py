@@ -6,6 +6,24 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+class OllamaModel(BaseModel):
+    """Single Ollama model info."""
+
+    name: str
+    display_name: str
+    size: int = 0
+    modified_at: str = ""
+
+
+class OllamaModelResponse(BaseModel):
+    """Response schema for available Ollama models."""
+
+    models: list[OllamaModel]
+    default_model: str
+    default_available: bool
+    error: Optional[str] = None
+
+
 class StockResearchRequest(BaseModel):
     """Request schema for starting stock research."""
 
@@ -13,6 +31,7 @@ class StockResearchRequest(BaseModel):
     include_peers: bool = Field(default=True)
     include_technical: bool = Field(default=True)
     include_ai_analysis: bool = Field(default=True)
+    llm_model: Optional[str] = Field(default=None, description="Ollama model to use for AI analysis")
 
     @field_validator("ticker")
     @classmethod

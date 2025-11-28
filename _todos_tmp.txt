@@ -33,7 +33,7 @@ The decision-making process includes an MFTA Alignment Rule: if the short-term e
 
 Can you please now add another Agent to the tool. It will be the Risk assessment and result Agent. This Agent must take all the provided data from the stock Research and  analyse all the results from the different Cards to get a view on an Investment decision and the Risk we would face when buying at the current Price. 
 Please make sure to first make an overview of the available metrics from the stock Research and the results provided from this stock Research part on the different Topics. Please understand the structure of the tol to include this Agent in the best way. This Agent should be run after the stock Research and the Underlying Analysis has finished. 
-Use the following files as a starting Point to develop this Agent: 
+Use the following files from the Project folder as a starting Point to develop this Agent: 
 - scoring agent draft.md
 - scoring values.json
 
@@ -45,3 +45,36 @@ The UI displaying the results should Change as follows:
 2.2 If the users wants to see all Details of the results there should be the possibility to Show the results with a toogle button.
 2. The rest of the results from the stock Research and the first Analysis should be hidden in a toggle filed that can be expanded if needed by the user.
 When a new Research is started all Cards should be collapsed.
+
+
+UI redo:
+Can you please review the complete stock Research UI part of the tool. The provided data all look promising and the Overall style is nice. I would like to make a complete review of the way the data is displayed in the UI, as this is not very user friendly and it is hard to get a good overview of all data and to understand the Underlying decisions the tool makes on wheter to invest in the stock or not. Can you please first get a good overview of the UI and how this is presented to the user and then thjink of the best way on how to present this to the user. The way each bit of data is presented in the UI components is very nice, but how the data is placed and ordered to form a complete Picture of the data is not perfect. 
+
+Style:
+Please make sure to use the Image Website-style-example.jpg as Inspiration for the design of the Website. This example is from a different sector, but we are only interested in the Styling and layout of this page. Make sure to first analyse this example and extract the relevant Fonts, layout ideas, Colors, sylings and further concepts that are important. Put this into a style guide file that will make and use it throughout the Project to have a similar look for all pages. Please make sure that it will be easy to later make changes to the look, like changing Colors or the font.
+
+For all changes please Keep in mind that it is important to present the Information to the user in the best way to make it easy for him to understand the presented data. 
+
+
+
+
+
+Very good! Can you make the following changes:
+1. In the Investment Decision part at the top the Risk assessment result says "High Risk" and a score of 15 - all marked in red Color. In the Details part further dwon on the page the Risk assessment does not Mention "High Risk" the score of 15 and it is not marked in red with the decision sell. Make sure the detailed part is consistent with the top part.
+2. In the toggle bar for Growth Analysis the Color indicates a hold Position and it displayes the score. For the toggle bar of the Technical Indicators says Neutral. All toggle bars should be consitent in the naming convention. This should be only SELL, HOLD, BUY with the relevant Color coding. Make sure the toggle bar only Shows These decisions in the reelvant Color. The scores should be inside when you expand the field.
+3. In the Key Takeaways part the first text field is cut off after some words. Pelase make sure to present the full text or make it able to expand by clicking. 
+4. The Key Takeaways part suggest a Hold (example for TSLA) but the Investment Decision part suggest a sell. This must be consitent and must be based on the Underlying data.
+
+
+The provided results for calculation of the entry Point and the decision based on the support and resistance lines are not correct in my opinion. I Need to know 2 Things here: 
+1. Would the current Price be a good entry Point
+2. What would be a good entry Point.
+To make These decisions you Need to analyse all prepared support and resistance lines near the current Price or the entry Level that is suggested and make a decsision based on These Levels and the rest of the technical Analysis. To give you an idea on how to best calculate this, please see file "tech-analysis-logic-update.md" in the Project folder. Use this file to update the current logic where needed. Make sure to first understand how it is currenty perfomred, which data is used and hwat logic is used. Then use the Knowledge from the file to update where necessary or rebuild parts of it, if needed.
+MAke sure to include a Risk and Reward calculation when deciding on a entry Point.
+
+
+
+
+
+
+
