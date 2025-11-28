@@ -326,9 +326,13 @@ class TechnicalAnalysisResult(BaseModel):
 
     # Overall scoring
     trend_score: float
+    price_action_score: Optional[float] = None  # Support/Resistance based entry quality score (0-10)
     composite_technical_score: float
     overall_signal: str
     signal_confidence: float
+
+    # Entry Analysis (comprehensive entry point evaluation)
+    entry_analysis: Optional[dict[str, Any]] = None
 
     # Chart data
     chart_data: dict[str, Any]

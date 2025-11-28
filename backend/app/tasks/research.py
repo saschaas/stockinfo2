@@ -287,6 +287,7 @@ def research_stock(
                     "momentum_score": ta.momentum_score,
                     "volatility_score": ta.volatility_score,
                     "volume_score": ta.volume_score,
+                    "price_action_score": ta.price_action_score,
                     "composite_technical_score": ta.composite_technical_score,
 
                     # Trend
@@ -398,6 +399,30 @@ def research_stock(
                         "r_squared": ta.beta_analysis.r_squared,
                         "volatility_vs_market": ta.beta_analysis.volatility_vs_market,
                         "risk_profile": ta.beta_analysis.risk_profile,
+                    },
+
+                    # Entry Analysis (comprehensive)
+                    "entry_analysis": {
+                        "range_position_pct": ta.entry_analysis.range_position_pct,
+                        "range_position_zone": ta.entry_analysis.range_position_zone,
+                        "confluence_score": ta.entry_analysis.confluence_score,
+                        "confluence_factors": ta.entry_analysis.confluence_factors,
+                        "suggested_stop_loss": ta.entry_analysis.suggested_stop_loss,
+                        "stop_loss_type": ta.entry_analysis.stop_loss_type,
+                        "stop_loss_distance_pct": ta.entry_analysis.stop_loss_distance_pct,
+                        "suggested_target": ta.entry_analysis.suggested_target,
+                        "target_distance_pct": ta.entry_analysis.target_distance_pct,
+                        "risk_reward_ratio": ta.entry_analysis.risk_reward_ratio,
+                        "risk_reward_quality": ta.entry_analysis.risk_reward_quality,
+                        "is_good_entry": ta.entry_analysis.is_good_entry,
+                        "entry_quality": ta.entry_analysis.entry_quality,
+                        "entry_quality_score": ta.entry_analysis.entry_quality_score,
+                        "suggested_entry_price": ta.entry_analysis.suggested_entry_price,
+                        "suggested_entry_zone_low": ta.entry_analysis.suggested_entry_zone_low,
+                        "suggested_entry_zone_high": ta.entry_analysis.suggested_entry_zone_high,
+                        "wait_for_pullback": ta.entry_analysis.wait_for_pullback,
+                        "entry_reasoning": ta.entry_analysis.entry_reasoning,
+                        "warning_signals": ta.entry_analysis.warning_signals,
                     },
 
                     # Chart data

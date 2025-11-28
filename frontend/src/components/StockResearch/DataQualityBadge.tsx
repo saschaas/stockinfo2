@@ -18,10 +18,16 @@ export default function DataQualityBadge({ completenessScore, missingCategories 
     return 'Limited'
   }
 
+  // Safe number formatting
+  const formatScore = (score: number | undefined | null): string => {
+    if (score === undefined || score === null || typeof score !== 'number' || isNaN(score)) return 'N/A'
+    return score.toFixed(0)
+  }
+
   return (
     <div className="inline-flex items-center gap-2">
       <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getColor()}`}>
-        Data Quality: {getQualityLabel()} ({completenessScore.toFixed(0)}%)
+        Data Quality: {getQualityLabel()} ({formatScore(completenessScore)}%)
       </div>
       {missingCategories && missingCategories.length > 0 && (
         <div className="group relative">

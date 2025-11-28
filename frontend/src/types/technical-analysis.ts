@@ -81,6 +81,7 @@ export interface TechnicalAnalysisData {
 
   // Overall Scoring
   trend_score: number
+  price_action_score?: number  // Support/Resistance based entry quality score (0-10)
   composite_technical_score: number
   overall_signal: 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell'
   signal_confidence: number
@@ -90,6 +91,9 @@ export interface TechnicalAnalysisData {
 
   // Beta Analysis
   beta_analysis: BetaAnalysis
+
+  // Entry Analysis (comprehensive entry point evaluation)
+  entry_analysis?: EntryAnalysis
 
   // Chart Data
   chart_data: ChartData
@@ -125,6 +129,44 @@ export interface BetaAnalysis {
   r_squared: number
   volatility_vs_market: 'low' | 'below_average' | 'average' | 'above_average' | 'high'
   risk_profile: 'conservative' | 'moderate' | 'aggressive' | 'very_aggressive'
+}
+
+export interface EntryAnalysis {
+  // Range Position (0-100%): 0% = at support, 100% = at resistance
+  range_position_pct: number
+  range_position_zone: 'discount' | 'neutral' | 'premium'
+
+  // Confluence Score (0-10): Weighted sum of confirming factors
+  confluence_score: number
+  confluence_factors: string[]
+
+  // Stop-Loss Levels
+  suggested_stop_loss: number
+  stop_loss_type: 'support' | 'atr' | 'swing_low'
+  stop_loss_distance_pct: number
+
+  // Take Profit / Target
+  suggested_target: number
+  target_distance_pct: number
+
+  // Risk/Reward Calculation
+  risk_reward_ratio: number
+  risk_reward_quality: 'excellent' | 'good' | 'acceptable' | 'poor'
+
+  // Entry Quality Assessment
+  is_good_entry: boolean
+  entry_quality: 'excellent' | 'good' | 'acceptable' | 'poor'
+  entry_quality_score: number  // 0-100
+
+  // Suggested Entry Points
+  suggested_entry_price: number
+  suggested_entry_zone_low: number
+  suggested_entry_zone_high: number
+  wait_for_pullback: boolean
+
+  // Analysis Reasoning
+  entry_reasoning: string
+  warning_signals: string[]
 }
 
 export interface ChartData {

@@ -4,6 +4,12 @@ interface PortfolioAllocationProps {
   confidenceScore: number
 }
 
+// Safe number formatting helper
+const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
+  if (value === undefined || value === null || typeof value !== 'number' || isNaN(value)) return 'N/A'
+  return value.toFixed(decimals)
+}
+
 export default function PortfolioAllocation({ allocation, recommendation, confidenceScore }: PortfolioAllocationProps) {
   const getRecommendationColor = () => {
     const rec = recommendation?.toLowerCase()
@@ -26,20 +32,20 @@ export default function PortfolioAllocation({ allocation, recommendation, confid
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium text-gray-700">Portfolio Allocation</span>
           <span className={`text-2xl font-bold ${getRecommendationColor()}`}>
-            {allocation.toFixed(1)}%
+            {safeToFixed(allocation, 1)}%
           </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div
             className={`h-3 rounded-full ${getAllocationColor()} transition-all duration-500`}
-            style={{ width: `${Math.min(allocation * 10, 100)}%` }}
+            style={{ width: `${Math.min((allocation || 0) * 10, 100)}%` }}
           ></div>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-xs text-gray-600">
         <div>
-          <span className="font-medium">Confidence:</span> {confidenceScore?.toFixed(0)}%
+          <span className="font-medium">Confidence:</span> {safeToFixed(confidenceScore, 0)}%
         </div>
         <div className={`font-semibold ${getRecommendationColor()}`}>
           {recommendation?.replace('_', ' ').toUpperCase()}

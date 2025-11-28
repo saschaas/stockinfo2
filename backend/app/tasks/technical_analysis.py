@@ -188,9 +188,34 @@ def analyze_stock_technical(
 
                 # Overall
                 "trend_score": analysis_result.trend_score,
+                "price_action_score": analysis_result.price_action_score,
                 "composite_technical_score": analysis_result.composite_technical_score,
                 "overall_signal": analysis_result.overall_signal,
                 "signal_confidence": analysis_result.signal_confidence,
+
+                # Entry Analysis (comprehensive)
+                "entry_analysis": {
+                    "range_position_pct": analysis_result.entry_analysis.range_position_pct,
+                    "range_position_zone": analysis_result.entry_analysis.range_position_zone,
+                    "confluence_score": analysis_result.entry_analysis.confluence_score,
+                    "confluence_factors": analysis_result.entry_analysis.confluence_factors,
+                    "suggested_stop_loss": analysis_result.entry_analysis.suggested_stop_loss,
+                    "stop_loss_type": analysis_result.entry_analysis.stop_loss_type,
+                    "stop_loss_distance_pct": analysis_result.entry_analysis.stop_loss_distance_pct,
+                    "suggested_target": analysis_result.entry_analysis.suggested_target,
+                    "target_distance_pct": analysis_result.entry_analysis.target_distance_pct,
+                    "risk_reward_ratio": analysis_result.entry_analysis.risk_reward_ratio,
+                    "risk_reward_quality": analysis_result.entry_analysis.risk_reward_quality,
+                    "is_good_entry": analysis_result.entry_analysis.is_good_entry,
+                    "entry_quality": analysis_result.entry_analysis.entry_quality,
+                    "entry_quality_score": analysis_result.entry_analysis.entry_quality_score,
+                    "suggested_entry_price": analysis_result.entry_analysis.suggested_entry_price,
+                    "suggested_entry_zone_low": analysis_result.entry_analysis.suggested_entry_zone_low,
+                    "suggested_entry_zone_high": analysis_result.entry_analysis.suggested_entry_zone_high,
+                    "wait_for_pullback": analysis_result.entry_analysis.wait_for_pullback,
+                    "entry_reasoning": analysis_result.entry_analysis.entry_reasoning,
+                    "warning_signals": analysis_result.entry_analysis.warning_signals,
+                },
 
                 # Chart data
                 "chart_data": analysis_result.chart_data,

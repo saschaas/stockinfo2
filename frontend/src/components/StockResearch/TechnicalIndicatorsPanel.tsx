@@ -409,9 +409,36 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
       {/* Support/Resistance Summary */}
       <div className="border-t border-gray-200 pt-6">
         <h4 className="text-lg font-semibold text-gray-900 mb-4">Support & Resistance Levels</h4>
+
+        {/* Current Price Position Indicator */}
+        {data.current_price && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <span className="text-sm text-blue-700">Current Price:</span>
+                <span className="ml-2 text-xl font-bold text-blue-900">${safeToFixed(data.current_price, 2)}</span>
+              </div>
+              {data.nearest_support && (
+                <div>
+                  <span className="text-sm text-green-700">Nearest Support:</span>
+                  <span className="ml-2 font-bold text-green-800">${safeToFixed(data.nearest_support, 2)}</span>
+                  <span className="ml-1 text-xs text-green-600">(-{safeToFixed(data.support_distance_pct, 1)}%)</span>
+                </div>
+              )}
+              {data.nearest_resistance && (
+                <div>
+                  <span className="text-sm text-red-700">Nearest Resistance:</span>
+                  <span className="ml-2 font-bold text-red-800">${safeToFixed(data.nearest_resistance, 2)}</span>
+                  <span className="ml-1 text-xs text-red-600">(+{safeToFixed(data.resistance_distance_pct, 1)}%)</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-            <h5 className="font-medium text-red-900 mb-3">Resistance Levels</h5>
+            <h5 className="font-medium text-red-900 mb-3">Resistance Levels (Pivot)</h5>
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-red-700">R3:</span>
@@ -429,7 +456,7 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
           </div>
 
           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h5 className="font-medium text-green-900 mb-3">Support Levels</h5>
+            <h5 className="font-medium text-green-900 mb-3">Support Levels (Pivot)</h5>
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-green-700">S1:</span>
@@ -446,11 +473,279 @@ export default function TechnicalIndicatorsPanel({ data }: TechnicalIndicatorsPa
             </div>
           </div>
         </div>
+
+        {/* Pivot Point */}
         <div className="mt-4 p-3 bg-gray-100 rounded">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-gray-700">Pivot Point:</span>
             <span className="text-lg font-bold text-gray-900">${safeToFixed(data.pivot, 2)}</span>
           </div>
+        </div>
+
+        {/* Comprehensive Entry Analysis */}
+        {data.entry_analysis ? (
+          <div className="mt-4 space-y-4">
+            {/* Entry Quality Header */}
+            <div className={`p-4 rounded-lg border-2 ${
+              data.entry_analysis.is_good_entry
+                ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300'
+                : data.entry_analysis.entry_quality === 'acceptable'
+                ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
+                : 'bg-gradient-to-r from-red-50 to-orange-50 border-red-300'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    data.entry_analysis.is_good_entry ? 'bg-green-500' :
+                    data.entry_analysis.entry_quality === 'acceptable' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}>
+                    {data.entry_analysis.is_good_entry ? (
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-gray-900 text-lg">
+                      {data.entry_analysis.is_good_entry ? 'Good Entry Point' :
+                       data.entry_analysis.entry_quality === 'acceptable' ? 'Acceptable Entry' : 'Poor Entry Point'}
+                    </h5>
+                    <p className="text-sm text-gray-600">
+                      Entry Quality Score: <span className="font-bold">{safeToFixed(data.entry_analysis.entry_quality_score, 0)}/100</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    data.entry_analysis.entry_quality === 'excellent' ? 'bg-green-500 text-white' :
+                    data.entry_analysis.entry_quality === 'good' ? 'bg-green-400 text-white' :
+                    data.entry_analysis.entry_quality === 'acceptable' ? 'bg-yellow-400 text-gray-900' :
+                    'bg-red-500 text-white'
+                  }`}>
+                    {data.entry_analysis.entry_quality.toUpperCase()}
+                  </span>
+                  {data.entry_analysis.wait_for_pullback && (
+                    <span className="text-xs text-orange-600 mt-1 font-medium">Consider waiting for pullback</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Range Position Gauge */}
+            <div className="p-4 bg-white rounded-lg border">
+              <h6 className="text-sm font-semibold text-gray-700 mb-3">Price Range Position</h6>
+              <div className="relative h-8 bg-gradient-to-r from-green-200 via-yellow-200 to-red-200 rounded-full overflow-hidden">
+                {/* Zone labels */}
+                <div className="absolute inset-0 flex text-xs font-medium">
+                  <div className="w-1/3 flex items-center justify-center text-green-800">Discount Zone</div>
+                  <div className="w-1/3 flex items-center justify-center text-yellow-800">Neutral Zone</div>
+                  <div className="w-1/3 flex items-center justify-center text-red-800">Premium Zone</div>
+                </div>
+                {/* Position indicator */}
+                <div
+                  className="absolute top-0 bottom-0 w-1 bg-gray-900 shadow-lg"
+                  style={{ left: `${Math.min(Math.max(data.entry_analysis.range_position_pct, 0), 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-gray-500">
+                <span>Support (0%)</span>
+                <span className="font-bold text-gray-700">{safeToFixed(data.entry_analysis.range_position_pct, 0)}%</span>
+                <span>Resistance (100%)</span>
+              </div>
+            </div>
+
+            {/* Risk/Reward & Trade Setup */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Risk/Reward Card */}
+              <div className="p-4 bg-white rounded-lg border">
+                <h6 className="text-sm font-semibold text-gray-700 mb-3">Risk/Reward Analysis</h6>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">R/R Ratio:</span>
+                    <span className={`text-xl font-bold ${
+                      data.entry_analysis.risk_reward_ratio >= 3 ? 'text-green-600' :
+                      data.entry_analysis.risk_reward_ratio >= 2 ? 'text-green-500' :
+                      data.entry_analysis.risk_reward_ratio >= 1.5 ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      {safeToFixed(data.entry_analysis.risk_reward_ratio, 2)}:1
+                    </span>
+                  </div>
+                  <div className={`px-2 py-1 rounded text-center text-sm font-medium ${
+                    data.entry_analysis.risk_reward_quality === 'excellent' ? 'bg-green-100 text-green-800' :
+                    data.entry_analysis.risk_reward_quality === 'good' ? 'bg-green-50 text-green-700' :
+                    data.entry_analysis.risk_reward_quality === 'acceptable' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {data.entry_analysis.risk_reward_quality.toUpperCase()}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                    <div className="text-center">
+                      <span className="text-xs text-gray-500 block">Risk to Stop</span>
+                      <span className="font-bold text-red-600">{safeToFixed(data.entry_analysis.stop_loss_distance_pct, 1)}%</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs text-gray-500 block">Reward to Target</span>
+                      <span className="font-bold text-green-600">{safeToFixed(data.entry_analysis.target_distance_pct, 1)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trade Levels Card */}
+              <div className="p-4 bg-white rounded-lg border">
+                <h6 className="text-sm font-semibold text-gray-700 mb-3">Suggested Trade Levels</h6>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center p-2 bg-green-50 rounded">
+                    <span className="text-sm text-green-700">Target:</span>
+                    <span className="font-bold text-green-700">${safeToFixed(data.entry_analysis.suggested_target, 2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-blue-50 rounded">
+                    <span className="text-sm text-blue-700">Entry Zone:</span>
+                    <span className="font-bold text-blue-700">
+                      ${safeToFixed(data.entry_analysis.suggested_entry_zone_low, 2)} - ${safeToFixed(data.entry_analysis.suggested_entry_zone_high, 2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-red-50 rounded">
+                    <span className="text-sm text-red-700">Stop Loss ({data.entry_analysis.stop_loss_type}):</span>
+                    <span className="font-bold text-red-700">${safeToFixed(data.entry_analysis.suggested_stop_loss, 2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Confluence Factors */}
+            <div className="p-4 bg-white rounded-lg border">
+              <div className="flex items-center justify-between mb-3">
+                <h6 className="text-sm font-semibold text-gray-700">Confluence Score</h6>
+                <span className={`text-lg font-bold ${
+                  data.entry_analysis.confluence_score >= 5.5 ? 'text-green-600' :
+                  data.entry_analysis.confluence_score >= 4.5 ? 'text-green-500' :
+                  data.entry_analysis.confluence_score >= 3.0 ? 'text-yellow-600' :
+                  'text-red-600'
+                }`}>
+                  {safeToFixed(data.entry_analysis.confluence_score, 1)}/10
+                </span>
+              </div>
+              {/* Confluence bar */}
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
+                <div
+                  className={`h-full transition-all ${
+                    data.entry_analysis.confluence_score >= 5.5 ? 'bg-green-500' :
+                    data.entry_analysis.confluence_score >= 4.5 ? 'bg-green-400' :
+                    data.entry_analysis.confluence_score >= 3.0 ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${Math.min(data.entry_analysis.confluence_score * 10, 100)}%` }}
+                />
+              </div>
+              {/* Confluence factors list */}
+              {data.entry_analysis.confluence_factors.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-500">Confirming Factors:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {data.entry_analysis.confluence_factors.map((factor, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded">
+                        {factor}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Warning Signals */}
+            {data.entry_analysis.warning_signals.length > 0 && (
+              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <h6 className="text-sm font-semibold text-orange-800 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Warning Signals
+                </h6>
+                <ul className="space-y-1">
+                  {data.entry_analysis.warning_signals.map((warning, idx) => (
+                    <li key={idx} className="text-sm text-orange-700 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                      {warning}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Analysis Reasoning */}
+            <div className="p-4 bg-gray-50 rounded-lg border">
+              <h6 className="text-sm font-semibold text-gray-700 mb-2">Analysis Summary</h6>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {data.entry_analysis.entry_reasoning}
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* Fallback for old data without entry_analysis */
+          data.current_price && (data.nearest_support || data.support_1) && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+              <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Entry Point Analysis
+              </h5>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-4 p-3 bg-white rounded border">
+                  <div>
+                    <span className="text-xs text-gray-500 block">Suggested Entry Zone</span>
+                    <span className="text-lg font-bold text-green-700">
+                      ${safeToFixed(data.nearest_support ? data.nearest_support * 1.01 : (data.support_1 || 0) * 1.01, 2)}
+                      <span className="text-sm font-normal text-gray-500"> - </span>
+                      ${safeToFixed(data.nearest_support ? data.nearest_support * 1.03 : (data.support_1 || 0) * 1.03, 2)}
+                    </span>
+                  </div>
+                </div>
+                {data.nearest_support && data.nearest_resistance && (
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 bg-white rounded border">
+                      <span className="text-xs text-gray-500 block">Risk (to support)</span>
+                      <span className="font-bold text-red-700">{safeToFixed(data.support_distance_pct, 1)}%</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border">
+                      <span className="text-xs text-gray-500 block">Reward (to resistance)</span>
+                      <span className="font-bold text-green-700">{safeToFixed(data.resistance_distance_pct, 1)}%</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border">
+                      <span className="text-xs text-gray-500 block">R/R Ratio</span>
+                      <span className={`font-bold ${
+                        (data.resistance_distance_pct || 0) / (data.support_distance_pct || 1) >= 2 ? 'text-green-700' :
+                        (data.resistance_distance_pct || 0) / (data.support_distance_pct || 1) >= 1 ? 'text-yellow-700' :
+                        'text-red-700'
+                      }`}>
+                        1:{safeToFixed((data.resistance_distance_pct || 0) / (data.support_distance_pct || 1), 1)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
+
+        {/* How Pivot Points Work */}
+        <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
+          <details className="cursor-pointer">
+            <summary className="text-xs font-medium text-gray-600">How Pivot Points Work</summary>
+            <p className="text-xs text-gray-500 mt-2">
+              Pivot points are calculated from the previous session's high, low, and close prices.
+              <strong> Support levels (S1-S3)</strong> represent price floors where buying interest typically emerges.
+              <strong> Resistance levels (R1-R3)</strong> represent price ceilings where selling pressure typically emerges.
+              The <strong>Pivot Point</strong> itself acts as the primary support/resistance level.
+              Price above the pivot is generally bullish; below is bearish.
+            </p>
+          </details>
         </div>
       </div>
 

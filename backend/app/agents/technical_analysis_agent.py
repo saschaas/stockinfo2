@@ -194,6 +194,54 @@ class BetaAnalysis:
 
 
 @dataclass
+class EntryAnalysis:
+    """
+    Comprehensive entry point analysis based on technical levels.
+
+    Uses the framework from tech-analysis-logic-update.md:
+    - Range Position %: Where price sits between support and resistance
+    - Confluence Score: Weighted factors confirming the setup
+    - Risk/Reward Ratio: Based on structural stop-loss and target
+    - Entry Quality: Objective assessment of current price as entry
+    """
+    # Range Position (0-100%): 0% = at support, 100% = at resistance
+    range_position_pct: float = 50.0
+    range_position_zone: str = "neutral"  # "discount", "neutral", "premium"
+
+    # Confluence Score (0-10): Weighted sum of confirming factors
+    confluence_score: float = 0.0
+    confluence_factors: List[str] = field(default_factory=list)
+
+    # Stop-Loss Levels
+    suggested_stop_loss: float = 0.0  # ATR-based or support-based
+    stop_loss_type: str = "support"  # "support", "atr", "swing_low"
+    stop_loss_distance_pct: float = 0.0  # Distance from current price
+
+    # Take Profit / Target
+    suggested_target: float = 0.0  # Based on resistance
+    target_distance_pct: float = 0.0  # Distance from current price
+
+    # Risk/Reward Calculation
+    risk_reward_ratio: float = 0.0  # Target distance / Stop distance
+    risk_reward_quality: str = "poor"  # "excellent", "good", "acceptable", "poor"
+
+    # Entry Quality Assessment
+    is_good_entry: bool = False  # Is current price a good entry point?
+    entry_quality: str = "poor"  # "excellent", "good", "acceptable", "poor"
+    entry_quality_score: float = 0.0  # 0-100 score
+
+    # Suggested Entry Points
+    suggested_entry_price: float = 0.0  # Optimal entry price
+    suggested_entry_zone_low: float = 0.0  # Entry zone lower bound
+    suggested_entry_zone_high: float = 0.0  # Entry zone upper bound
+    wait_for_pullback: bool = False  # Should wait for pullback?
+
+    # Analysis Reasoning
+    entry_reasoning: str = ""  # Human-readable explanation
+    warning_signals: List[str] = field(default_factory=list)  # Caution flags
+
+
+@dataclass
 class TechnicalAnalysisResult:
     """Complete technical analysis output"""
     ticker: str
@@ -214,11 +262,15 @@ class TechnicalAnalysisResult:
     # Beta/Risk analysis
     beta_analysis: BetaAnalysis = field(default_factory=BetaAnalysis)
 
+    # Entry Analysis (comprehensive entry point evaluation)
+    entry_analysis: EntryAnalysis = field(default_factory=EntryAnalysis)
+
     # Overall scoring (0-10)
     trend_score: float = 0.0
     momentum_score: float = 0.0
     volatility_score: float = 0.0
     volume_score: float = 0.0
+    price_action_score: float = 5.0  # Support/Resistance based score (0-10)
     composite_technical_score: float = 0.0
 
     # Trading signals
@@ -254,11 +306,13 @@ class TechnicalAnalysisAgent:
         self.bb_std = 2.5  # Wider bands for growth stocks
 
         # Scoring weights (optimized for growth stocks)
+        # Now includes price_action based on support/resistance levels
         self.weights = {
-            "trend": 0.30,
-            "momentum": 0.35,  # Higher weight for momentum
-            "volatility": 0.15,
-            "volume": 0.20
+            "trend": 0.25,
+            "momentum": 0.30,  # Higher weight for momentum
+            "volatility": 0.10,
+            "volume": 0.15,
+            "price_action": 0.20  # Support/Resistance based entry quality
         }
 
     def _safe_float(self, value: Any, default: float = 0.0) -> float:
@@ -342,6 +396,16 @@ class TechnicalAnalysisAgent:
         # Step 6: Calculate support/resistance levels
         result.support_resistance = self._calculate_support_resistance(df, result.current_price)
 
+        # Step 6b: Calculate price action score based on SR levels + technical confirmations
+        result.price_action_score = self._calculate_price_action_score(
+            result.current_price,
+            result.support_resistance,
+            result.trend.trend_direction,
+            momentum=result.momentum,
+            volume=result.volume,
+            trend=result.trend
+        )
+
         # Step 7: Detect chart patterns
         result.patterns = self._detect_patterns(df)
 
@@ -357,6 +421,19 @@ class TechnicalAnalysisAgent:
         # Step 9: Beta calculation (if benchmark data available)
         if benchmark_data:
             result.beta_analysis = self._calculate_beta(df, benchmark_data)
+
+        # Step 9b: Comprehensive Entry Analysis
+        result.entry_analysis = self._calculate_entry_analysis(
+            current_price=result.current_price,
+            sr=result.support_resistance,
+            trend=result.trend,
+            momentum=result.momentum,
+            volume=result.volume,
+            volatility=result.volatility,
+            atr=result.volatility.atr
+        )
+        # Update price_action_score from entry analysis
+        result.price_action_score = result.entry_analysis.entry_quality_score / 10.0  # Convert 0-100 to 0-10
 
         # Step 10: Calculate composite score
         result.composite_technical_score = self._calculate_composite_score(result)
@@ -882,33 +959,255 @@ class TechnicalAnalysisAgent:
                 sr.resistance_3 = high + 2 * (sr.pivot - low)
                 sr.support_3 = low - 2 * (high - sr.pivot)
 
-            # Auto-detect support/resistance from swing points
+            # Auto-detect support/resistance from swing points using multiple windows
             if len(df) >= 20:
-                window = 5
-                highs = df['high'].rolling(window=window*2+1, center=True).max()
-                lows = df['low'].rolling(window=window*2+1, center=True).min()
+                # Use multiple window sizes to catch different timeframe swings
+                all_support_candidates = set()
+                all_resistance_candidates = set()
 
-                # Resistance levels (local maxima)
-                resistance_candidates = df[df['high'] == highs]['high'].unique()
-                sr.resistance_levels = sorted([float(r) for r in resistance_candidates if r > current_price])[:3]
+                for window in [5, 10, 20]:  # Multiple window sizes for robustness
+                    if len(df) >= window * 2 + 1:
+                        highs = df['high'].rolling(window=window*2+1, center=True).max()
+                        lows = df['low'].rolling(window=window*2+1, center=True).min()
 
-                # Support levels (local minima)
-                support_candidates = df[df['low'] == lows]['low'].unique()
-                sr.support_levels = sorted([float(s) for s in support_candidates if s < current_price], reverse=True)[:3]
+                        # Resistance levels (local maxima)
+                        resistance_candidates = df[df['high'] == highs]['high'].unique()
+                        for r in resistance_candidates:
+                            if r > current_price:
+                                all_resistance_candidates.add(float(r))
 
-            # Find nearest levels
-            if sr.resistance_levels:
-                sr.nearest_resistance = sr.resistance_levels[0]
-                sr.resistance_distance_pct = ((sr.nearest_resistance - current_price) / current_price) * 100
+                        # Support levels (local minima)
+                        support_candidates = df[df['low'] == lows]['low'].unique()
+                        for s in support_candidates:
+                            if s < current_price:
+                                all_support_candidates.add(float(s))
 
-            if sr.support_levels:
-                sr.nearest_support = sr.support_levels[0]
+                # Sort and take top 3
+                sr.resistance_levels = sorted(list(all_resistance_candidates))[:3]
+                sr.support_levels = sorted(list(all_support_candidates), reverse=True)[:3]
+
+            # === FIND TRUE NEAREST LEVELS FROM ALL SOURCES ===
+            # Combine pivot-based AND swing-detected levels to find actual nearest
+
+            # Collect all valid support levels below current price
+            all_supports_below = []
+
+            # Add pivot-based supports if valid and below current price
+            for pivot_support in [sr.support_1, sr.support_2, sr.support_3]:
+                if pivot_support > 0 and pivot_support < current_price:
+                    all_supports_below.append(pivot_support)
+
+            # Add swing-detected supports
+            for swing_support in sr.support_levels:
+                if swing_support > 0 and swing_support < current_price:
+                    all_supports_below.append(swing_support)
+
+            # Collect all valid resistance levels above current price
+            all_resistances_above = []
+
+            # Add pivot-based resistances if valid and above current price
+            for pivot_resistance in [sr.resistance_1, sr.resistance_2, sr.resistance_3]:
+                if pivot_resistance > 0 and pivot_resistance > current_price:
+                    all_resistances_above.append(pivot_resistance)
+
+            # Add swing-detected resistances
+            for swing_resistance in sr.resistance_levels:
+                if swing_resistance > 0 and swing_resistance > current_price:
+                    all_resistances_above.append(swing_resistance)
+
+            # Find TRUE nearest support (highest value below current price)
+            if all_supports_below:
+                sr.nearest_support = max(all_supports_below)  # Closest to current price
                 sr.support_distance_pct = ((current_price - sr.nearest_support) / current_price) * 100
+
+            # Find TRUE nearest resistance (lowest value above current price)
+            if all_resistances_above:
+                sr.nearest_resistance = min(all_resistances_above)  # Closest to current price
+                sr.resistance_distance_pct = ((sr.nearest_resistance - current_price) / current_price) * 100
 
         except Exception as e:
             logger.error("Error calculating support/resistance", error=str(e))
 
         return sr
+
+    def _calculate_price_action_score(
+        self,
+        current_price: float,
+        sr: SupportResistanceAnalysis,
+        trend_direction: str,
+        momentum: Optional['MomentumAnalysis'] = None,
+        volume: Optional['VolumeAnalysis'] = None,
+        trend: Optional['TrendAnalysis'] = None
+    ) -> float:
+        """
+        Calculate price action score based on support/resistance levels and technical signals.
+
+        A good entry point is where buying pressure is likely to overpower selling pressure.
+
+        Technical Analysis Entry Signals:
+        1. SUPPORT/RESISTANCE: Buy near strong support, or on breakout above resistance
+        2. MOMENTUM (RSI): Oversold (<30) crossing back up = buy signal
+        3. TREND (MA): Bullish crossover (50-day > 200-day) confirms uptrend
+        4. MACD: MACD crossing above signal line = momentum shift
+        5. VOLUME: Above-average volume confirms the move's significance
+
+        Score ranges from 0-10:
+        - 8-10: Excellent entry (near support + momentum confirmation + volume)
+        - 6-8: Good entry (near support OR breakout with some confirmation)
+        - 4-6: Neutral zone (no clear signal)
+        - 2-4: Poor entry (at resistance, overextended, weak volume)
+        - 0-2: Very poor entry (multiple warning signs)
+        """
+        score = 5.0  # Start neutral
+
+        try:
+            # Check if we have valid SR levels
+            has_support = sr.nearest_support is not None and sr.nearest_support > 0
+            has_resistance = sr.nearest_resistance is not None and sr.nearest_resistance > 0
+
+            if not has_support and not has_resistance:
+                return score  # Return neutral if no levels available
+
+            # Get distances (already calculated as percentages)
+            support_dist_pct = sr.support_distance_pct if has_support else 100
+            resistance_dist_pct = sr.resistance_distance_pct if has_resistance else 100
+
+            # === 1. SUPPORT & RESISTANCE ANALYSIS ===
+            # Entry Signal: Buy when price rebounds off support OR breaks above resistance
+
+            if trend_direction in ["bullish", "neutral"]:
+                # GOOD: Price near support (potential bounce zone)
+                if has_support:
+                    if support_dist_pct <= 2.0:
+                        # Very close to support - excellent entry zone
+                        score += 2.0
+                        logger.debug(f"Price within 2% of support - excellent entry zone")
+                    elif support_dist_pct <= 5.0:
+                        # Close to support - good entry zone
+                        score += 1.5
+                    elif support_dist_pct <= 8.0:
+                        # Moderate - acceptable entry
+                        score += 0.5
+
+                # CAUTION: Price near resistance (potential rejection)
+                if has_resistance:
+                    if resistance_dist_pct <= 2.0:
+                        # At resistance - high risk of rejection unless breakout
+                        score -= 1.5
+                    elif resistance_dist_pct <= 5.0:
+                        # Near resistance - caution
+                        score -= 0.5
+
+            elif trend_direction == "bearish":
+                # In bearish trend, near support is risky (may break down)
+                if has_support and support_dist_pct <= 3.0:
+                    score -= 1.0  # Support may fail in downtrend
+
+            # === 2. MOMENTUM CONFIRMATION (RSI) ===
+            # Entry Signal: RSI drops below 30 (oversold) then crosses back up above 30
+            if momentum:
+                rsi = momentum.rsi
+                rsi_signal = momentum.rsi_signal
+
+                if rsi_signal == "oversold" or (rsi and rsi < 35):
+                    # Oversold = potential buying opportunity
+                    score += 1.5
+                    logger.debug(f"RSI oversold ({rsi}) - buying opportunity")
+                elif rsi_signal == "overbought" or (rsi and rsi > 70):
+                    # Overbought = not a good entry for longs
+                    score -= 1.5
+                    logger.debug(f"RSI overbought ({rsi}) - poor entry")
+                elif rsi and 40 <= rsi <= 60:
+                    # Neutral zone - acceptable
+                    score += 0.25
+
+                # MACD confirmation
+                if momentum.macd_cross == "bullish":
+                    # Bullish MACD crossover = momentum shift, good entry
+                    score += 1.0
+                    logger.debug("MACD bullish crossover - momentum confirmation")
+                elif momentum.macd_cross == "bearish":
+                    # Bearish MACD = weak entry
+                    score -= 0.75
+
+            # === 3. TREND CONFIRMATION (Moving Averages) ===
+            # Entry Signal: Bullish when 50-day MA > 200-day MA (golden cross)
+            if trend:
+                if trend.golden_cross:
+                    # Golden cross = confirmed uptrend, good entry
+                    score += 1.0
+                    logger.debug("Golden cross present - trend confirmation")
+                elif trend.death_cross:
+                    # Death cross = downtrend, risky entry for longs
+                    score -= 1.0
+
+                # Price above key MAs = bullish structure
+                if trend.price_above_sma_50 and trend.price_above_sma_200:
+                    score += 0.5
+                elif not trend.price_above_sma_50 and not trend.price_above_sma_200:
+                    score -= 0.5
+
+            # === 4. VOLUME CONFIRMATION ===
+            # Entry Signal: Above-average volume confirms move significance
+            if volume:
+                volume_ratio = volume.volume_ratio
+                if volume_ratio and volume_ratio >= 1.5:
+                    # High volume = strong conviction, confirms the move
+                    score += 1.0
+                    logger.debug(f"High volume ({volume_ratio}x) - move confirmed")
+                elif volume_ratio and volume_ratio >= 1.2:
+                    # Above average volume
+                    score += 0.5
+                elif volume_ratio and volume_ratio < 0.7:
+                    # Low volume = weak move, may be false signal
+                    score -= 0.5
+
+                # OBV trend
+                if volume.obv_trend == "rising":
+                    score += 0.5  # Accumulation
+                elif volume.obv_trend == "falling":
+                    score -= 0.5  # Distribution
+
+            # === 5. RISK/REWARD CALCULATION ===
+            if has_support and has_resistance:
+                if support_dist_pct > 0:
+                    rr_ratio = resistance_dist_pct / support_dist_pct
+                    if rr_ratio >= 3.0:
+                        score += 1.5  # Excellent R/R
+                    elif rr_ratio >= 2.0:
+                        score += 1.0  # Good R/R
+                    elif rr_ratio >= 1.5:
+                        score += 0.5  # Acceptable
+                    elif rr_ratio < 0.75:
+                        score -= 1.0  # Poor R/R
+
+            # === 6. MULTIPLE SUPPORT LEVEL CONFIRMATION ===
+            # Count support levels below (stronger foundation = better entry)
+            support_levels_below = len([s for s in sr.support_levels if s < current_price])
+            pivot_supports_below = sum([
+                1 for s in [sr.support_1, sr.support_2, sr.support_3]
+                if s > 0 and s < current_price
+            ])
+            total_supports = support_levels_below + pivot_supports_below
+
+            if total_supports >= 4:
+                score += 0.75  # Strong support foundation
+            elif total_supports >= 2:
+                score += 0.5
+
+            # === 7. BREAKOUT DETECTION ===
+            # If price just broke above a resistance level, it's potentially good entry
+            if has_resistance and resistance_dist_pct < 0:
+                # Price is above what was resistance = breakout
+                score += 0.5
+                logger.debug("Potential breakout above resistance")
+
+        except Exception as e:
+            logger.error("Error calculating price action score", error=str(e))
+            return 5.0  # Return neutral on error
+
+        # Clamp score to 0-10 range
+        return round(max(0.0, min(10.0, score)), 2)
 
     def _detect_patterns(self, df: pd.DataFrame) -> ChartPatterns:
         """Detect chart patterns"""
@@ -962,17 +1261,18 @@ class TechnicalAnalysisAgent:
         return patterns
 
     def _calculate_composite_score(self, result: TechnicalAnalysisResult) -> float:
-        """Calculate weighted composite technical score"""
+        """Calculate weighted composite technical score including price action (SR levels)"""
         composite = (
             result.trend_score * self.weights["trend"] +
             result.momentum_score * self.weights["momentum"] +
             result.volatility_score * self.weights["volatility"] +
-            result.volume_score * self.weights["volume"]
+            result.volume_score * self.weights["volume"] +
+            result.price_action_score * self.weights["price_action"]
         )
         return round(composite, 2)
 
     def _generate_signal(self, result: TechnicalAnalysisResult) -> Tuple[str, float]:
-        """Generate overall trading signal and confidence"""
+        """Generate overall trading signal and confidence, incorporating SR levels"""
         score = result.composite_technical_score
 
         # Determine signal
@@ -1014,12 +1314,39 @@ class TechnicalAnalysisAgent:
         else:
             signals.append(0)
 
+        # Price Action signal (based on SR levels)
+        sr = result.support_resistance
+        if result.price_action_score >= 7.0:
+            signals.append(1)  # Good entry point (near support with room to run)
+        elif result.price_action_score <= 3.0:
+            signals.append(-1)  # Poor entry point (near resistance or bad R/R)
+        else:
+            signals.append(0)
+
         # Calculate agreement
         signal_sum = sum(signals)
         max_agreement = len(signals)
         agreement = abs(signal_sum) / max_agreement
 
         confidence = min(95, max(50, 50 + (agreement * 45)))
+
+        # === SR-BASED CONFIDENCE ADJUSTMENTS ===
+        # Boost confidence if signal aligns with SR position
+        if signal in ["buy", "strong_buy"]:
+            # Buying near support = higher confidence
+            if sr.support_distance_pct is not None and sr.support_distance_pct <= 3.0:
+                confidence = min(95, confidence + 5)
+            # Buying at resistance = lower confidence
+            elif sr.resistance_distance_pct is not None and sr.resistance_distance_pct <= 2.0:
+                confidence = max(50, confidence - 10)
+
+        elif signal in ["sell", "strong_sell"]:
+            # Selling near resistance (in downtrend) = higher confidence
+            if sr.resistance_distance_pct is not None and sr.resistance_distance_pct <= 3.0:
+                confidence = min(95, confidence + 5)
+            # Selling near support = lower confidence (support may hold)
+            elif sr.support_distance_pct is not None and sr.support_distance_pct <= 2.0:
+                confidence = max(50, confidence - 5)
 
         return signal, round(confidence, 1)
 
@@ -1345,3 +1672,361 @@ class TechnicalAnalysisAgent:
             logger.error("Error calculating beta", error=str(e))
 
         return beta_analysis
+
+    def _calculate_entry_analysis(
+        self,
+        current_price: float,
+        sr: SupportResistanceAnalysis,
+        trend: TrendAnalysis,
+        momentum: MomentumAnalysis,
+        volume: VolumeAnalysis,
+        volatility: VolatilityAnalysis,
+        atr: float
+    ) -> EntryAnalysis:
+        """
+        Comprehensive entry point analysis based on technical framework.
+
+        Implements the logic from tech-analysis-logic-update.md:
+        1. Calculate Range Position % - where price sits in trading range
+        2. Calculate Confluence Score - weighted technical confirmations
+        3. Calculate Risk/Reward Ratio - using structural levels
+        4. Determine if current price is a good entry
+        5. Suggest optimal entry point if current is not ideal
+
+        Returns:
+            EntryAnalysis with complete entry assessment
+        """
+        entry = EntryAnalysis()
+
+        try:
+            # === 1. RANGE POSITION CALCULATION ===
+            # Range Position % = (Current Price - Support) / (Resistance - Support) × 100
+            nearest_support = sr.nearest_support or sr.support_1 or 0
+            nearest_resistance = sr.nearest_resistance or sr.resistance_1 or 0
+
+            if nearest_support > 0 and nearest_resistance > 0 and nearest_resistance > nearest_support:
+                range_size = nearest_resistance - nearest_support
+                if range_size > 0:
+                    entry.range_position_pct = ((current_price - nearest_support) / range_size) * 100
+                    entry.range_position_pct = max(0, min(100, entry.range_position_pct))
+
+                    # Determine zone
+                    if entry.range_position_pct <= 30:
+                        entry.range_position_zone = "discount"  # Near support - good for longs
+                    elif entry.range_position_pct >= 70:
+                        entry.range_position_zone = "premium"  # Near resistance - risky for longs
+                    else:
+                        entry.range_position_zone = "neutral"
+            else:
+                # Fallback if we don't have proper S/R
+                entry.range_position_pct = 50.0
+                entry.range_position_zone = "neutral"
+
+            # === 2. CONFLUENCE SCORE CALCULATION ===
+            # Based on framework: minimum 3.0 required, 4.5+ = high probability, 5.5+ = max position
+            confluence_score = 0.0
+            confluence_factors = []
+
+            # Factor 1: Higher timeframe trend alignment (weight: 2.0)
+            if trend.trend_direction == "bullish" and trend.price_above_sma_200:
+                confluence_score += 2.0
+                confluence_factors.append("Bullish trend aligned (above SMA 200)")
+            elif trend.trend_direction == "bearish" and not trend.price_above_sma_200:
+                confluence_score += 1.0  # Bearish alignment (less weight for shorts)
+                confluence_factors.append("Bearish trend aligned")
+
+            # Factor 2: Key support/resistance level (weight: 1.5)
+            support_dist_pct = sr.support_distance_pct if sr.support_distance_pct else 100
+            if support_dist_pct <= 3.0:
+                confluence_score += 1.5
+                confluence_factors.append(f"At key support level ({support_dist_pct:.1f}% away)")
+            elif support_dist_pct <= 5.0:
+                confluence_score += 1.0
+                confluence_factors.append(f"Near support level ({support_dist_pct:.1f}% away)")
+
+            # Factor 3: Moving average zone (weight: 1.0)
+            if trend.price_above_sma_20 and trend.price_above_sma_50:
+                confluence_score += 1.0
+                confluence_factors.append("Price above key MAs (20/50)")
+            elif not trend.price_above_sma_20 and not trend.price_above_sma_50:
+                confluence_score -= 0.5  # Negative for bearish
+                confluence_factors.append("Price below key MAs (bearish)")
+
+            # Factor 4: Volume confirmation (weight: 1.0)
+            if volume.volume_ratio >= 1.5:
+                confluence_score += 1.0
+                confluence_factors.append(f"High volume confirmation ({volume.volume_ratio:.1f}x)")
+            elif volume.volume_ratio >= 1.2:
+                confluence_score += 0.5
+                confluence_factors.append(f"Above average volume ({volume.volume_ratio:.1f}x)")
+
+            # Factor 5: Momentum indicator (weight: 0.5)
+            if momentum.rsi_signal == "oversold" or (momentum.rsi and momentum.rsi < 35):
+                confluence_score += 0.5
+                confluence_factors.append(f"RSI oversold ({momentum.rsi:.1f})")
+            elif momentum.macd_cross == "bullish":
+                confluence_score += 0.5
+                confluence_factors.append("MACD bullish crossover")
+
+            # Factor 6: Golden cross present (weight: 0.5)
+            if trend.golden_cross:
+                confluence_score += 0.5
+                confluence_factors.append("Golden cross (SMA 50 > 200)")
+            elif trend.death_cross:
+                confluence_score -= 0.5
+                confluence_factors.append("Death cross warning")
+
+            # Factor 7: OBV confirmation (weight: 0.5)
+            if volume.obv_trend == "rising":
+                confluence_score += 0.5
+                confluence_factors.append("OBV rising (accumulation)")
+            elif volume.obv_trend == "falling":
+                confluence_score -= 0.5
+                confluence_factors.append("OBV falling (distribution)")
+
+            entry.confluence_score = max(0, confluence_score)
+            entry.confluence_factors = confluence_factors
+
+            # === 3. STOP-LOSS CALCULATION ===
+            # Use ATR-based stop or support-based stop (whichever is more appropriate)
+            atr_multiplier = 2.0  # Standard for swing trading
+
+            # ATR-based stop
+            atr_stop = current_price - (atr * atr_multiplier) if atr > 0 else 0
+
+            # Support-based stop (1% below nearest support)
+            support_stop = nearest_support * 0.99 if nearest_support > 0 else 0
+
+            # Choose the more conservative (higher) stop for longs
+            if support_stop > 0 and atr_stop > 0:
+                if support_stop > atr_stop:
+                    entry.suggested_stop_loss = support_stop
+                    entry.stop_loss_type = "support"
+                else:
+                    entry.suggested_stop_loss = atr_stop
+                    entry.stop_loss_type = "atr"
+            elif support_stop > 0:
+                entry.suggested_stop_loss = support_stop
+                entry.stop_loss_type = "support"
+            elif atr_stop > 0:
+                entry.suggested_stop_loss = atr_stop
+                entry.stop_loss_type = "atr"
+
+            # Calculate stop distance
+            if entry.suggested_stop_loss > 0 and current_price > 0:
+                entry.stop_loss_distance_pct = ((current_price - entry.suggested_stop_loss) / current_price) * 100
+
+            # === 4. TARGET CALCULATION ===
+            # Target is nearest resistance (or R1 if no swing resistance)
+            if nearest_resistance > 0:
+                entry.suggested_target = nearest_resistance * 0.99  # 1% below resistance
+                if current_price > 0:
+                    entry.target_distance_pct = ((entry.suggested_target - current_price) / current_price) * 100
+            elif sr.resistance_1 > 0:
+                entry.suggested_target = sr.resistance_1 * 0.99
+                if current_price > 0:
+                    entry.target_distance_pct = ((entry.suggested_target - current_price) / current_price) * 100
+
+            # === 5. RISK/REWARD RATIO ===
+            # R/R = Target Distance / Stop Distance
+            if entry.stop_loss_distance_pct > 0 and entry.target_distance_pct > 0:
+                entry.risk_reward_ratio = entry.target_distance_pct / entry.stop_loss_distance_pct
+
+                # Categorize R/R quality (minimum 2:1 for swing trading)
+                if entry.risk_reward_ratio >= 3.0:
+                    entry.risk_reward_quality = "excellent"
+                elif entry.risk_reward_ratio >= 2.0:
+                    entry.risk_reward_quality = "good"
+                elif entry.risk_reward_ratio >= 1.5:
+                    entry.risk_reward_quality = "acceptable"
+                else:
+                    entry.risk_reward_quality = "poor"
+
+            # === 6. ENTRY QUALITY ASSESSMENT ===
+            # Combines range position, confluence, and R/R into single quality score
+            quality_score = 50.0  # Start neutral
+
+            # Range Position contribution (25%)
+            if entry.range_position_zone == "discount":
+                quality_score += 20
+            elif entry.range_position_zone == "premium":
+                quality_score -= 20
+
+            # Confluence contribution (25%)
+            if entry.confluence_score >= 5.5:
+                quality_score += 25
+            elif entry.confluence_score >= 4.5:
+                quality_score += 20
+            elif entry.confluence_score >= 3.0:
+                quality_score += 10
+            elif entry.confluence_score < 2.0:
+                quality_score -= 15
+
+            # R/R contribution (25%)
+            if entry.risk_reward_quality == "excellent":
+                quality_score += 25
+            elif entry.risk_reward_quality == "good":
+                quality_score += 20
+            elif entry.risk_reward_quality == "acceptable":
+                quality_score += 10
+            else:
+                quality_score -= 15
+
+            # Trend alignment contribution (25%)
+            if trend.trend_direction == "bullish" and trend.price_above_sma_200:
+                quality_score += 20
+            elif trend.trend_direction == "neutral":
+                quality_score += 5
+            elif trend.trend_direction == "bearish":
+                quality_score -= 15
+
+            entry.entry_quality_score = max(0, min(100, quality_score))
+
+            # Categorize quality
+            if entry.entry_quality_score >= 80:
+                entry.entry_quality = "excellent"
+                entry.is_good_entry = True
+            elif entry.entry_quality_score >= 60:
+                entry.entry_quality = "good"
+                entry.is_good_entry = True
+            elif entry.entry_quality_score >= 40:
+                entry.entry_quality = "acceptable"
+                entry.is_good_entry = False  # Not ideal, but tradeable
+            else:
+                entry.entry_quality = "poor"
+                entry.is_good_entry = False
+
+            # === 7. SUGGESTED ENTRY POINT ===
+            # If current price is not ideal, suggest where to enter
+            if nearest_support > 0:
+                # Optimal entry is 1-3% above nearest support
+                entry.suggested_entry_price = nearest_support * 1.02  # 2% above support
+                entry.suggested_entry_zone_low = nearest_support * 1.01  # 1% above
+                entry.suggested_entry_zone_high = nearest_support * 1.03  # 3% above
+
+                # Determine if should wait for pullback
+                if current_price > entry.suggested_entry_zone_high:
+                    entry.wait_for_pullback = True
+                else:
+                    entry.wait_for_pullback = False
+            else:
+                # Fallback to current price area
+                entry.suggested_entry_price = current_price
+                entry.suggested_entry_zone_low = current_price * 0.98
+                entry.suggested_entry_zone_high = current_price * 1.02
+                entry.wait_for_pullback = False
+
+            # === 8. GENERATE REASONING ===
+            reasoning_parts = []
+
+            # Current price position
+            if entry.range_position_zone == "discount":
+                reasoning_parts.append(
+                    f"Current price (${current_price:.2f}) is in the discount zone "
+                    f"({entry.range_position_pct:.0f}% of range), near support at ${nearest_support:.2f}. "
+                    "This is typically a favorable entry zone."
+                )
+            elif entry.range_position_zone == "premium":
+                reasoning_parts.append(
+                    f"Current price (${current_price:.2f}) is in the premium zone "
+                    f"({entry.range_position_pct:.0f}% of range), near resistance at ${nearest_resistance:.2f}. "
+                    "This increases risk of rejection. Consider waiting for a pullback."
+                )
+            else:
+                reasoning_parts.append(
+                    f"Current price (${current_price:.2f}) is in a neutral zone "
+                    f"({entry.range_position_pct:.0f}% of range) between support and resistance."
+                )
+
+            # Confluence assessment
+            if entry.confluence_score >= 4.5:
+                reasoning_parts.append(
+                    f"Confluence score is strong ({entry.confluence_score:.1f}/10) with {len(confluence_factors)} confirming factors."
+                )
+            elif entry.confluence_score >= 3.0:
+                reasoning_parts.append(
+                    f"Confluence score meets minimum threshold ({entry.confluence_score:.1f}/10)."
+                )
+            else:
+                reasoning_parts.append(
+                    f"Confluence score is weak ({entry.confluence_score:.1f}/10). "
+                    "Consider waiting for more confirming signals."
+                )
+
+            # Risk/Reward assessment
+            if entry.risk_reward_ratio >= 2.0:
+                reasoning_parts.append(
+                    f"Risk/Reward ratio is favorable at {entry.risk_reward_ratio:.1f}:1 "
+                    f"(risk {entry.stop_loss_distance_pct:.1f}% to stop, reward {entry.target_distance_pct:.1f}% to target)."
+                )
+            elif entry.risk_reward_ratio > 0:
+                reasoning_parts.append(
+                    f"Risk/Reward ratio is below ideal at {entry.risk_reward_ratio:.1f}:1. "
+                    "A minimum 2:1 ratio is recommended for swing trading."
+                )
+
+            # Final recommendation
+            if entry.is_good_entry:
+                reasoning_parts.append(
+                    f"ENTRY QUALITY: {entry.entry_quality.upper()} ({entry.entry_quality_score:.0f}/100). "
+                    "Current price offers a reasonable entry point."
+                )
+            else:
+                if entry.wait_for_pullback:
+                    reasoning_parts.append(
+                        f"ENTRY QUALITY: {entry.entry_quality.upper()} ({entry.entry_quality_score:.0f}/100). "
+                        f"Consider waiting for pullback to ${entry.suggested_entry_zone_low:.2f} - ${entry.suggested_entry_zone_high:.2f} "
+                        "for better risk/reward."
+                    )
+                else:
+                    reasoning_parts.append(
+                        f"ENTRY QUALITY: {entry.entry_quality.upper()} ({entry.entry_quality_score:.0f}/100). "
+                        "Setup lacks sufficient technical confirmation."
+                    )
+
+            entry.entry_reasoning = " ".join(reasoning_parts)
+
+            # === 9. WARNING SIGNALS ===
+            warnings = []
+
+            # R/R warning
+            if entry.risk_reward_ratio < 1.5 and entry.risk_reward_ratio > 0:
+                warnings.append(f"Poor risk/reward ratio ({entry.risk_reward_ratio:.1f}:1)")
+
+            # Premium zone warning
+            if entry.range_position_zone == "premium":
+                warnings.append("Price near resistance (premium zone)")
+
+            # Death cross warning
+            if trend.death_cross:
+                warnings.append("Death cross present (bearish)")
+
+            # Low confluence warning
+            if entry.confluence_score < 3.0:
+                warnings.append(f"Low confluence score ({entry.confluence_score:.1f}/10)")
+
+            # RSI overbought warning
+            if momentum.rsi_signal == "overbought":
+                warnings.append(f"RSI overbought ({momentum.rsi:.1f})")
+
+            # Low volume warning
+            if volume.volume_ratio < 0.7:
+                warnings.append(f"Below average volume ({volume.volume_ratio:.1f}x)")
+
+            entry.warning_signals = warnings
+
+            logger.info(
+                "Entry analysis completed",
+                entry_quality=entry.entry_quality,
+                quality_score=entry.entry_quality_score,
+                range_position=entry.range_position_pct,
+                confluence=entry.confluence_score,
+                rr_ratio=entry.risk_reward_ratio,
+                is_good_entry=entry.is_good_entry
+            )
+
+        except Exception as e:
+            logger.error("Error calculating entry analysis", error=str(e))
+            entry.entry_reasoning = "Unable to calculate entry analysis due to insufficient data."
+
+        return entry

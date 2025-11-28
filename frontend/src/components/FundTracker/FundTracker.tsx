@@ -90,7 +90,6 @@ export default function FundTracker() {
       hasValidated.current = true
       const invalidFundIds: number[] = []
 
-      // Validate all funds first
       for (const fund of funds.funds) {
         if (fund.cik) {
           try {
@@ -105,18 +104,15 @@ export default function FundTracker() {
         }
       }
 
-      // Remove all invalid funds
       if (invalidFundIds.length > 0) {
         console.log(`Removing ${invalidFundIds.length} invalid funds...`)
         for (const fundId of invalidFundIds) {
           try {
             await removeFund(fundId)
-            console.log(`Removed fund ID ${fundId}`)
           } catch (error) {
             console.error(`Error removing fund ${fundId}:`, error)
           }
         }
-        // Refresh the funds list after all removals
         queryClient.invalidateQueries({ queryKey: ['funds'] })
       }
     }
@@ -127,20 +123,14 @@ export default function FundTracker() {
   // Handle search input with debouncing
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
-
-    // Clear existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
     }
-
-    // Don't search if query is too short
     if (value.length < 2) {
       setSearchResults([])
       setShowSearchResults(false)
       return
     }
-
-    // Debounce search
     setIsSearching(true)
     searchTimeoutRef.current = setTimeout(async () => {
       try {
@@ -156,7 +146,6 @@ export default function FundTracker() {
     }, 300)
   }
 
-  // Handle selecting a search result
   const handleSelectSearchResult = (result: SearchResult) => {
     setNewFundCik(result.cik)
     setNewFundName(result.name)
@@ -170,28 +159,22 @@ export default function FundTracker() {
       setAddError('Please enter a CIK or search for a fund')
       return
     }
-
     setAddError(null)
     setAddSuccess(null)
     setIsValidating(true)
 
     try {
-      // Validate first
       const validation = await validateFund(newFundCik.trim(), newFundName.trim() || undefined)
-
       if (!validation.is_valid) {
         setAddError(validation.error || 'Validation failed')
         setIsValidating(false)
         return
       }
-
       if (validation.fund_type === 'etf') {
         setAddError('ETFs are not supported. Please add only investment funds that file 13F forms.')
         setIsValidating(false)
         return
       }
-
-      // If validation passed, add the fund
       await addFundMutation.mutateAsync({
         cik: newFundCik.trim(),
         name: newFundName.trim() || validation.name || undefined,
@@ -209,65 +192,72 @@ export default function FundTracker() {
     }
   }
 
+  const tabs = [
+    { id: 'holdings', label: 'Holdings' },
+    { id: 'changes', label: 'Recent Changes' },
+    { id: 'new', label: 'New Positions' },
+    { id: 'sold', label: 'Sold Positions' },
+  ] as const
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Fund Tracker</h2>
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Fund Tracker</h1>
+        <p className="text-gray-500 text-sm mt-1">Track institutional fund holdings and changes</p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Fund List */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Tracked Funds</h3>
+        <div className="card card-body">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Tracked Funds</h3>
 
           {fundsLoading ? (
-            <div className="animate-pulse space-y-3">
+            <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-10 bg-gray-200 rounded"></div>
+                <div key={i} className="h-12 bg-cream-dark rounded-xl animate-pulse" />
               ))}
             </div>
           ) : fundsError ? (
-            <div className="text-red-600 text-sm">Error loading funds</div>
+            <div className="p-4 bg-danger-50 text-danger-700 rounded-xl text-sm">Error loading funds</div>
           ) : (
             <>
               <div className="space-y-2 mb-6">
                 {/* ALL FUNDS aggregated view */}
-                <div
-                  className={`flex items-center justify-between px-4 py-2 rounded-lg border-2 ${
+                <button
+                  onClick={() => setSelectedFund(0)}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
                     selectedFund === 0
-                      ? 'bg-primary-100 text-primary-800 border-primary-500'
-                      : 'hover:bg-gray-100 border-gray-300'
+                      ? 'bg-primary-50 border-primary-500 text-primary-800'
+                      : 'border-border-warm hover:bg-cream hover:border-border-warm-dark'
                   }`}
                 >
-                  <button
-                    onClick={() => setSelectedFund(0)}
-                    className="flex-1 text-left"
-                  >
-                    <div className="font-bold text-sm">ALL FUNDS</div>
-                    <div className="text-xs text-gray-500">Combined holdings across all funds</div>
-                  </button>
-                </div>
+                  <div className="font-bold text-sm">ALL FUNDS</div>
+                  <div className="text-xs text-gray-500">Combined holdings across all funds</div>
+                </button>
 
                 {/* Individual funds */}
                 {funds?.funds?.map((fund: any) => (
                   <div
                     key={fund.id}
-                    className={`flex items-center justify-between px-4 py-2 rounded-lg ${
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
                       selectedFund === fund.id
-                        ? 'bg-primary-100 text-primary-800'
-                        : 'hover:bg-gray-100'
+                        ? 'bg-primary-50 border border-primary-200'
+                        : 'hover:bg-cream border border-transparent'
                     }`}
                   >
                     <button
                       onClick={() => setSelectedFund(fund.id)}
                       className="flex-1 text-left"
                     >
-                      <div className="font-medium text-sm">{fund.name}</div>
+                      <div className="font-medium text-sm text-gray-900">{fund.name}</div>
                       {fund.ticker && (
                         <div className="text-xs text-gray-500">{fund.ticker}</div>
                       )}
                     </button>
                     <button
                       onClick={() => handleRemoveFund(fund.id, fund.name)}
-                      className="ml-2 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      className="ml-2 p-1.5 text-gray-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
                       title="Remove fund"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,99 +269,79 @@ export default function FundTracker() {
               </div>
 
               {/* Add Fund Form */}
-              <div className="border-t pt-4">
+              <div className="border-t border-border-warm pt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Add New Fund</h4>
 
                 {addError && (
-                  <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  <div className="mb-3 p-3 bg-danger-50 border border-danger-100 rounded-xl text-sm text-danger-700">
                     {addError}
                   </div>
                 )}
-
                 {addSuccess && (
-                  <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                  <div className="mb-3 p-3 bg-success-50 border border-success-100 rounded-xl text-sm text-success-700">
                     {addSuccess}
                   </div>
                 )}
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {/* Search Input */}
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Search funds (e.g., FMR, Fidelity, or CIK)"
+                      placeholder="Search funds (e.g., FMR, Fidelity)"
                       value={searchQuery}
                       onChange={(e) => handleSearchChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="input"
                     />
                     {isSearching && (
-                      <div className="absolute right-3 top-2.5 text-gray-400 text-xs">
-                        Searching...
-                      </div>
+                      <div className="absolute right-3 top-3 text-gray-400 text-xs">Searching...</div>
                     )}
 
                     {/* Search Results Dropdown */}
                     {showSearchResults && searchResults.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-border-warm rounded-xl shadow-card max-h-64 overflow-y-auto">
                         {searchResults.map((result) => (
-                          <div
+                          <button
                             key={result.cik}
                             onClick={() => handleSelectSearchResult(result)}
-                            className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${
-                              result.is_recommended ? 'bg-green-50' : ''
+                            className={`w-full text-left px-4 py-3 hover:bg-cream border-b border-border-warm last:border-b-0 transition-colors ${
+                              result.is_recommended ? 'bg-success-50' : ''
                             }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="font-medium text-sm text-gray-900">
-                                  {result.name}
-                                  {result.is_recommended && (
-                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                      ✓ Recommended
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  CIK: {result.cik}
-                                  {result.ticker && ` • Ticker: ${result.ticker}`}
-                                  {result.has_13f_filings && result.latest_filing_date && (
-                                    <span> • Latest filing: {result.latest_filing_date}</span>
-                                  )}
-                                </div>
-                                {!result.has_13f_filings && (
-                                  <div className="text-xs text-orange-600 mt-0.5">
-                                    ⚠ No 13F filings found
-                                  </div>
-                                )}
-                              </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-gray-900">{result.name}</span>
+                              {result.is_recommended && (
+                                <span className="badge badge-success text-xs">Recommended</span>
+                              )}
                             </div>
-                          </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              CIK: {result.cik}
+                              {result.ticker && ` • ${result.ticker}`}
+                            </div>
+                          </button>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  {/* CIK and Name Inputs (Auto-filled from search) */}
                   <input
                     type="text"
-                    placeholder="CIK (auto-filled from search)"
+                    placeholder="CIK (auto-filled)"
                     value={newFundCik}
-                    onChange={(e) => setNewFundCik(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
                     readOnly
+                    className="input bg-cream"
                   />
                   <input
                     type="text"
-                    placeholder="Fund Name (auto-filled from search)"
+                    placeholder="Fund Name (auto-filled)"
                     value={newFundName}
-                    onChange={(e) => setNewFundName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
                     readOnly
+                    className="input bg-cream"
                   />
                   <button
                     onClick={handleAddFund}
                     disabled={isValidating || addFundMutation.isPending || !newFundCik}
-                    className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    className="btn-primary w-full"
                   >
                     {isValidating || addFundMutation.isPending ? 'Adding...' : 'Add Fund'}
                   </button>
@@ -384,345 +354,68 @@ export default function FundTracker() {
         {/* Fund Details */}
         <div className="lg:col-span-2">
           {selectedFund !== null ? (
-            <div className="bg-white rounded-lg shadow">
+            <div className="card overflow-hidden">
               {/* Tabs */}
-              <div className="border-b border-gray-200">
+              <div className="border-b border-border-warm bg-cream">
                 <nav className="flex -mb-px">
-                  <button
-                    onClick={() => setActiveTab('holdings')}
-                    className={`px-6 py-3 text-sm font-medium ${
-                      activeTab === 'holdings'
-                        ? 'border-b-2 border-primary-500 text-primary-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Holdings
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('changes')}
-                    className={`px-6 py-3 text-sm font-medium ${
-                      activeTab === 'changes'
-                        ? 'border-b-2 border-primary-500 text-primary-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Recent Changes
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('new')}
-                    className={`px-6 py-3 text-sm font-medium ${
-                      activeTab === 'new'
-                        ? 'border-b-2 border-primary-500 text-primary-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    New Stocks
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('sold')}
-                    className={`px-6 py-3 text-sm font-medium ${
-                      activeTab === 'sold'
-                        ? 'border-b-2 border-primary-500 text-primary-600'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Sold Stocks
-                  </button>
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`px-6 py-4 text-sm font-medium transition-colors ${
+                        activeTab === tab.id
+                          ? 'border-b-2 border-primary-500 text-primary-600 bg-white'
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-cream-dark'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </nav>
               </div>
 
               <div className="p-6">
+                {/* Holdings Tab */}
                 {activeTab === 'holdings' && (
                   <>
                     {holdingsLoading ? (
-                      <div className="animate-pulse space-y-3">
+                      <div className="space-y-3">
                         {[...Array(10)].map((_, i) => (
-                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
+                          <div key={i} className="h-10 bg-cream-dark rounded-lg animate-pulse" />
                         ))}
                       </div>
                     ) : holdings?.holdings?.length > 0 ? (
                       <>
-                        <div className="mb-4 text-sm text-gray-500">
+                        <div className="mb-4 badge badge-neutral">
                           Filing Date: {holdings.filing_date}
                         </div>
-                        <table className="w-full">
-                          <thead>
-                            <tr className="text-left text-sm text-gray-500">
-                              <th className="pb-2">Ticker</th>
-                              <th className="pb-2">Company</th>
-                              <th className="pb-2 text-right">Shares</th>
-                              <th className="pb-2 text-right">Value</th>
-                              <th className="pb-2 text-right">%</th>
-                              {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {holdings.holdings.map((holding: any, index: number) => (
-                              <tr key={index} className="border-t border-gray-100">
-                                <td className="py-2 font-medium">{holding.ticker}</td>
-                                <td className="py-2 text-sm text-gray-600">
-                                  {holding.company_name}
-                                </td>
-                                <td className="py-2 text-right text-sm">
-                                  {holding.shares.toLocaleString()}
-                                </td>
-                                <td className="py-2 text-right text-sm">
-                                  ${(holding.value / 1000000).toFixed(2)}M
-                                </td>
-                                <td className="py-2 text-right text-sm">
-                                  {holding.percentage?.toFixed(2)}%
-                                </td>
-                                {selectedFund === 0 && (
-                                  <td className="py-2 text-right text-sm">
-                                    <button
-                                      onClick={() => handleFundCountClick(holding.ticker, holding.company_name, holding.fund_names || [])}
-                                      className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
-                                      title="Click to see which funds hold this position"
-                                    >
-                                      {holding.fund_count}
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </>
-                    ) : (
-                      <p className="text-gray-500">No holdings data available</p>
-                    )}
-                  </>
-                )}
-
-                {activeTab === 'changes' && (
-                  <>
-                    {changesLoading ? (
-                      <div className="animate-pulse space-y-3">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div>
-                        {changes?.filing_date && (
-                          <div className="mb-4 text-sm text-gray-500">
-                            Filing Date: {changes.filing_date}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Top 10 Bought */}
-                          <div>
-                            <h4 className="font-medium text-green-600 mb-3">Top 10 Bought</h4>
-                            {(() => {
-                              const bought = [
-                                ...(changes?.new_positions || []),
-                                ...(changes?.increased || [])
-                              ]
-                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
-                                .slice(0, 10);
-
-                              return bought.length > 0 ? (
-                                <div className="space-y-2">
-                                  {bought.map((item: any, index: number) => (
-                                    <div key={index} className="bg-green-50 p-3 rounded border border-green-200">
-                                      <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
-                                      <div className="flex justify-between items-start mt-1">
-                                        <div>
-                                          <div className="text-xs text-gray-600">{item.ticker}</div>
-                                          <div className="text-xs text-green-700">
-                                            +${(item.value_change / 1000000).toFixed(2)}M
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="text-xs text-gray-600">
-                                            {item.percentage?.toFixed(2)}% of fund
-                                          </div>
-                                          {selectedFund === 0 && item.fund_count && (
-                                            <button
-                                              onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
-                                              className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
-                                              title="Click to see which funds hold this position"
-                                            >
-                                              {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-gray-500">No positions bought</p>
-                              );
-                            })()}
-                          </div>
-
-                          {/* Top 10 Sold */}
-                          <div>
-                            <h4 className="font-medium text-red-600 mb-3">Top 10 Sold</h4>
-                            {(() => {
-                              const sold = [
-                                ...(changes?.decreased || []),
-                                ...(changes?.sold || [])
-                              ]
-                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
-                                .slice(0, 10);
-
-                              return sold.length > 0 ? (
-                                <div className="space-y-2">
-                                  {sold.map((item: any, index: number) => (
-                                    <div key={index} className="bg-red-50 p-3 rounded border border-red-200">
-                                      <div className="font-medium text-sm">{item.company_name || item.ticker}</div>
-                                      <div className="flex justify-between items-start mt-1">
-                                        <div>
-                                          <div className="text-xs text-gray-600">{item.ticker}</div>
-                                          <div className="text-xs text-red-700">
-                                            ${(item.value_change / 1000000).toFixed(2)}M
-                                          </div>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="text-xs text-gray-600">
-                                            {item.percentage?.toFixed(2)}% of fund
-                                          </div>
-                                          {selectedFund === 0 && item.fund_count && (
-                                            <button
-                                              onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
-                                              className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
-                                              title="Click to see which funds hold this position"
-                                            >
-                                              {item.fund_count} fund{item.fund_count !== 1 ? 's' : ''}
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-gray-500">No positions sold</p>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === 'new' && (
-                  <>
-                    {changesLoading ? (
-                      <div className="animate-pulse space-y-3">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
-                        ))}
-                      </div>
-                    ) : changes?.new_positions?.length > 0 ? (
-                      <>
-                        {changes?.filing_date && (
-                          <div className="mb-4 text-sm text-gray-500">
-                            Filing Date: {changes.filing_date}
-                          </div>
-                        )}
-                        <table className="w-full">
-                          <thead>
-                            <tr className="text-left text-sm text-gray-500">
-                              <th className="pb-2">Ticker</th>
-                              <th className="pb-2">Company</th>
-                              <th className="pb-2 text-right">Value</th>
-                              <th className="pb-2 text-right">% of Fund</th>
-                              {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {changes.new_positions
-                              .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
-                              .map((item: any, index: number) => (
-                              <tr key={index} className="border-t border-gray-100">
-                                <td className="py-2 font-medium">{item.ticker}</td>
-                                <td className="py-2 text-sm text-gray-600">
-                                  {item.company_name || '-'}
-                                </td>
-                                <td className="py-2 text-right text-sm text-green-600">
-                                  +${(item.value / 1000000).toFixed(2)}M
-                                </td>
-                                <td className="py-2 text-right text-sm">
-                                  {item.percentage?.toFixed(2)}%
-                                </td>
-                                {selectedFund === 0 && (
-                                  <td className="py-2 text-right text-sm">
-                                    <button
-                                      onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
-                                      className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
-                                      title="Click to see which funds hold this position"
-                                    >
-                                      {item.fund_count}
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </>
-                    ) : (
-                      <p className="text-gray-500">No new positions</p>
-                    )}
-                  </>
-                )}
-
-                {activeTab === 'sold' && (
-                  <>
-                    {changesLoading ? (
-                      <div className="animate-pulse space-y-3">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="h-8 bg-gray-200 rounded"></div>
-                        ))}
-                      </div>
-                    ) : (() => {
-                      const soldPositions = [
-                        ...(changes?.decreased || []),
-                        ...(changes?.sold || [])
-                      ].sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
-
-                      return soldPositions.length > 0 ? (
-                        <>
-                          {changes?.filing_date && (
-                            <div className="mb-4 text-sm text-gray-500">
-                              Filing Date: {changes.filing_date}
-                            </div>
-                          )}
+                        <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead>
-                              <tr className="text-left text-sm text-gray-500">
-                                <th className="pb-2">Ticker</th>
-                                <th className="pb-2">Company</th>
-                                <th className="pb-2 text-right">Value Change</th>
-                                <th className="pb-2 text-right">% of Fund</th>
-                                {selectedFund === 0 && <th className="pb-2 text-right">Funds</th>}
+                              <tr className="table-header text-left">
+                                <th className="px-4 py-3 rounded-l-lg">Ticker</th>
+                                <th className="px-4 py-3">Company</th>
+                                <th className="px-4 py-3 text-right">Shares</th>
+                                <th className="px-4 py-3 text-right">Value</th>
+                                <th className="px-4 py-3 text-right">%</th>
+                                {selectedFund === 0 && <th className="px-4 py-3 text-right rounded-r-lg">Funds</th>}
                               </tr>
                             </thead>
                             <tbody>
-                              {soldPositions.map((item: any, index: number) => (
-                                <tr key={index} className="border-t border-gray-100">
-                                  <td className="py-2 font-medium">{item.ticker}</td>
-                                  <td className="py-2 text-sm text-gray-600">
-                                    {item.company_name || '-'}
-                                  </td>
-                                  <td className="py-2 text-right text-sm text-red-600">
-                                    ${(item.value_change / 1000000).toFixed(2)}M
-                                  </td>
-                                  <td className="py-2 text-right text-sm">
-                                    {item.percentage?.toFixed(2)}%
-                                  </td>
+                              {holdings.holdings.map((holding: any, index: number) => (
+                                <tr key={index} className="table-row">
+                                  <td className="px-4 py-3 font-semibold text-gray-900">{holding.ticker}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{holding.company_name}</td>
+                                  <td className="px-4 py-3 text-right text-sm font-mono">{holding.shares.toLocaleString()}</td>
+                                  <td className="px-4 py-3 text-right text-sm font-mono">${(holding.value / 1000000).toFixed(2)}M</td>
+                                  <td className="px-4 py-3 text-right text-sm">{holding.percentage?.toFixed(2)}%</td>
                                   {selectedFund === 0 && (
-                                    <td className="py-2 text-right text-sm">
+                                    <td className="px-4 py-3 text-right">
                                       <button
-                                        onClick={() => handleFundCountClick(item.ticker, item.company_name, item.fund_names || [])}
-                                        className="font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
-                                        title="Click to see which funds hold this position"
+                                        onClick={() => handleFundCountClick(holding.ticker, holding.company_name, holding.fund_names || [])}
+                                        className="font-medium text-primary-600 hover:text-primary-700"
                                       >
-                                        {item.fund_count}
+                                        {holding.fund_count}
                                       </button>
                                     </td>
                                   )}
@@ -730,9 +423,172 @@ export default function FundTracker() {
                               ))}
                             </tbody>
                           </table>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-gray-500 text-center py-8">No holdings data available</p>
+                    )}
+                  </>
+                )}
+
+                {/* Changes Tab */}
+                {activeTab === 'changes' && (
+                  <>
+                    {changesLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-16 bg-cream-dark rounded-xl animate-pulse" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div>
+                        {changes?.filing_date && (
+                          <div className="mb-4 badge badge-neutral">Filing Date: {changes.filing_date}</div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Top Bought */}
+                          <div>
+                            <h4 className="font-semibold text-success-700 mb-3 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-success-500" />
+                              Top 10 Bought
+                            </h4>
+                            {(() => {
+                              const bought = [...(changes?.new_positions || []), ...(changes?.increased || [])]
+                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                                .slice(0, 10);
+                              return bought.length > 0 ? (
+                                <div className="space-y-2">
+                                  {bought.map((item: any, index: number) => (
+                                    <div key={index} className="bg-success-50 p-3 rounded-xl border border-success-100">
+                                      <div className="font-medium text-sm text-gray-900">{item.company_name || item.ticker}</div>
+                                      <div className="flex justify-between items-center mt-1">
+                                        <div className="text-xs text-success-700">+${(item.value_change / 1000000).toFixed(2)}M</div>
+                                        <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : <p className="text-sm text-gray-500">No positions bought</p>;
+                            })()}
+                          </div>
+                          {/* Top Sold */}
+                          <div>
+                            <h4 className="font-semibold text-danger-700 mb-3 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-danger-500" />
+                              Top 10 Sold
+                            </h4>
+                            {(() => {
+                              const sold = [...(changes?.decreased || []), ...(changes?.sold || [])]
+                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                                .slice(0, 10);
+                              return sold.length > 0 ? (
+                                <div className="space-y-2">
+                                  {sold.map((item: any, index: number) => (
+                                    <div key={index} className="bg-danger-50 p-3 rounded-xl border border-danger-100">
+                                      <div className="font-medium text-sm text-gray-900">{item.company_name || item.ticker}</div>
+                                      <div className="flex justify-between items-center mt-1">
+                                        <div className="text-xs text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</div>
+                                        <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : <p className="text-sm text-gray-500">No positions sold</p>;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* New Positions Tab */}
+                {activeTab === 'new' && (
+                  <>
+                    {changesLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-10 bg-cream-dark rounded-lg animate-pulse" />
+                        ))}
+                      </div>
+                    ) : changes?.new_positions?.length > 0 ? (
+                      <>
+                        {changes?.filing_date && (
+                          <div className="mb-4 badge badge-neutral">Filing Date: {changes.filing_date}</div>
+                        )}
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="table-header text-left">
+                                <th className="px-4 py-3 rounded-l-lg">Ticker</th>
+                                <th className="px-4 py-3">Company</th>
+                                <th className="px-4 py-3 text-right">Value</th>
+                                <th className="px-4 py-3 text-right rounded-r-lg">%</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {changes.new_positions
+                                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                                .map((item: any, index: number) => (
+                                <tr key={index} className="table-row">
+                                  <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{item.company_name || '-'}</td>
+                                  <td className="px-4 py-3 text-right text-sm text-success-700">+${(item.value / 1000000).toFixed(2)}M</td>
+                                  <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-gray-500 text-center py-8">No new positions</p>
+                    )}
+                  </>
+                )}
+
+                {/* Sold Positions Tab */}
+                {activeTab === 'sold' && (
+                  <>
+                    {changesLoading ? (
+                      <div className="space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-10 bg-cream-dark rounded-lg animate-pulse" />
+                        ))}
+                      </div>
+                    ) : (() => {
+                      const soldPositions = [...(changes?.decreased || []), ...(changes?.sold || [])]
+                        .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0));
+                      return soldPositions.length > 0 ? (
+                        <>
+                          {changes?.filing_date && (
+                            <div className="mb-4 badge badge-neutral">Filing Date: {changes.filing_date}</div>
+                          )}
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="table-header text-left">
+                                  <th className="px-4 py-3 rounded-l-lg">Ticker</th>
+                                  <th className="px-4 py-3">Company</th>
+                                  <th className="px-4 py-3 text-right">Value Change</th>
+                                  <th className="px-4 py-3 text-right rounded-r-lg">%</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {soldPositions.map((item: any, index: number) => (
+                                  <tr key={index} className="table-row">
+                                    <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{item.company_name || '-'}</td>
+                                    <td className="px-4 py-3 text-right text-sm text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</td>
+                                    <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </>
                       ) : (
-                        <p className="text-gray-500">No sold or decreased positions</p>
+                        <p className="text-gray-500 text-center py-8">No sold positions</p>
                       );
                     })()}
                   </>
@@ -740,54 +596,47 @@ export default function FundTracker() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-              Select a fund to view details
+            <div className="card card-body text-center py-16">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary-50 flex items-center justify-center">
+                <svg className="w-8 h-8 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a Fund</h3>
+              <p className="text-gray-500">Choose a fund from the list to view holdings and changes</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal for showing which funds hold a position */}
+      {/* Modal */}
       {modalFunds && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={closeModal}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">{modalFunds.ticker}</h3>
-                  <p className="text-sm text-gray-600">{modalFunds.companyName}</p>
-                </div>
-                <button
-                  onClick={closeModal}
-                  className="text-gray-400 hover:text-gray-600"
-                  title="Close"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={closeModal}>
+          <div className="card card-body max-w-md w-full m-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{modalFunds.ticker}</h3>
+                <p className="text-sm text-gray-500">{modalFunds.companyName}</p>
               </div>
-
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">
-                  Held by {modalFunds.fundNames.length} fund{modalFunds.fundNames.length !== 1 ? 's' : ''}:
-                </h4>
-                <div className="space-y-1 max-h-96 overflow-y-auto">
-                  {modalFunds.fundNames.map((fundName, index) => (
-                    <div key={index} className="px-3 py-2 bg-gray-50 rounded text-sm text-gray-800">
-                      {fundName}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={closeModal}
-                className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
-              >
-                Close
+              <button onClick={closeModal} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-cream">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
+            <div className="mb-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Held by {modalFunds.fundNames.length} fund{modalFunds.fundNames.length !== 1 ? 's' : ''}:
+              </h4>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {modalFunds.fundNames.map((fundName, index) => (
+                  <div key={index} className="px-3 py-2 bg-cream rounded-lg text-sm text-gray-800">
+                    {fundName}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={closeModal} className="btn-primary w-full">Close</button>
           </div>
         </div>
       )}

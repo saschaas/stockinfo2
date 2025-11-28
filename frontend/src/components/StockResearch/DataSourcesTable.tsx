@@ -114,7 +114,7 @@ export default function DataSourcesTable({
       <h4 className="text-lg font-semibold text-gray-900 mb-4">Data Sources & Coverage</h4>
 
       {/* Data Completeness Summary */}
-      {completenessScore !== undefined && (
+      {completenessScore !== undefined && !isNaN(completenessScore) && (
         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Overall Data Completeness</span>
@@ -123,7 +123,7 @@ export default function DataSourcesTable({
               completenessScore >= 60 ? 'text-yellow-600' :
               completenessScore >= 40 ? 'text-orange-600' : 'text-red-600'
             }`}>
-              {completenessScore.toFixed(0)}%
+              {typeof completenessScore === 'number' ? completenessScore.toFixed(0) : 'N/A'}%
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -133,7 +133,7 @@ export default function DataSourcesTable({
                 completenessScore >= 60 ? 'bg-yellow-500' :
                 completenessScore >= 40 ? 'bg-orange-500' : 'bg-red-500'
               }`}
-              style={{ width: `${completenessScore}%` }}
+              style={{ width: `${completenessScore || 0}%` }}
             ></div>
           </div>
         </div>
