@@ -11,7 +11,11 @@
       "Bash(dir:*)",
       "Bash(git fsck:*)",
       "Bash(git gc:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(npm run build:*)",
+      "Bash(python -m py_compile:*)"
     ],
     "deny": [],
     "ask": []

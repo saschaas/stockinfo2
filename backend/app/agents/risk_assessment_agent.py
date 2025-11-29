@@ -105,6 +105,10 @@ class RiskAssessmentResult:
     decision_confidence: float = 50.0  # 0-100
     entry_quality: str = "fair"  # "excellent", "good", "fair", "poor"
 
+    # Decision Components (for transparency - shows how the decision was made)
+    decision_composite_score: float = 50.0  # Final weighted composite (0-100)
+    decision_components: Dict[str, float] = field(default_factory=dict)  # Individual factor contributions
+
     # Key Factors Summary
     bullish_factors: List[str] = field(default_factory=list)
     bearish_factors: List[str] = field(default_factory=list)
@@ -240,15 +244,20 @@ class RiskAssessmentAgent:
         # Step 4: Determine risk level
         result.risk_level = self._determine_risk_level(result.risk_score)
 
-        # Step 5: Calculate risk/reward analysis
+        # Step 5: Calculate risk/reward analysis (incorporates price targets from growth analysis)
         result.risk_reward = self._calculate_risk_reward(
-            technical_analysis, result.current_price
+            technical_analysis, result.current_price, growth_analysis
         )
 
         # Step 6: Generate investment decision
         result.investment_decision, result.decision_confidence, result.entry_quality = (
-            self._generate_investment_decision(result, growth_analysis)
+            self._generate_investment_decision(result, growth_analysis, technical_analysis)
         )
+
+        # Store decision components for transparency
+        if hasattr(self, '_last_decision_components'):
+            result.decision_components = self._last_decision_components
+            result.decision_composite_score = self._last_decision_components.get("final_composite", 50.0)
 
         # Step 7: Identify key factors
         result.bullish_factors = self._identify_bullish_factors(
@@ -502,13 +511,21 @@ class RiskAssessmentAgent:
     def _calculate_risk_reward(
         self,
         technical: Dict[str, Any],
-        current_price: float
+        current_price: float,
+        growth: Optional[Dict[str, Any]] = None
     ) -> RiskRewardAnalysis:
-        """Calculate risk/reward metrics"""
+        """
+        Calculate risk/reward metrics integrating both technical levels and price targets.
+
+        Uses:
+        - Technical support/resistance for risk (stop loss) levels
+        - Price targets from growth analysis for reward (target) levels
+        - Combines both for a comprehensive risk/reward assessment
+        """
         rr = RiskRewardAnalysis()
         rr.current_price = current_price
 
-        # Get support and resistance levels
+        # Get support and resistance levels from technical analysis
         rr.nearest_support = self._safe_float(
             technical.get("nearest_support", 0)
         )
@@ -527,12 +544,42 @@ class RiskAssessmentAgent:
             if resistance_levels:
                 rr.nearest_resistance = resistance_levels[0]
 
-        # Calculate percentages
+        # Get price targets from growth analysis (if available)
+        price_target_base = 0.0
+        price_target_optimistic = 0.0
+        upside_potential = 0.0
+        if growth:
+            price_target_base = self._safe_float(growth.get("price_target_base", 0))
+            price_target_optimistic = self._safe_float(growth.get("price_target_optimistic", 0))
+            upside_potential = self._safe_float(growth.get("upside_potential", 0))
+
+        # Determine the best target for reward calculation
+        # Priority: Use price target if significantly higher than resistance, else use resistance
+        best_target = rr.nearest_resistance
+        if price_target_base > 0:
+            if rr.nearest_resistance > 0:
+                # Use price target if it's within reasonable range (not too far from resistance)
+                # If price target is much higher, use a blend
+                if price_target_base > rr.nearest_resistance * 1.5:
+                    # Price target is very optimistic, use weighted average
+                    best_target = (rr.nearest_resistance * 0.4 + price_target_base * 0.6)
+                else:
+                    # Use the higher of the two
+                    best_target = max(rr.nearest_resistance, price_target_base)
+            else:
+                # No resistance level, use price target directly
+                best_target = price_target_base
+
+        # Calculate risk distance (to support/stop)
         if current_price > 0 and rr.nearest_support > 0:
             rr.risk_distance_pct = ((current_price - rr.nearest_support) / current_price) * 100
 
-        if current_price > 0 and rr.nearest_resistance > 0:
-            rr.reward_distance_pct = ((rr.nearest_resistance - current_price) / current_price) * 100
+        # Calculate reward distance (to target)
+        if current_price > 0 and best_target > 0:
+            rr.reward_distance_pct = ((best_target - current_price) / current_price) * 100
+        elif current_price > 0 and upside_potential > 0:
+            # Fallback to upside potential if no target available
+            rr.reward_distance_pct = upside_potential
 
         # Calculate risk/reward ratio
         if rr.risk_distance_pct > 0:
@@ -555,75 +602,177 @@ class RiskAssessmentAgent:
         elif rr.nearest_support > 0:
             rr.suggested_stop = rr.nearest_support * 0.97  # 3% below support
 
-        # Target at nearest resistance
-        rr.suggested_target = rr.nearest_resistance
+        # Target: Use the calculated best_target (incorporates price targets)
+        rr.suggested_target = best_target if best_target > 0 else rr.nearest_resistance
 
         return rr
 
     def _generate_investment_decision(
         self,
         result: RiskAssessmentResult,
-        growth: Optional[Dict[str, Any]]
+        growth: Optional[Dict[str, Any]],
+        technical: Optional[Dict[str, Any]] = None
     ) -> tuple[str, float, str]:
-        """Generate investment decision based on risk score and other factors"""
+        """
+        Generate investment decision based on a weighted composite of all analysis factors.
 
-        score = result.risk_score
-        rr_favorable = result.risk_reward.is_favorable
+        This is the AUTHORITATIVE decision that consolidates:
+        - Risk Assessment Score (35% weight) - technical risk from market structure, momentum, volatility
+        - Growth Analysis Score (25% weight) - fundamental growth potential
+        - Technical Signal (25% weight) - technical indicator signals from Technical Analysis Agent
+        - Risk/Reward Quality (15% weight) - entry point quality
+
+        Decision thresholds (on 0-100 composite scale):
+        - BUY: >= 65 (strong positive signals across factors)
+        - HOLD: 45-65 (mixed signals or neutral)
+        - AVOID: 30-45 (more negative than positive signals)
+        - SELL: < 30 (strong negative signals)
+        """
+
+        # Component scores (all normalized to 0-100)
+        risk_score = result.risk_score  # Already 0-100
+
+        # Growth score: convert from 0-10 to 0-100
+        growth_score_raw = self._safe_float(growth.get("composite_score", 5)) if growth else 5.0
+        growth_score = growth_score_raw * 10  # Now 0-100
+
+        # Technical signal from Technical Analysis Agent (NOT from Growth Analysis)
+        # composite_technical_score is on 0-10 scale, need to convert to 0-100
+        technical_score = 50  # Default neutral
+        if technical:
+            # Prefer composite_technical_score if available (0-10 scale, convert to 0-100)
+            if technical.get("composite_technical_score") is not None:
+                tech_score_raw = self._safe_float(technical.get("composite_technical_score", 5))
+                technical_score = tech_score_raw * 10  # Convert 0-10 to 0-100
+            else:
+                # Fallback: convert overall_signal to score
+                signal = technical.get("overall_signal", "neutral")
+                if signal:
+                    signal_lower = signal.lower()
+                    if "strong_buy" in signal_lower:
+                        technical_score = 90
+                    elif "buy" in signal_lower:
+                        technical_score = 75
+                    elif "strong_sell" in signal_lower:
+                        technical_score = 10
+                    elif "sell" in signal_lower:
+                        technical_score = 25
+                    else:
+                        technical_score = 50  # neutral/hold
+
+        # Risk/Reward quality score
         rr_ratio = result.risk_reward.risk_reward_ratio
+        rr_favorable = result.risk_reward.is_favorable
+        if rr_ratio >= 3.0:
+            rr_score = 100
+        elif rr_ratio >= 2.0:
+            rr_score = 80
+        elif rr_ratio >= 1.5:
+            rr_score = 65
+        elif rr_ratio >= 1.0:
+            rr_score = 50
+        elif rr_ratio >= 0.5:
+            rr_score = 30
+        else:
+            rr_score = 15
 
-        # Determine entry quality
-        if score >= 80 and rr_favorable:
+        # Calculate weighted composite score
+        composite_score = (
+            risk_score * 0.35 +      # Risk assessment weight
+            growth_score * 0.25 +     # Growth analysis weight
+            technical_score * 0.25 +  # Technical signal weight
+            rr_score * 0.15           # Risk/Reward weight
+        )
+
+        # Apply upside potential adjustment
+        # Strong upside potential (>25%) adds confidence, negative upside reduces it
+        upside_potential = self._safe_float(growth.get("upside_potential", 0)) if growth else 0
+        upside_adjustment = 0.0
+        if upside_potential >= 30:
+            upside_adjustment = 5  # Strong upside adds 5 points
+        elif upside_potential >= 20:
+            upside_adjustment = 3  # Good upside adds 3 points
+        elif upside_potential >= 10:
+            upside_adjustment = 1  # Moderate upside adds 1 point
+        elif upside_potential < 0:
+            upside_adjustment = -3  # Negative upside (overvalued) subtracts 3 points
+        elif upside_potential < 5:
+            upside_adjustment = -1  # Low upside subtracts 1 point
+
+        composite_score += upside_adjustment
+
+        # Apply MFTA multiplier to adjust final score
+        mfta_multiplier = 1.0
+        if result.mfta_alignment == "aligned_bullish":
+            mfta_multiplier = 1.1  # 10% boost for aligned bullish
+        elif result.mfta_alignment == "aligned_bearish":
+            mfta_multiplier = 0.85  # 15% reduction for aligned bearish
+        elif result.mfta_alignment == "mixed":
+            mfta_multiplier = 0.95  # 5% reduction for mixed signals
+
+        final_composite = composite_score * mfta_multiplier
+        final_composite = max(0, min(100, final_composite))
+
+        # Store component scores for transparency (will be added to result later)
+        self._last_decision_components = {
+            "risk_score_component": risk_score,
+            "growth_score_component": growth_score,
+            "technical_score_component": technical_score,
+            "rr_score_component": rr_score,
+            "upside_potential": upside_potential,
+            "upside_adjustment": upside_adjustment,
+            "pre_mfta_composite": composite_score,
+            "mfta_multiplier": mfta_multiplier,
+            "final_composite": final_composite,
+        }
+
+        # Determine entry quality based on composite
+        if final_composite >= 75:
             entry_quality = "excellent"
-        elif score >= 60 and rr_ratio >= 1.5:
+        elif final_composite >= 60:
             entry_quality = "good"
-        elif score >= 40:
+        elif final_composite >= 45:
             entry_quality = "fair"
         else:
             entry_quality = "poor"
 
-        # Determine decision
-        if score >= 80 and rr_favorable:
+        # Determine decision based on composite score thresholds
+        if final_composite >= 65:
             decision = "BUY"
-            base_confidence = 85
-        elif score >= 70 and rr_ratio >= 1.5:
-            decision = "BUY"
-            base_confidence = 75
-        elif score >= 60:
-            if rr_favorable:
-                decision = "BUY"
-                base_confidence = 65
-            else:
-                decision = "HOLD"
-                base_confidence = 60
-        elif score >= 40:
+            base_confidence = 70 + (final_composite - 65) * 0.5  # 70-87.5%
+        elif final_composite >= 45:
             decision = "HOLD"
-            base_confidence = 55
-        elif score >= 20:
+            base_confidence = 55 + (final_composite - 45) * 0.5  # 55-65%
+        elif final_composite >= 30:
             decision = "AVOID"
-            base_confidence = 60
+            base_confidence = 55 + (45 - final_composite) * 0.5  # 55-62.5%
         else:
             decision = "SELL"
-            base_confidence = 70
+            base_confidence = 65 + (30 - final_composite) * 0.5  # 65-80%
 
-        # Adjust confidence based on MFTA
-        mfta_adjustment = 0
-        if result.mfta_alignment == "aligned_bullish" and decision in ["BUY", "HOLD"]:
-            mfta_adjustment = 10
-        elif result.mfta_alignment == "aligned_bearish" and decision in ["AVOID", "SELL"]:
-            mfta_adjustment = 10
-        elif result.mfta_alignment == "mixed":
-            mfta_adjustment = -5
+        # Boost confidence if factors are aligned (agreement increases confidence)
+        scores = [risk_score, growth_score, technical_score, rr_score]
+        score_std = (sum((s - sum(scores)/4)**2 for s in scores) / 4) ** 0.5
+        if score_std < 15:  # Low variance = high agreement
+            base_confidence += 5
+        elif score_std > 25:  # High variance = low agreement
+            base_confidence -= 5
 
-        # Adjust confidence based on growth analysis if available
-        growth_adjustment = 0
-        if growth:
-            growth_score = self._safe_float(growth.get("composite_score", 5))
-            if growth_score >= 7:
-                growth_adjustment = 5
-            elif growth_score <= 4:
-                growth_adjustment = -5
+        confidence = min(95, max(35, base_confidence))
 
-        confidence = min(95, max(30, base_confidence + mfta_adjustment + growth_adjustment))
+        logger.info(
+            "Investment decision calculated",
+            decision=decision,
+            final_composite=round(final_composite, 1),
+            risk_component=round(risk_score, 1),
+            growth_component=round(growth_score, 1),
+            technical_component=round(technical_score, 1),
+            rr_component=round(rr_score, 1),
+            upside_potential=round(upside_potential, 1),
+            upside_adjustment=upside_adjustment,
+            mfta_alignment=result.mfta_alignment,
+            confidence=round(confidence, 1),
+        )
 
         return decision, confidence, entry_quality
 
@@ -663,10 +812,22 @@ class RiskAssessmentAgent:
         if mfta.get("trend_alignment") == "aligned_bullish":
             factors.append("All timeframes aligned bullish (high confidence)")
 
-        # Growth factors
+        # Growth factors and price targets
         if growth:
-            if self._safe_float(growth.get("upside_potential", 0)) > 20:
-                factors.append(f"Significant upside potential ({growth.get('upside_potential', 0):.1f}%)")
+            upside = self._safe_float(growth.get("upside_potential", 0))
+            if upside > 20:
+                factors.append(f"Significant upside potential ({upside:.1f}%)")
+            elif upside > 10:
+                factors.append(f"Moderate upside potential ({upside:.1f}%)")
+
+            # Price target factors
+            price_target_base = self._safe_float(growth.get("price_target_base", 0))
+            if price_target_base > 0:
+                method = growth.get("price_target_method", "")
+                if method == "composite":
+                    factors.append(f"Multiple valuation methods support ${price_target_base:.2f} target")
+                elif method == "analyst":
+                    factors.append(f"Analyst consensus target: ${price_target_base:.2f}")
 
             strengths = growth.get("key_strengths", [])
             factors.extend(strengths[:2])  # Add top 2 strengths
@@ -711,11 +872,18 @@ class RiskAssessmentAgent:
         elif mfta.get("trend_alignment") == "mixed":
             factors.append("Mixed timeframe signals (uncertain direction)")
 
-        # Growth factors
+        # Growth factors and valuation concerns
         if growth:
             risk_score = self._safe_float(growth.get("risk_score", 5))
             if risk_score > 7:
                 factors.append(f"Elevated risk score: {risk_score:.1f}/10")
+
+            # Negative upside = overvalued
+            upside = self._safe_float(growth.get("upside_potential", 0))
+            if upside < 0:
+                factors.append(f"Stock appears overvalued ({abs(upside):.1f}% downside to target)")
+            elif upside < 5:
+                factors.append("Limited upside potential (<5%)")
 
             risks = growth.get("key_risks", [])
             factors.extend(risks[:2])  # Add top 2 risks
@@ -787,42 +955,71 @@ class RiskAssessmentAgent:
             return "Larger position size possible (low volatility). Consider up to 5-7% portfolio risk."
 
     def _generate_summary(self, result: RiskAssessmentResult) -> str:
-        """Generate 2-3 sentence summary"""
+        """
+        Generate 2-3 sentence summary that is CONSISTENT with the investment_decision.
+
+        The summary must clearly state the decision and explain the key factors.
+        """
         decision = result.investment_decision
-        score = result.risk_score
-        level = result.risk_level
+        composite = result.decision_composite_score
+        confidence = result.decision_confidence
         rr = result.risk_reward.risk_reward_ratio
         entry = result.entry_quality
 
         summaries = []
 
-        # Risk assessment summary
-        if level == "low":
-            summaries.append(f"Technical risk assessment shows favorable conditions with a score of {score:.0f}/100.")
-        elif level == "medium":
-            summaries.append(f"Technical risk assessment indicates moderate conditions with a score of {score:.0f}/100.")
-        elif level == "elevated":
-            summaries.append(f"Technical risk assessment shows elevated risk with a score of {score:.0f}/100.")
-        else:
-            summaries.append(f"Technical risk assessment indicates high risk with a score of {score:.0f}/100.")
+        # Lead with the decision and confidence
+        decision_text = {
+            "BUY": "recommended for BUY",
+            "HOLD": "recommended for HOLD",
+            "AVOID": "recommended to AVOID",
+            "SELL": "recommended for SELL"
+        }
 
-        # Risk/Reward
-        if rr >= 2.0:
-            summaries.append(f"Risk/reward ratio of 1:{rr:.1f} is favorable for entry.")
-        elif rr >= 1.0:
-            summaries.append(f"Risk/reward ratio of 1:{rr:.1f} is acceptable but not ideal.")
-        else:
-            summaries.append(f"Risk/reward ratio of 1:{rr:.1f} is unfavorable - limited upside vs downside.")
+        summaries.append(
+            f"{result.ticker} stock is {decision_text.get(decision, 'under review')} "
+            f"with {confidence:.0f}% confidence based on a composite score of {composite:.0f}/100."
+        )
 
-        # Decision
+        # Explain key contributing factors
+        components = result.decision_components
+        if components:
+            factors = []
+            risk_comp = components.get("risk_score_component", 50)
+            growth_comp = components.get("growth_score_component", 50)
+            rr_comp = components.get("rr_score_component", 50)
+
+            # Identify strongest positive and negative factors
+            if risk_comp >= 60:
+                factors.append("favorable technical risk profile")
+            elif risk_comp < 40:
+                factors.append("elevated technical risk")
+
+            if growth_comp >= 60:
+                factors.append("strong growth potential")
+            elif growth_comp < 40:
+                factors.append("limited growth indicators")
+
+            if rr_comp >= 65:
+                factors.append("attractive risk/reward ratio")
+            elif rr_comp < 40:
+                factors.append("unfavorable risk/reward setup")
+
+            if factors:
+                if decision in ["BUY", "HOLD"]:
+                    summaries.append(f"Key factors include {', '.join(factors[:2])}.")
+                else:
+                    summaries.append(f"Concerns include {', '.join(factors[:2])}.")
+
+        # Add action guidance
         if decision == "BUY":
-            summaries.append(f"Entry quality is {entry} - consider accumulating positions.")
+            summaries.append(f"Entry quality is {entry} - consider building positions.")
         elif decision == "HOLD":
-            summaries.append("Recommend holding current positions and monitoring for better entry.")
+            summaries.append("Hold existing positions and monitor for clearer signals.")
         elif decision == "AVOID":
-            summaries.append("Recommend avoiding new positions until conditions improve.")
+            summaries.append("Wait for improved conditions before initiating new positions.")
         else:
-            summaries.append("Recommend reducing exposure due to unfavorable risk profile.")
+            summaries.append("Consider reducing exposure given the current risk profile.")
 
         return " ".join(summaries)
 

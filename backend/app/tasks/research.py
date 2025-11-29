@@ -225,6 +225,17 @@ def research_stock(
                     "price_target_optimistic": growth_result.price_target_optimistic,
                     "price_target_pessimistic": growth_result.price_target_pessimistic,
                     "upside_potential": growth_result.upside_potential,
+                    # Price target calculation methods (for transparency)
+                    "price_targets": {
+                        "base": growth_result.price_target_base,
+                        "optimistic": growth_result.price_target_optimistic,
+                        "pessimistic": growth_result.price_target_pessimistic,
+                        "analyst": growth_result.price_target_analyst,
+                        "pe_based": growth_result.price_target_pe_based,
+                        "growth_based": growth_result.price_target_growth_based,
+                        "method": growth_result.price_target_method,
+                        "upside_potential": growth_result.upside_potential,
+                    },
                     "composite_score": growth_result.composite_score,
                     "fundamental_score": growth_result.fundamental_score,
                     "sentiment_score": growth_result.sentiment_score,
@@ -549,6 +560,8 @@ def research_stock(
                     "investment_decision": ra.investment_decision,
                     "decision_confidence": ra.decision_confidence,
                     "entry_quality": ra.entry_quality,
+                    "decision_composite_score": ra.decision_composite_score,
+                    "decision_components": ra.decision_components,
 
                     # Key Factors
                     "bullish_factors": ra.bullish_factors,

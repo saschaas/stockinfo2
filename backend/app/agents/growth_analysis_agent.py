@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Any, Tuple
-import logging
 
 import ollama
+import structlog
 
 from backend.app.config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 
@@ -61,7 +61,10 @@ class FinancialData:
 
     # Earnings
     eps: float = 0.0
+    eps_forward: float = 0.0  # Forward EPS estimate
     eps_growth_yoy: float = 0.0
+    pe_ratio: float = 0.0  # Trailing P/E
+    pe_forward: float = 0.0  # Forward P/E
 
     # Cash flow
     operating_cashflow: float = 0.0
@@ -221,6 +224,12 @@ class GrowthAnalysisResult:
     price_target_base: float = 0.0
     price_target_pessimistic: float = 0.0
     upside_potential: float = 0.0  # % to base target
+
+    # Price target calculation methods (for transparency)
+    price_target_analyst: float = 0.0  # From analyst consensus
+    price_target_pe_based: float = 0.0  # P/E valuation method
+    price_target_growth_based: float = 0.0  # Growth rate projection
+    price_target_method: str = ""  # Primary method used: "analyst", "pe_based", "growth_based", "composite"
 
     # Key insights
     key_strengths: List[str] = field(default_factory=list)
@@ -442,12 +451,12 @@ class GrowthAnalysisAgent:
 
         return CompanyProfile(
             ticker=ticker,
-            name=info.get("longName", info.get("shortName", "")),
+            name=info.get("longName") or info.get("shortName") or info.get("name", ""),
             sector=info.get("sector", ""),
             industry=info.get("industry", ""),
-            market_cap=self._safe_float(info.get("marketCap"), 0),
+            market_cap=self._safe_float(info.get("marketCap") or info.get("market_cap"), 0),
             employees=int(info.get("fullTimeEmployees") or 0),
-            description=info.get("longBusinessSummary", ""),
+            description=info.get("longBusinessSummary") or info.get("description", ""),
             website=info.get("website", "")
         )
 
@@ -466,9 +475,13 @@ class GrowthAnalysisAgent:
         financial.operating_margin = self._safe_float(info.get("operatingMargins", 0)) * 100 if info.get("operatingMargins") else 0.0
         financial.net_margin = self._safe_float(info.get("profitMargins", 0)) * 100 if info.get("profitMargins") else 0.0
 
-        # Earnings
-        financial.eps = self._safe_float(info.get("trailingEps", 0))
-        financial.eps_growth_yoy = self._safe_float(info.get("earningsGrowth", 0)) * 100 if info.get("earningsGrowth") else 0.0
+        # Earnings - support both camelCase and snake_case keys
+        financial.eps = self._safe_float(info.get("trailingEps") or info.get("eps", 0))
+        financial.eps_forward = self._safe_float(info.get("forwardEps") or info.get("forward_eps", 0))
+        earnings_growth = info.get("earningsGrowth") or info.get("earnings_growth")
+        financial.eps_growth_yoy = self._safe_float(earnings_growth, 0) * 100 if earnings_growth else 0.0
+        financial.pe_ratio = self._safe_float(info.get("trailingPE") or info.get("pe_ratio", 0))
+        financial.pe_forward = self._safe_float(info.get("forwardPE") or info.get("forward_pe", 0))
 
         # Cash flow
         financial.operating_cashflow = self._safe_float(info.get("operatingCashflow", 0))
@@ -545,10 +558,16 @@ class GrowthAnalysisAgent:
 
         indicators = TechnicalIndicators()
 
-        # Price data
-        indicators.current_price = self._safe_float(info.get("currentPrice", 0))
-        indicators.week_52_high = self._safe_float(info.get("fiftyTwoWeekHigh", 0))
-        indicators.week_52_low = self._safe_float(info.get("fiftyTwoWeekLow", 0))
+        # Price data - try both camelCase and snake_case keys
+        indicators.current_price = self._safe_float(
+            info.get("currentPrice") or info.get("current_price") or info.get("regularMarketPrice", 0)
+        )
+        indicators.week_52_high = self._safe_float(
+            info.get("fiftyTwoWeekHigh") or info.get("week_52_high", 0)
+        )
+        indicators.week_52_low = self._safe_float(
+            info.get("fiftyTwoWeekLow") or info.get("week_52_low", 0)
+        )
 
         # Performance
         indicators.price_change_ytd = self._safe_float(info.get("52WeekChange", 0)) * 100 if info.get("52WeekChange") else 0.0
@@ -864,23 +883,112 @@ class GrowthAnalysisAgent:
         return recommendation, confidence, allocation
 
     def _calculate_price_targets(self, result: GrowthAnalysisResult) -> GrowthAnalysisResult:
-        """Calculate price targets for different scenarios"""
+        """
+        Calculate price targets using multiple valuation methods:
+
+        1. Analyst Consensus - Uses analyst price targets if available
+        2. P/E Ratio Method - P_future = EPS_future × future_P/E (Comparable Valuation)
+        3. Growth Rate Projection - Future EPS = Current EPS × (1 + g)^t, then apply P/E
+
+        The final target is a weighted average of available methods.
+        """
         current_price = result.technical_indicators.current_price
+        fin = result.financial_data
 
         if current_price <= 0:
             return result
 
-        # Use analyst target if available
+        # Track which methods produced valid targets
+        valid_targets = []
+
+        # Log available data for debugging
+        comp = result.competitor_analysis
+
+        logger.info(
+            "Price target calculation inputs",
+            ticker=result.ticker,
+            eps=fin.eps,
+            eps_forward=fin.eps_forward,
+            pe_ratio=fin.pe_ratio,
+            pe_forward=fin.pe_forward,
+            eps_growth_yoy=fin.eps_growth_yoy,
+            revenue_yoy_growth=fin.revenue_yoy_growth,
+            revenue_current=fin.revenue_current,
+            ps_ratio=comp.ps_ratio,
+            analyst_target=result.sentiment_data.price_target_avg,
+            market_cap=result.company_profile.market_cap,
+        )
+
+        # ========================================
+        # METHOD 1: Analyst Consensus Targets
+        # ========================================
         if result.sentiment_data.price_target_avg > 0:
-            result.price_target_base = result.sentiment_data.price_target_avg
-            result.price_target_optimistic = result.sentiment_data.price_target_high or (result.price_target_base * 1.25)
-            result.price_target_pessimistic = result.sentiment_data.price_target_low or (result.price_target_base * 0.85)
+            result.price_target_analyst = result.sentiment_data.price_target_avg
+            valid_targets.append(("analyst", result.price_target_analyst, 0.50))  # 50% weight
+            logger.info("Analyst target available", target=result.price_target_analyst)
+
+        # ========================================
+        # METHOD 2: P/E Ratio Based Valuation
+        # Formula: P_future = EPS_future × future_P/E
+        # ========================================
+        pe_target = self._calculate_pe_based_target(result)
+        if pe_target and pe_target > 0:
+            result.price_target_pe_based = pe_target
+            valid_targets.append(("pe_based", pe_target, 0.30))  # 30% weight
+            logger.info("P/E based target calculated", target=pe_target)
+
+        # ========================================
+        # METHOD 3: Growth Rate Based Projection
+        # Formula: Future EPS = Current EPS × (1 + g)^t
+        # ========================================
+        growth_target = self._calculate_growth_based_target(result)
+        if growth_target and growth_target > 0:
+            result.price_target_growth_based = growth_target
+            valid_targets.append(("growth_based", growth_target, 0.20))  # 20% weight
+            logger.info("Growth based target calculated", target=growth_target)
+
+        # ========================================
+        # Calculate weighted average base target
+        # ========================================
+        if valid_targets:
+            # Normalize weights based on available methods
+            total_weight = sum(w for _, _, w in valid_targets)
+            weighted_sum = sum(target * (weight / total_weight) for _, target, weight in valid_targets)
+            result.price_target_base = weighted_sum
+
+            # Determine primary method used
+            primary_method = max(valid_targets, key=lambda x: x[2])[0]
+            result.price_target_method = primary_method if len(valid_targets) == 1 else "composite"
+
+            # Calculate optimistic and pessimistic scenarios
+            # Use analyst high/low if available, otherwise derive from base
+            if result.sentiment_data.price_target_high > 0:
+                result.price_target_optimistic = max(
+                    result.sentiment_data.price_target_high,
+                    result.price_target_base * 1.20
+                )
+            else:
+                # Optimistic: 20-30% above base depending on growth potential
+                growth_premium = 1.20 if fin.eps_growth_yoy < 15 else 1.30
+                result.price_target_optimistic = result.price_target_base * growth_premium
+
+            if result.sentiment_data.price_target_low > 0:
+                result.price_target_pessimistic = min(
+                    result.sentiment_data.price_target_low,
+                    result.price_target_base * 0.85
+                )
+            else:
+                # Pessimistic: 10-20% below base depending on risk
+                risk_discount = 0.85 if result.risk_analysis.risk_score > 5 else 0.90
+                result.price_target_pessimistic = result.price_target_base * risk_discount
+
         else:
-            # Calculate based on composite score
+            # Fallback: Simple composite score-based estimate
+            result.price_target_method = "score_based"
             if result.composite_score >= 7:
-                upside = 0.30
+                upside = 0.25
             elif result.composite_score >= 5:
-                upside = 0.15
+                upside = 0.12
             else:
                 upside = 0.05
 
@@ -889,9 +997,154 @@ class GrowthAnalysisAgent:
             result.price_target_pessimistic = current_price * (1 + upside * 0.5)
 
         # Calculate upside potential
-        result.upside_potential = ((result.price_target_base - current_price) / current_price) * 100
+        if current_price > 0:
+            result.upside_potential = ((result.price_target_base - current_price) / current_price) * 100
 
         return result
+
+    def _calculate_pe_based_target(self, result: GrowthAnalysisResult) -> float:
+        """
+        P/E Ratio Based Valuation (Comparable Valuation Method)
+
+        Formula: P_future = EPS_future × target_P/E
+
+        For stocks without positive EPS, uses Price-to-Sales as fallback.
+
+        The target P/E is determined by:
+        1. Forward P/E if available (analyst expectations)
+        2. Peer average P/E adjusted for growth differential
+        3. Industry reasonable P/E based on growth rate
+        """
+        fin = result.financial_data
+        comp = result.competitor_analysis
+        current_price = result.technical_indicators.current_price
+
+        # Get the best available EPS estimate
+        eps_to_use = fin.eps_forward if fin.eps_forward > 0 else fin.eps
+
+        # If we have positive EPS, use P/E method
+        if eps_to_use > 0:
+            target_pe = 0.0
+
+            # Option 1: Use forward P/E as market's expectation
+            if fin.pe_forward > 0 and fin.pe_forward < 100:
+                target_pe = fin.pe_forward
+
+            # Option 2: Use peer P/E with growth adjustment
+            elif comp.pe_ratio > 0:
+                growth_rate = fin.eps_growth_yoy
+                if growth_rate > 20:
+                    growth_multiplier = min(1.20, 1 + (growth_rate - 20) / 100)
+                elif growth_rate < 5:
+                    growth_multiplier = max(0.85, 1 - (5 - growth_rate) / 50)
+                else:
+                    growth_multiplier = 1.0
+                target_pe = comp.pe_ratio * growth_multiplier
+
+            # Option 3: Derive reasonable P/E from growth rate (PEG = 1.0-1.5)
+            elif fin.eps_growth_yoy > 0:
+                fair_peg = 1.2
+                target_pe = fin.eps_growth_yoy * fair_peg
+                target_pe = min(target_pe, 40)
+
+            # Option 4: Use current P/E as baseline
+            elif fin.pe_ratio > 0 and fin.pe_ratio < 100:
+                target_pe = fin.pe_ratio
+
+            if target_pe > 0:
+                return eps_to_use * target_pe
+
+        # Fallback: For stocks without positive EPS, use Price-to-Sales method
+        # This is common for growth stocks that are not yet profitable
+        if comp.ps_ratio > 0 and fin.revenue_current > 0:
+            # Get shares outstanding estimate from market cap and current price
+            if current_price > 0:
+                # Target based on revenue growth expectations
+                growth_rate = fin.revenue_yoy_growth / 100 if fin.revenue_yoy_growth > 0 else 0.10
+                growth_rate = min(growth_rate, 0.50)  # Cap at 50%
+
+                # Project revenue 1 year forward
+                future_revenue = fin.revenue_current * (1 + growth_rate)
+
+                # Apply P/S multiple (use current or peer average)
+                target_ps = comp.ps_ratio
+                if fin.revenue_yoy_growth > 30:
+                    target_ps *= 1.15  # Premium for high growth
+                elif fin.revenue_yoy_growth < 10:
+                    target_ps *= 0.90  # Discount for slow growth
+
+                # Calculate target market cap and derive price
+                target_market_cap = future_revenue * target_ps
+                current_market_cap = result.company_profile.market_cap
+                if current_market_cap > 0:
+                    price_multiplier = target_market_cap / current_market_cap
+                    return current_price * price_multiplier
+
+        return 0.0
+
+    def _calculate_growth_based_target(self, result: GrowthAnalysisResult, years: int = 2) -> float:
+        """
+        Growth Rate Based Projection
+
+        Formula: Future EPS = Current EPS × (1 + g)^t
+                 Target Price = Future EPS × reasonable P/E
+
+        For stocks without positive EPS, uses revenue growth projection.
+        """
+        fin = result.financial_data
+        comp = result.competitor_analysis
+        current_price = result.technical_indicators.current_price
+
+        # Get current EPS
+        current_eps = fin.eps if fin.eps > 0 else fin.eps_forward
+
+        # Get growth rate (prefer earnings growth, fallback to revenue growth)
+        growth_rate = fin.eps_growth_yoy / 100 if fin.eps_growth_yoy > 0 else 0
+        if growth_rate <= 0:
+            growth_rate = fin.revenue_yoy_growth / 100 if fin.revenue_yoy_growth > 0 else 0
+
+        # If we have positive EPS and growth, use EPS-based projection
+        if current_eps > 0 and growth_rate > 0:
+            # Cap extreme growth rates for realism (max 50% annual)
+            growth_rate = min(growth_rate, 0.50)
+
+            # Project future EPS: EPS_future = EPS_current × (1 + g)^t
+            future_eps = current_eps * ((1 + growth_rate) ** years)
+
+            # Determine reasonable P/E for the future state
+            if growth_rate > 0.25:
+                future_pe = min(25, 15 + growth_rate * 40)
+            elif growth_rate > 0.10:
+                future_pe = 15 + growth_rate * 30
+            else:
+                future_pe = 12 + growth_rate * 30
+
+            # Use peer P/E as sanity check
+            if comp.pe_ratio > 0:
+                future_pe = (future_pe + comp.pe_ratio) / 2
+
+            return future_eps * future_pe
+
+        # Fallback: Revenue-based growth projection for unprofitable companies
+        if fin.revenue_current > 0 and growth_rate > 0 and current_price > 0:
+            growth_rate = min(growth_rate, 0.50)  # Cap at 50%
+
+            # Project revenue forward
+            future_revenue = fin.revenue_current * ((1 + growth_rate) ** years)
+
+            # Apply current P/S ratio (assume it stays similar)
+            if comp.ps_ratio > 0:
+                # As company grows, P/S may compress slightly
+                future_ps = comp.ps_ratio * 0.9  # 10% P/S compression
+
+                # Calculate implied target price
+                current_market_cap = result.company_profile.market_cap
+                if current_market_cap > 0:
+                    future_market_cap = future_revenue * future_ps
+                    price_multiplier = future_market_cap / current_market_cap
+                    return current_price * price_multiplier
+
+        return 0.0
 
     def _identify_strengths(self, result: GrowthAnalysisResult) -> List[str]:
         """Identify key strengths"""

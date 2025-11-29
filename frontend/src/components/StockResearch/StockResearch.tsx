@@ -318,10 +318,6 @@ export default function StockResearch() {
                   <section className="grid lg:grid-cols-3 gap-6">
                     <InvestmentDecisionCard
                       data={activeJobData.result.risk_assessment as RiskAssessmentData}
-                      technicalAnalysis={activeJobData.result.technical_analysis}
-                      growthScore={activeJobData.result.composite_score}
-                      aiRecommendation={activeJobData.result.recommendation}
-                      aiConfidence={activeJobData.result.confidence_score}
                     />
                     <QuickMetrics
                       riskAssessment={activeJobData.result.risk_assessment as RiskAssessmentData}

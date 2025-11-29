@@ -74,6 +74,16 @@ export interface RiskAssessmentData {
   investment_decision: 'BUY' | 'HOLD' | 'AVOID' | 'SELL'
   decision_confidence: number  // 0-100
   entry_quality: 'excellent' | 'good' | 'fair' | 'poor'
+  decision_composite_score: number  // 0-100 - final weighted composite
+  decision_components: {  // Individual factor contributions
+    risk_score_component: number
+    growth_score_component: number
+    technical_score_component: number
+    rr_score_component: number
+    pre_mfta_composite: number
+    mfta_multiplier: number
+    final_composite: number
+  }
 
   // Key Factors Summary
   bullish_factors: string[]

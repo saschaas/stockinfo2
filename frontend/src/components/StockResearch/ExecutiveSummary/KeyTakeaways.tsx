@@ -21,8 +21,9 @@ export default function KeyTakeaways({
   const decision = riskAssessment.investment_decision
   const decisionColor = getDecisionColor(decision)
 
-  // Get the summary text - prefer aiSummary, fallback to riskAssessment.summary
-  const summaryText = aiSummary || riskAssessment.summary
+  // Use risk assessment summary as the primary source (it's now consistent with the investment decision)
+  // The aiSummary from growth analysis may have different recommendation context
+  const summaryText = riskAssessment.summary || aiSummary
 
   // Check if text is long enough to need expansion
   const isLongText = summaryText && summaryText.length > 150

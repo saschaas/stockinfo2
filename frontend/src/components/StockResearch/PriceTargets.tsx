@@ -6,13 +6,27 @@ interface PriceTargetsProps {
   upsidePotential: number
 }
 
+// Helper to safely convert to number
+const safeNumber = (value: unknown, defaultValue: number = 0): number => {
+  if (value === undefined || value === null) return defaultValue
+  const num = typeof value === 'number' ? value : parseFloat(String(value))
+  return isNaN(num) ? defaultValue : num
+}
+
 export default function PriceTargets({
-  currentPrice,
-  baseTarget,
-  optimisticTarget,
-  pessimisticTarget,
-  upsidePotential
+  currentPrice: rawCurrentPrice,
+  baseTarget: rawBaseTarget,
+  optimisticTarget: rawOptimisticTarget,
+  pessimisticTarget: rawPessimisticTarget,
+  upsidePotential: rawUpsidePotential
 }: PriceTargetsProps) {
+  // Safely convert all values to numbers
+  const currentPrice = safeNumber(rawCurrentPrice)
+  const baseTarget = safeNumber(rawBaseTarget)
+  const optimisticTarget = safeNumber(rawOptimisticTarget)
+  const pessimisticTarget = safeNumber(rawPessimisticTarget)
+  const upsidePotential = safeNumber(rawUpsidePotential)
+
   const maxPrice = Math.max(currentPrice, optimisticTarget) * 1.1
   const minPrice = Math.min(currentPrice, pessimisticTarget) * 0.9
 

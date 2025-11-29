@@ -72,6 +72,7 @@ AI-Powered Stock Research Tool with fund tracking and comprehensive analysis.
    docker exec stockinfo-ollama ollama pull mistral
    docker exec stockinfo-ollama ollama pull gpt-oss
    docker exec stockinfo-ollama ollama pull phi4-reasoning
+   docker exec stockinfo-ollama ollama pull qwen3
    ```
 
 5. **Access the application**
