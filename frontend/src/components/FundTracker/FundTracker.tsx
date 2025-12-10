@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds } from '../../services/api'
+import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds, startStockResearch } from '../../services/api'
 
 interface SearchResult {
   cik: string
@@ -27,6 +28,12 @@ export default function FundTracker() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [modalFunds, setModalFunds] = useState<{ ticker: string; companyName: string; fundNames: string[] } | null>(null)
 
+  // Stock selection state for batch analysis
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const navigate = useNavigate()
+  const MAX_SELECTION = 5
+
   const queryClient = useQueryClient()
 
   const handleFundCountClick = (ticker: string, companyName: string, fundNames: string[]) => {
@@ -35,6 +42,64 @@ export default function FundTracker() {
 
   const closeModal = () => {
     setModalFunds(null)
+  }
+
+  // Stock selection helper functions
+  const toggleTickerSelection = (ticker: string) => {
+    setSelectedTickers(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(ticker)) {
+        newSet.delete(ticker) // Deselect
+      } else if (newSet.size < MAX_SELECTION) {
+        newSet.add(ticker) // Select if under limit
+      }
+      // Silently ignore if trying to select more than MAX_SELECTION
+      return newSet
+    })
+  }
+
+  const clearSelection = () => setSelectedTickers(new Set())
+
+  const handleBatchAnalysis = async () => {
+    if (selectedTickers.size === 0) return
+
+    setIsAnalyzing(true)
+    const tickers = Array.from(selectedTickers)
+
+    try {
+      // Start research jobs for each ticker sequentially
+      const results = []
+      const errors = []
+
+      for (const ticker of tickers) {
+        try {
+          const response = await startStockResearch(ticker, {
+            include_peers: true,
+            include_technical: true,
+            include_ai_analysis: true,
+          })
+          results.push({ ticker, jobId: response.job_id })
+        } catch (error: any) {
+          console.error(`Failed to start research for ${ticker}:`, error)
+          errors.push({ ticker, error: error.response?.data?.detail || error.message })
+        }
+      }
+
+      // Navigate to Stock Research with job IDs
+      navigate('/research', {
+        state: {
+          fromFundTracker: true,
+          batchJobs: results,
+          errors: errors,
+        }
+      })
+
+      clearSelection()
+    } catch (error) {
+      console.error('Batch analysis failed:', error)
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const { data: funds, isLoading: fundsLoading, error: fundsError } = useQuery({
@@ -374,6 +439,69 @@ export default function FundTracker() {
                 </nav>
               </div>
 
+              {/* Stock Selection Bar - Shows when stocks are selected */}
+              {selectedTickers.size > 0 && (
+                <div className="sticky top-0 z-10 bg-gradient-to-r from-primary-50 to-blue-50 border-b-2 border-primary-200 px-6 py-3">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                        Selected ({selectedTickers.size}/{MAX_SELECTION}):
+                      </span>
+                      <div className="flex flex-wrap gap-2 flex-1 min-w-0">
+                        {Array.from(selectedTickers).map(ticker => (
+                          <span key={ticker} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white rounded-md border border-primary-300 text-sm font-medium text-primary-700 shadow-sm">
+                            {ticker}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleTickerSelection(ticker);
+                              }}
+                              className="hover:text-primary-900 transition-colors"
+                              title="Remove"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={clearSelection}
+                        className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white/50 rounded-md transition-colors"
+                      >
+                        Clear All
+                      </button>
+                      <button
+                        onClick={handleBatchAnalysis}
+                        disabled={isAnalyzing}
+                        className="px-4 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 rounded-md shadow-sm transition-colors flex items-center gap-2"
+                      >
+                        {isAnalyzing ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            Analyze {selectedTickers.size} Stock{selectedTickers.size > 1 ? 's' : ''}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="p-6">
                 {/* Holdings Tab */}
                 {activeTab === 'holdings' && (
@@ -405,7 +533,21 @@ export default function FundTracker() {
                               {holdings.holdings.map((holding: any, index: number) => (
                                 <tr key={index} className="table-row">
                                   <td className="px-4 py-3 font-semibold text-gray-900">{holding.ticker}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{holding.company_name}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleTickerSelection(holding.actual_ticker || holding.ticker);
+                                      }}
+                                      className={`cursor-pointer transition-colors ${
+                                        selectedTickers.has(holding.actual_ticker || holding.ticker)
+                                          ? 'text-primary-600 font-semibold underline'
+                                          : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                      }`}
+                                    >
+                                      {holding.company_name}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3 text-right text-sm font-mono">{holding.shares.toLocaleString()}</td>
                                   <td className="px-4 py-3 text-right text-sm font-mono">${(holding.value / 1000000).toFixed(2)}M</td>
                                   <td className="px-4 py-3 text-right text-sm">{holding.percentage?.toFixed(2)}%</td>
@@ -460,7 +602,21 @@ export default function FundTracker() {
                                 <div className="space-y-2">
                                   {bought.map((item: any, index: number) => (
                                     <div key={index} className="bg-success-50 p-3 rounded-xl border border-success-100">
-                                      <div className="font-medium text-sm text-gray-900">{item.company_name || item.ticker}</div>
+                                      <div className="font-medium text-sm">
+                                        <span
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleTickerSelection(item.actual_ticker || item.ticker);
+                                          }}
+                                          className={`cursor-pointer transition-colors ${
+                                            selectedTickers.has(item.actual_ticker || item.ticker)
+                                              ? 'text-primary-600 font-semibold underline'
+                                              : 'text-gray-900 hover:text-primary-500 hover:underline'
+                                          }`}
+                                        >
+                                          {item.company_name || item.ticker}
+                                        </span>
+                                      </div>
                                       <div className="flex justify-between items-center mt-1">
                                         <div className="text-xs text-success-700">+${(item.value_change / 1000000).toFixed(2)}M</div>
                                         <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
@@ -485,7 +641,21 @@ export default function FundTracker() {
                                 <div className="space-y-2">
                                   {sold.map((item: any, index: number) => (
                                     <div key={index} className="bg-danger-50 p-3 rounded-xl border border-danger-100">
-                                      <div className="font-medium text-sm text-gray-900">{item.company_name || item.ticker}</div>
+                                      <div className="font-medium text-sm">
+                                        <span
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleTickerSelection(item.actual_ticker || item.ticker);
+                                          }}
+                                          className={`cursor-pointer transition-colors ${
+                                            selectedTickers.has(item.actual_ticker || item.ticker)
+                                              ? 'text-primary-600 font-semibold underline'
+                                              : 'text-gray-900 hover:text-primary-500 hover:underline'
+                                          }`}
+                                        >
+                                          {item.company_name || item.ticker}
+                                        </span>
+                                      </div>
                                       <div className="flex justify-between items-center mt-1">
                                         <div className="text-xs text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</div>
                                         <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
@@ -532,7 +702,21 @@ export default function FundTracker() {
                                 .map((item: any, index: number) => (
                                 <tr key={index} className="table-row">
                                   <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{item.company_name || '-'}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleTickerSelection(item.actual_ticker || item.ticker);
+                                      }}
+                                      className={`cursor-pointer transition-colors ${
+                                        selectedTickers.has(item.actual_ticker || item.ticker)
+                                          ? 'text-primary-600 font-semibold underline'
+                                          : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                      }`}
+                                    >
+                                      {item.company_name || '-'}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3 text-right text-sm text-success-700">+${(item.value / 1000000).toFixed(2)}M</td>
                                   <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
                                 </tr>
@@ -578,7 +762,21 @@ export default function FundTracker() {
                                 {soldPositions.map((item: any, index: number) => (
                                   <tr key={index} className="table-row">
                                     <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{item.company_name || '-'}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleTickerSelection(item.ticker);
+                                        }}
+                                        className={`cursor-pointer transition-colors ${
+                                          selectedTickers.has(item.ticker)
+                                            ? 'text-primary-600 font-semibold underline'
+                                            : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                        }`}
+                                      >
+                                        {item.company_name || '-'}
+                                      </span>
+                                    </td>
                                     <td className="px-4 py-3 text-right text-sm text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</td>
                                     <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
                                   </tr>

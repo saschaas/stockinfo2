@@ -74,7 +74,17 @@ MAke sure to include a Risk and Reward calculation when deciding on a entry Poin
 
 
 
+Very good!
+For the Price Targets in the Growth Stock Analysis part, can you please add values for the missing Price Targets? If this data is not available you can you one Approach mentioned in Future_value.jpg. Make sure to first understand These approaches and then validate them in a Research. If they fit to the Approach of the tool and the available data, then please inclide These calculations to the tool and fill the missing values. Please review this part of the Analysis part to make sure the new values are considered in the Overall Analysis process.
+Please first understand this part of the code to best include the new values if relevant.
 
 
+Ticker Symbols and lnks
+In the Fund Tracker part of the Website, can you please add the stock ticker to the stocks. You don't Need to Show this ticker, but Keep it with the stocks. This infromation will be needed in the next step.
+Please make the displayed stocks in the tabs: Holdings, Recent Changes, New Positions and Sold Positions, clickable.
+If a user clicks on one stock, this stock should be added to a selection of ticker Symbols (only the ticker Symbols are needed). A second click on the stock should de-select the stock.
+The selection should Display only the ticker Symbols in a seperate element of the page. This element should be invisible, if no stock is selected. If one or more stocks are selected, there should also be a button "Analyse". When clicked These stocks should be sent to the Stock Research tab and a Research for all selected ticker shouold be started. It is important that the ticker Symbols are passed as Argument, because that is what this function is expecting. If a stock is not found, it should be skipped an an error should be displayed to the user.
+The element with the ticker Symbols should be very compact and modern Looking.
+Please make sure to fully understand the current tool and the function, before planning this new feature. It should  blend seamlessly in the tool.
 
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { startStockResearch, fetchAvailableModels } from '../../services/api'
 import { useResearchStore } from '../../stores/researchStore'
@@ -103,6 +104,40 @@ export default function StockResearch() {
       }
     }))
   }
+
+  // Handle batch jobs from Fund Tracker
+  const location = useLocation()
+  useEffect(() => {
+    // Check if navigated from Fund Tracker with batch jobs
+    if (location.state?.fromFundTracker && location.state?.batchJobs) {
+      const { batchJobs, errors } = location.state
+
+      // Add jobs to the research store
+      if (batchJobs && batchJobs.length > 0) {
+        batchJobs.forEach(({ ticker, jobId }: { ticker: string; jobId: string }) => {
+          addJob({
+            id: jobId,
+            ticker: ticker,
+            status: 'pending',
+            progress: 0,
+            currentStep: 'Initializing research...',
+            createdAt: new Date(),
+          })
+        })
+        console.log(`Started analysis for ${batchJobs.length} stocks from Fund Tracker:`, batchJobs.map((j: any) => j.ticker).join(', '))
+      }
+
+      // Log errors for failed tickers
+      if (errors && errors.length > 0) {
+        errors.forEach(({ ticker, error }: { ticker: string; error: string }) => {
+          console.error(`Failed to analyze ${ticker}:`, error)
+        })
+      }
+
+      // Clear navigation state to prevent re-triggering on refresh
+      window.history.replaceState({}, document.title)
+    }
+  }, [location, addJob])
 
   const mutation = useMutation({
     mutationFn: (ticker: string) => startStockResearch(ticker, {

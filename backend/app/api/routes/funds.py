@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.exceptions import NotFoundException
 from backend.app.db.models import Fund, FundHolding
 from backend.app.db.session import get_db
+from backend.app.services.cusip_mapper import get_ticker_or_cusip
 from backend.app.schemas.funds import (
     FundListResponse,
     FundHoldingsResponse,
@@ -178,6 +179,7 @@ async def get_aggregated_holdings(
             if key not in aggregated_holdings:
                 aggregated_holdings[key] = {
                     "ticker": h.ticker,
+                    "actual_ticker": get_ticker_or_cusip(h.ticker),  # Convert CUSIP to ticker
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -196,6 +198,7 @@ async def get_aggregated_holdings(
         percentage = (data["value"] / total_value * 100) if total_value > 0 else 0
         holdings_list.append({
             "ticker": data["ticker"],
+            "actual_ticker": data["actual_ticker"],
             "company_name": data["company_name"],
             "shares": data["shares"],
             "value": data["value"],
@@ -322,6 +325,7 @@ async def get_aggregated_changes(
             if key not in change_dict:
                 change_dict[key] = {
                     "ticker": h.ticker,
+                    "actual_ticker": get_ticker_or_cusip(h.ticker),
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -351,6 +355,7 @@ async def get_aggregated_changes(
             percentage = (data["value"] / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
             result_changes[change_type].append({
                 "ticker": data["ticker"],
+                "actual_ticker": data["actual_ticker"],
                 "company_name": data["company_name"],
                 "shares": data["shares"],
                 "value": data["value"],
@@ -438,6 +443,7 @@ async def get_fund_holdings(
         holdings=[
             {
                 "ticker": h.ticker,
+                "actual_ticker": get_ticker_or_cusip(h.ticker),
                 "company_name": h.company_name,
                 "shares": h.shares,
                 "value": float(h.value),
@@ -511,6 +517,7 @@ async def get_fund_changes(
 
         change_data = {
             "ticker": h.ticker,
+            "actual_ticker": get_ticker_or_cusip(h.ticker),
             "company_name": h.company_name,
             "shares": h.shares,
             "value": float(h.value),

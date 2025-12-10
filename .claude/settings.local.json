@@ -15,7 +15,20 @@
       "Bash(git commit:*)",
       "Bash(git push)",
       "Bash(npm run build:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_console_messages",
+      "Bash(python3:*)",
+      "Bash(docker logs:*)",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_run_code",
+      "mcp__playwright__browser_close",
+      "Bash(docker cp:*)",
+      "Bash(python:*)",
+      "mcp__playwright__browser_network_requests"
     ],
     "deny": [],
     "ask": []
