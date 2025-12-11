@@ -1,7 +1,17 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useResearchStore } from '../../stores/researchStore'
 
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+// Construct WebSocket URL based on current page URL (works with both normal and host networking)
+const getWsBaseUrl = () => {
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL
+  }
+  // Use current page's host and protocol (http -> ws, https -> wss)
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}`
+}
+
+const WS_BASE_URL = getWsBaseUrl()
 
 /**
  * JobProgressManager maintains WebSocket connections for ALL pending/running jobs,
