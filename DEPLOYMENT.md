@@ -1,5 +1,13 @@
 # Deployment Guide
 
+## Quick Start
+
+After starting the application with `docker-compose up -d`, access it at:
+
+**Frontend**: http://localhost:8080
+**Backend API**: http://localhost:8000
+**Dagster UI**: http://localhost:3001
+
 ## GPU vs CPU Setup
 
 The application uses Ollama for AI inference, which can run on either GPU or CPU.
@@ -69,6 +77,16 @@ Both configurations produce identical results; GPU just runs faster.
 **Cause**: Docker cannot access NVIDIA GPU (GPU not present or nvidia-container-toolkit not installed)
 
 **Solution**: Use CPU-only mode (default configuration with GPU settings commented out)
+
+### Error: "net.ipv4.ip_unprivileged_port_start: permission denied"
+
+**Cause**: Trying to bind to privileged port (< 1024) without sufficient permissions
+
+**Solution**: The default configuration now uses port 8080 instead of port 80. Access the frontend at http://localhost:8080
+
+If you need to use port 80 (requires root/sudo):
+1. Run Docker with elevated privileges, OR
+2. Set up a reverse proxy (nginx/caddy) that runs on port 80 and forwards to 8080
 
 ### Ollama Not Responding
 

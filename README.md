@@ -76,7 +76,7 @@ AI-Powered Stock Research Tool with fund tracking and comprehensive analysis.
    ```
 
 5. **Access the application**
-   - Frontend: http://localhost
+   - Frontend: http://localhost:8080
    - API Docs: http://localhost:8000/docs
    - Dagster UI: http://localhost:3001
 

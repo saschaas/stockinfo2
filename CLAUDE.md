@@ -54,7 +54,7 @@ make db-reset                 # Reset and reapply all migrations
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │  Frontend   │◄───►│  Backend API │◄───►│  PostgreSQL │
 │  (React)    │     │  (FastAPI)   │     │             │
-│  Port 80    │     │  Port 8000   │     │  Port 5432  │
+│  Port 8080  │     │  Port 8000   │     │  Port 5432  │
 └─────────────┘     └──────┬───────┘     └─────────────┘
                           │
               ┌───────────┼───────────┐

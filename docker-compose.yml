@@ -160,7 +160,7 @@ services:
       dockerfile: Dockerfile
     container_name: stockinfo-frontend
     ports:
-      - "80:80"
+      - "8080:80"  # Changed from 80:80 to avoid privileged port issues
     depends_on:
       - backend
     restart: unless-stopped
