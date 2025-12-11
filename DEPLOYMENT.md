@@ -80,13 +80,28 @@ Both configurations produce identical results; GPU just runs faster.
 
 ### Error: "net.ipv4.ip_unprivileged_port_start: permission denied"
 
-**Cause**: Trying to bind to privileged port (< 1024) without sufficient permissions
+**Cause 1**: Trying to bind to privileged port (< 1024) without sufficient permissions
 
 **Solution**: The default configuration now uses port 8080 instead of port 80. Access the frontend at http://localhost:8080
 
 If you need to use port 80 (requires root/sudo):
 1. Run Docker with elevated privileges, OR
 2. Set up a reverse proxy (nginx/caddy) that runs on port 80 and forwards to 8080
+
+**Cause 2**: Docker security restrictions (AppArmor/SELinux) preventing sysctl modifications
+
+**Solution**: Use the provided `docker-compose.override.yml` file which disables these restrictions:
+
+```bash
+# The override file is automatically used by docker-compose
+docker-compose up -d
+```
+
+The `docker-compose.override.yml` file adds these settings to all services:
+- `security_opt: [apparmor=unconfined, seccomp=unconfined]` - Disables AppArmor and seccomp
+- `userns_mode: host` - Uses host user namespace
+
+**Note**: These settings reduce container isolation but are necessary on some restricted systems. Only use on trusted development/internal servers.
 
 ### Ollama Not Responding
 

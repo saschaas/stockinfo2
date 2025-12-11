@@ -60,6 +60,8 @@ AI-Powered Stock Research Tool with fund tracking and comprehensive analysis.
    docker-compose up -d
    ```
 
+   **Note for restricted servers**: If you encounter the error "permission denied" related to sysctls, the provided `docker-compose.override.yml` file will automatically apply security workarounds. See [DEPLOYMENT.md](DEPLOYMENT.md) for details.
+
 3. **Initialize database**
    ```bash
    docker-compose --profile init up db-init

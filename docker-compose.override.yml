@@ -1,0 +1,58 @@
+# Docker Compose override for servers with restricted permissions
+# This file adds security options to bypass sysctl permission errors
+# Usage: Place this file in the same directory as docker-compose.yml
+#        Docker Compose will automatically use it
+#
+# Fixes the error: "open sysctl net.ipv4.ip_unprivileged_port_start file:
+# reopen fd 8: permission denied"
+
+version: '3.8'
+
+services:
+  postgres:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  redis:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  ollama:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  backend:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  celery-worker:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  celery-beat:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  dagster:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
+
+  frontend:
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    userns_mode: "host"
