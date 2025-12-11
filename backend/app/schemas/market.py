@@ -42,3 +42,29 @@ class MarketSentimentHistoryResponse(BaseModel):
 
     days: int
     history: list[dict[str, Any]]
+
+
+class WebScrapedMarketDataResponse(BaseModel):
+    """Response schema for web-scraped market data."""
+
+    date: date
+    source_url: str
+    source_name: str
+    market_summary: str | None = None
+    overall_sentiment: float | None = None
+    bullish_score: float | None = None
+    bearish_score: float | None = None
+    trending_sectors: list[dict[str, Any]] = Field(default_factory=list)
+    declining_sectors: list[dict[str, Any]] = Field(default_factory=list)
+    market_themes: list[str] = Field(default_factory=list)
+    key_events: list[str] = Field(default_factory=list)
+    confidence_score: float | None = None
+    scraping_model: str | None = None
+    analysis_model: str | None = None
+
+
+class CombinedMarketResponse(BaseModel):
+    """Combined response with both traditional and web-scraped market data."""
+
+    traditional: MarketSentimentResponse
+    web_scraped: WebScrapedMarketDataResponse | None = None

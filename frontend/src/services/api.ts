@@ -27,11 +27,84 @@ export async function refreshMarketSentiment() {
   return data
 }
 
+export async function refreshWebScrapedMarket(
+  websiteKey?: string,
+  scrapingModel?: string,
+  analysisModel?: string
+): Promise<{ status: string; job_id: string; message: string }> {
+  const params = new URLSearchParams()
+  if (websiteKey) params.append('website_key', websiteKey)
+  if (scrapingModel) params.append('scraping_model', scrapingModel)
+  if (analysisModel) params.append('analysis_model', analysisModel)
+
+  const { data } = await api.post(`/market/sentiment/refresh-web-scraped?${params.toString()}`)
+  return data
+}
+
+export async function getMarketScrapingConfig(): Promise<{
+  available_websites: Record<string, { name: string; url: string }>
+}> {
+  const { data } = await api.get('/market/scraping-config')
+  return data
+}
+
+export async function setMarketScrapingConfig(
+  websiteKey: string,
+  scrapingModel?: string,
+  analysisModel?: string
+): Promise<{ status: string; message: string }> {
+  const { data } = await api.post('/market/scraping-config', {
+    website_key: websiteKey,
+    scraping_model: scrapingModel,
+    analysis_model: analysisModel,
+  })
+  return data
+}
+
 export async function fetchIndicesHistory(days: number = 90) {
   const { data } = await api.get('/market/indices/history', {
     params: { days },
   })
   return data
+}
+
+// Type definitions for market data
+export interface CombinedMarketResponse {
+  traditional: MarketSentimentResponse
+  web_scraped?: WebScrapedMarketDataResponse
+}
+
+export interface MarketSentimentResponse {
+  date: string
+  indices?: {
+    sp500: { close: number | null; change_pct: number | null }
+    nasdaq: { close: number | null; change_pct: number | null }
+    dow: { close: number | null; change_pct: number | null }
+  }
+  overall_sentiment?: number
+  bullish_score?: number
+  bearish_score?: number
+  hot_sectors: Array<{ name: string }>
+  negative_sectors: Array<{ name: string }>
+  top_news: Array<any>
+  message?: string
+}
+
+export interface WebScrapedMarketDataResponse {
+  date: string
+  source_url: string
+  source_name: string
+  market_summary?: string
+  overall_sentiment?: number
+  bullish_score?: number
+  bearish_score?: number
+  trending_sectors: Array<{ name: string }>
+  declining_sectors: Array<{ name: string }>
+  market_themes: string[]
+  key_events: string[]
+  confidence_score?: number
+  scraping_model?: string
+  analysis_model?: string
 }
 
 // Stock endpoints

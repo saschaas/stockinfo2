@@ -161,6 +161,68 @@ class MarketSentiment(Base):
     )
 
 
+class WebScrapedMarketData(Base):
+    """Market data extracted from web scraping with AI analysis."""
+
+    __tablename__ = "web_scraped_market_data"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+
+    # Source information
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_name: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # e.g., "market_overview_perplexity"
+    data_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="market_overview"
+    )
+
+    # Raw scraped data
+    raw_scraped_data: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
+    scraping_model: Mapped[str] = mapped_column(
+        String(50), nullable=True
+    )  # LLM used for extraction
+
+    # AI analysis results
+    market_summary: Mapped[str] = mapped_column(Text, nullable=True)
+    overall_sentiment: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
+    bullish_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
+    bearish_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
+
+    # Sector analysis
+    trending_sectors: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    declining_sectors: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+
+    # Market themes/narratives
+    market_themes: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+    key_events: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+
+    # Analysis metadata
+    analysis_model: Mapped[str] = mapped_column(
+        String(50), nullable=True
+    )  # LLM used for analysis
+    analysis_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Quality indicators
+    confidence_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=True)
+    data_completeness: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )  # 0-100
+
+    # Extraction metadata
+    extraction_method: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="mcp_playwright"
+    )
+    response_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class StockAnalysis(Base):
     """Comprehensive stock analysis results."""
 
@@ -174,6 +236,7 @@ class StockAnalysis(Base):
     company_name: Mapped[str] = mapped_column(String(200), nullable=True)
     sector: Mapped[str] = mapped_column(String(100), nullable=True)
     industry: Mapped[str] = mapped_column(String(100), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
 
     # Valuation metrics
     pe_ratio: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=True)

@@ -48,6 +48,7 @@ dependencies = [
     # HTTP clients
     "httpx>=0.25.2",
     "aiohttp>=3.9.1",
+    "playwright>=1.40.0",
 
     # Financial data sources
     "yfinance>=0.2.33",

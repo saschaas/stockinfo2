@@ -272,3 +272,65 @@ reporting:
     default_height: 400
     default_width: 800
     theme: "plotly_white"
+
+# ==============================================================================
+# Web Scraping Configuration
+# ==============================================================================
+web_scraping:
+  # Company profile description
+  company_profile:
+    url_pattern: "https://finance.yahoo.com/quote/{TICKER}/profile/"
+    extraction_prompt: |
+      Extract the company description from this webpage accessibility tree.
+
+      Requirements:
+      - Find the business description section (usually labeled "Description" or "Business Summary")
+      - Extract ONLY the text describing what the company does and how they make money
+      - Return the description as a JSON object with a "description" key
+      - If multiple description sections exist, combine them coherently
+      - If no description found, return {"description": ""}
+
+      Return ONLY valid JSON in this format:
+      {"description": "The company description text here..."}
+    timeout: 30
+    fallback_enabled: true
+
+  # Market data from web scraping
+  market_overview_perplexity:
+    url_pattern: "https://www.marketwatch.com/"
+    extraction_prompt: |
+      Extract market overview information from this MarketWatch homepage.
+
+      Requirements:
+      - Extract the overall market sentiment from headlines and market data
+      - Identify trending/hot sectors mentioned in articles
+      - Identify declining/concerning sectors or stocks
+      - Extract key market themes or narratives from top stories
+      - Extract significant market events or news from headlines
+      - Look for bullish/bearish language in headlines and summaries
+
+      Return ONLY valid JSON in this exact format:
+      {
+        "market_summary": "Overall market description based on headlines and data...",
+        "trending_sectors": ["sector1", "sector2", "sector3"],
+        "declining_sectors": ["sector1", "sector2"],
+        "market_themes": ["theme1", "theme2"],
+        "key_events": ["event1", "event2"],
+        "sentiment_indicators": {
+          "positive_mentions": ["positive indicator1", "positive indicator2"],
+          "negative_mentions": ["negative indicator1", "negative indicator2"]
+        }
+      }
+
+      If information is not found, return empty arrays/strings.
+      DO NOT make up information that is not present on the page.
+    timeout: 60
+    fallback_enabled: true
+
+  # Future data types can be added here
+  # Example:
+  # executive_compensation:
+  #   url_pattern: "https://finance.yahoo.com/quote/{TICKER}/compensation/"
+  #   extraction_prompt: "Extract executive compensation data..."
+  #   timeout: 30
+  #   fallback_enabled: true

@@ -1,10 +1,23 @@
 """Application configuration using Pydantic Settings."""
 
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import Any, Dict
 
+import yaml
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass
+class WebScrapingConfig:
+    """Configuration for web scraping a specific data type."""
+
+    data_type: str
+    url_pattern: str
+    extraction_prompt: str
+    timeout: int = 30
+    fallback_enabled: bool = True
 
 
 class Settings(BaseSettings):
@@ -138,6 +151,29 @@ class Settings(BaseSettings):
     # ==========================================================================
     sentry_dsn: str | None = Field(default=None, description="Sentry DSN")
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
+
+    @property
+    def web_scraping_configs(self) -> Dict[str, "WebScrapingConfig"]:
+        """Load web scraping configurations from YAML config file."""
+        try:
+            with open("config/config.yaml", "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+
+            scraping_configs = config.get("web_scraping", {})
+
+            result = {}
+            for data_type, cfg in scraping_configs.items():
+                result[data_type] = WebScrapingConfig(
+                    data_type=data_type,
+                    url_pattern=cfg.get("url_pattern", ""),
+                    extraction_prompt=cfg.get("extraction_prompt", ""),
+                    timeout=cfg.get("timeout", 30),
+                    fallback_enabled=cfg.get("fallback_enabled", True),
+                )
+            return result
+        except Exception as e:
+            # Return empty dict if config file doesn't exist or has no web_scraping section
+            return {}
 
     @field_validator("log_level")
     @classmethod

@@ -22,10 +22,28 @@ WORKDIR /app
 # Build argument for optional extras (e.g., "dagster")
 ARG INSTALL_EXTRAS=""
 
-# Install runtime dependencies
+# Install runtime dependencies including Playwright requirements
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    wget \
+    # Playwright browser dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -37,6 +55,11 @@ COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir /wheels/*.whl && \
     rm -rf /wheels && \
     if [ -n "$INSTALL_EXTRAS" ]; then pip install --no-cache-dir ".[$INSTALL_EXTRAS]"; fi
+
+# Install Playwright browsers in a system-wide location
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install chromium --with-deps && \
+    chmod -R 755 /ms-playwright
 
 # Copy application code
 COPY backend/ ./backend/
