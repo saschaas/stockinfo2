@@ -56,6 +56,7 @@ class StockAnalysisResponse(BaseModel):
     company_name: str | None = None
     sector: str | None = None
     industry: str | None = None
+    description: str | None = None
 
     # Valuation metrics
     pe_ratio: float | None = None
@@ -134,6 +135,7 @@ class StockAnalysisResponse(BaseModel):
             company_name=obj.company_name,
             sector=obj.sector,
             industry=obj.industry,
+            description=obj.description,
             pe_ratio=float(obj.pe_ratio) if obj.pe_ratio else None,
             forward_pe=float(obj.forward_pe) if obj.forward_pe else None,
             peg_ratio=float(obj.peg_ratio) if obj.peg_ratio else None,

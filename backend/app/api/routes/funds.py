@@ -173,13 +173,17 @@ async def get_aggregated_holdings(
         holdings_result = await db.execute(holdings_stmt)
         holdings = holdings_result.scalars().all()
 
-        # Aggregate by ticker
+        # Aggregate by normalized ticker (actual_ticker) to avoid duplicates
         for h in holdings:
-            key = h.ticker
+            # Get normalized ticker (converts CUSIP to ticker if possible)
+            actual_ticker = get_ticker_or_cusip(h.ticker)
+            # Use actual_ticker if available, otherwise use CUSIP + company combo as key
+            key = actual_ticker if actual_ticker else f"{h.ticker}_{h.company_name}"
+
             if key not in aggregated_holdings:
                 aggregated_holdings[key] = {
                     "ticker": h.ticker,
-                    "actual_ticker": get_ticker_or_cusip(h.ticker),  # Convert CUSIP to ticker
+                    "actual_ticker": actual_ticker,
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -189,7 +193,8 @@ async def get_aggregated_holdings(
             aggregated_holdings[key]["shares"] += h.shares or 0
             aggregated_holdings[key]["value"] += float(h.value)
             aggregated_holdings[key]["fund_count"] += 1
-            aggregated_holdings[key]["fund_names"].append(fund.name)
+            if fund.name not in aggregated_holdings[key]["fund_names"]:
+                aggregated_holdings[key]["fund_names"].append(fund.name)
             total_value += float(h.value)
 
     # Convert to list and calculate percentages
@@ -318,14 +323,17 @@ async def get_aggregated_changes(
             else:
                 value_change = 0.0
 
-            # Aggregate by ticker and change type
+            # Aggregate by normalized ticker and change type to avoid duplicates
             change_dict = aggregated_changes[h.change_type]
-            key = h.ticker
+            # Get normalized ticker (converts CUSIP to ticker if possible)
+            actual_ticker = get_ticker_or_cusip(h.ticker)
+            # Use actual_ticker if available, otherwise use CUSIP + company combo as key
+            key = actual_ticker if actual_ticker else f"{h.ticker}_{h.company_name}"
 
             if key not in change_dict:
                 change_dict[key] = {
                     "ticker": h.ticker,
-                    "actual_ticker": get_ticker_or_cusip(h.ticker),
+                    "actual_ticker": actual_ticker,
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -340,7 +348,8 @@ async def get_aggregated_changes(
             change_dict[key]["shares_change"] += h.shares_change or 0
             change_dict[key]["value_change"] += value_change
             change_dict[key]["fund_count"] += 1
-            change_dict[key]["fund_names"].append(fund.name)
+            if fund.name not in change_dict[key]["fund_names"]:
+                change_dict[key]["fund_names"].append(fund.name)
 
     # Convert to lists and calculate percentages
     result_changes = {

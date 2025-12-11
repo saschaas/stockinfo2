@@ -53,6 +53,7 @@ interface CollapsedSections {
 export default function StockResearch() {
   const [ticker, setTicker] = useState('')
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const { addJob, jobs, activeJob, setActiveJob } = useResearchStore()
 
   // Fetch available Ollama models on component mount
@@ -279,7 +280,7 @@ export default function StockResearch() {
         {/* Active Job Results */}
         {jobs.length > 0 && activeJobData && (
           <>
-            {/* Job Status Card */}
+            {/* Job Status Card with Company Profile */}
             <div className="card card-body">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
@@ -290,7 +291,18 @@ export default function StockResearch() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">{activeJobData.ticker}</h2>
-                    <p className="text-sm text-gray-500">Job ID: {activeJobData.id.slice(0, 8)}...</p>
+                    {activeJobData.result?.company_name && (
+                      <p className="text-base text-gray-700 font-medium">
+                        {activeJobData.result.company_name}
+                      </p>
+                    )}
+                    {(activeJobData.result?.sector || activeJobData.result?.industry) && (
+                      <p className="text-sm text-gray-500">
+                        {[activeJobData.result.sector, activeJobData.result.industry]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <span
@@ -307,6 +319,30 @@ export default function StockResearch() {
                   {activeJobData.status.charAt(0).toUpperCase() + activeJobData.status.slice(1)}
                 </span>
               </div>
+
+              {/* Company Description */}
+              {activeJobData.result?.description && (
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Company Overview
+                    </h3>
+                    <button
+                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      className="text-xs text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                    >
+                      {isDescriptionExpanded ? 'Read less' : 'Read more'}
+                    </button>
+                  </div>
+                  <p
+                    className={`text-sm text-gray-700 leading-relaxed ${
+                      isDescriptionExpanded ? '' : 'line-clamp-2'
+                    }`}
+                  >
+                    {activeJobData.result.description}
+                  </p>
+                </div>
+              )}
 
               {/* Progress Display */}
               {activeJobData.status !== 'completed' && (

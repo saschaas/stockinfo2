@@ -44,6 +44,15 @@ export default function FundTracker() {
     setModalFunds(null)
   }
 
+  // Helper to check if ticker is valid for stock research
+  const isValidTicker = (ticker: string | null | undefined): boolean => {
+    if (!ticker) return false
+    // Check it's not a CUSIP (9 alphanumeric characters)
+    if (ticker.length === 9 && /^[A-Z0-9]{9}$/i.test(ticker)) return false
+    // Valid tickers are typically 1-5 characters
+    return ticker.length >= 1 && ticker.length <= 5
+  }
+
   // Stock selection helper functions
   const toggleTickerSelection = (ticker: string) => {
     setSelectedTickers(prev => {
@@ -530,39 +539,49 @@ export default function FundTracker() {
                               </tr>
                             </thead>
                             <tbody>
-                              {holdings.holdings.map((holding: any, index: number) => (
-                                <tr key={index} className="table-row">
-                                  <td className="px-4 py-3 font-semibold text-gray-900">{holding.ticker}</td>
-                                  <td className="px-4 py-3 text-sm">
-                                    <span
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleTickerSelection(holding.actual_ticker || holding.ticker);
-                                      }}
-                                      className={`cursor-pointer transition-colors ${
-                                        selectedTickers.has(holding.actual_ticker || holding.ticker)
-                                          ? 'text-primary-600 font-semibold underline'
-                                          : 'text-gray-600 hover:text-primary-500 hover:underline'
-                                      }`}
-                                    >
-                                      {holding.company_name}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-sm font-mono">{holding.shares.toLocaleString()}</td>
-                                  <td className="px-4 py-3 text-right text-sm font-mono">${(holding.value / 1000000).toFixed(2)}M</td>
-                                  <td className="px-4 py-3 text-right text-sm">{holding.percentage?.toFixed(2)}%</td>
-                                  {selectedFund === 0 && (
-                                    <td className="px-4 py-3 text-right">
-                                      <button
-                                        onClick={() => handleFundCountClick(holding.ticker, holding.company_name, holding.fund_names || [])}
-                                        className="font-medium text-primary-600 hover:text-primary-700"
-                                      >
-                                        {holding.fund_count}
-                                      </button>
+                              {holdings.holdings.map((holding: any, index: number) => {
+                                const validTicker = holding.actual_ticker
+                                const isValid = isValidTicker(validTicker)
+                                return (
+                                  <tr key={index} className="table-row">
+                                    <td className="px-4 py-3 font-semibold text-gray-900">{holding.ticker}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                      {isValid ? (
+                                        <span
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleTickerSelection(validTicker);
+                                          }}
+                                          className={`cursor-pointer transition-colors ${
+                                            selectedTickers.has(validTicker)
+                                              ? 'text-primary-600 font-semibold underline'
+                                              : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                          }`}
+                                        >
+                                          {holding.company_name}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-600">
+                                          {holding.company_name}
+                                        </span>
+                                      )}
                                     </td>
-                                  )}
-                                </tr>
-                              ))}
+                                    <td className="px-4 py-3 text-right text-sm font-mono">{holding.shares.toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-sm font-mono">${(holding.value / 1000000).toFixed(2)}M</td>
+                                    <td className="px-4 py-3 text-right text-sm">{holding.percentage?.toFixed(2)}%</td>
+                                    {selectedFund === 0 && (
+                                      <td className="px-4 py-3 text-right">
+                                        <button
+                                          onClick={() => handleFundCountClick(holding.ticker, holding.company_name, holding.fund_names || [])}
+                                          className="font-medium text-primary-600 hover:text-primary-700"
+                                        >
+                                          {holding.fund_count}
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                )
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -600,29 +619,39 @@ export default function FundTracker() {
                                 .slice(0, 10);
                               return bought.length > 0 ? (
                                 <div className="space-y-2">
-                                  {bought.map((item: any, index: number) => (
-                                    <div key={index} className="bg-success-50 p-3 rounded-xl border border-success-100">
-                                      <div className="font-medium text-sm">
-                                        <span
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleTickerSelection(item.actual_ticker || item.ticker);
-                                          }}
-                                          className={`cursor-pointer transition-colors ${
-                                            selectedTickers.has(item.actual_ticker || item.ticker)
-                                              ? 'text-primary-600 font-semibold underline'
-                                              : 'text-gray-900 hover:text-primary-500 hover:underline'
-                                          }`}
-                                        >
-                                          {item.company_name || item.ticker}
-                                        </span>
+                                  {bought.map((item: any, index: number) => {
+                                    const validTicker = item.actual_ticker
+                                    const isValid = isValidTicker(validTicker)
+                                    return (
+                                      <div key={index} className="bg-success-50 p-3 rounded-xl border border-success-100">
+                                        <div className="font-medium text-sm">
+                                          {isValid ? (
+                                            <span
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleTickerSelection(validTicker);
+                                              }}
+                                              className={`cursor-pointer transition-colors ${
+                                                selectedTickers.has(validTicker)
+                                                  ? 'text-primary-600 font-semibold underline'
+                                                  : 'text-gray-900 hover:text-primary-500 hover:underline'
+                                              }`}
+                                            >
+                                              {item.company_name || item.ticker}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-900">
+                                              {item.company_name || item.ticker}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex justify-between items-center mt-1">
+                                          <div className="text-xs text-success-700">+${(item.value_change / 1000000).toFixed(2)}M</div>
+                                          <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
+                                        </div>
                                       </div>
-                                      <div className="flex justify-between items-center mt-1">
-                                        <div className="text-xs text-success-700">+${(item.value_change / 1000000).toFixed(2)}M</div>
-                                        <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
-                                      </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                               ) : <p className="text-sm text-gray-500">No positions bought</p>;
                             })()}
@@ -639,29 +668,39 @@ export default function FundTracker() {
                                 .slice(0, 10);
                               return sold.length > 0 ? (
                                 <div className="space-y-2">
-                                  {sold.map((item: any, index: number) => (
-                                    <div key={index} className="bg-danger-50 p-3 rounded-xl border border-danger-100">
-                                      <div className="font-medium text-sm">
-                                        <span
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleTickerSelection(item.actual_ticker || item.ticker);
-                                          }}
-                                          className={`cursor-pointer transition-colors ${
-                                            selectedTickers.has(item.actual_ticker || item.ticker)
-                                              ? 'text-primary-600 font-semibold underline'
-                                              : 'text-gray-900 hover:text-primary-500 hover:underline'
-                                          }`}
-                                        >
-                                          {item.company_name || item.ticker}
-                                        </span>
+                                  {sold.map((item: any, index: number) => {
+                                    const validTicker = item.actual_ticker
+                                    const isValid = isValidTicker(validTicker)
+                                    return (
+                                      <div key={index} className="bg-danger-50 p-3 rounded-xl border border-danger-100">
+                                        <div className="font-medium text-sm">
+                                          {isValid ? (
+                                            <span
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleTickerSelection(validTicker);
+                                              }}
+                                              className={`cursor-pointer transition-colors ${
+                                                selectedTickers.has(validTicker)
+                                                  ? 'text-primary-600 font-semibold underline'
+                                                  : 'text-gray-900 hover:text-primary-500 hover:underline'
+                                              }`}
+                                            >
+                                              {item.company_name || item.ticker}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-900">
+                                              {item.company_name || item.ticker}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex justify-between items-center mt-1">
+                                          <div className="text-xs text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</div>
+                                          <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
+                                        </div>
                                       </div>
-                                      <div className="flex justify-between items-center mt-1">
-                                        <div className="text-xs text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</div>
-                                        <div className="text-xs text-gray-500">{item.percentage?.toFixed(2)}%</div>
-                                      </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                               ) : <p className="text-sm text-gray-500">No positions sold</p>;
                             })()}
@@ -699,28 +738,38 @@ export default function FundTracker() {
                             <tbody>
                               {changes.new_positions
                                 .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
-                                .map((item: any, index: number) => (
-                                <tr key={index} className="table-row">
-                                  <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
-                                  <td className="px-4 py-3 text-sm">
-                                    <span
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleTickerSelection(item.actual_ticker || item.ticker);
-                                      }}
-                                      className={`cursor-pointer transition-colors ${
-                                        selectedTickers.has(item.actual_ticker || item.ticker)
-                                          ? 'text-primary-600 font-semibold underline'
-                                          : 'text-gray-600 hover:text-primary-500 hover:underline'
-                                      }`}
-                                    >
-                                      {item.company_name || '-'}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-sm text-success-700">+${(item.value / 1000000).toFixed(2)}M</td>
-                                  <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
-                                </tr>
-                              ))}
+                                .map((item: any, index: number) => {
+                                  const validTicker = item.actual_ticker
+                                  const isValid = isValidTicker(validTicker)
+                                  return (
+                                    <tr key={index} className="table-row">
+                                      <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                      <td className="px-4 py-3 text-sm">
+                                        {isValid ? (
+                                          <span
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleTickerSelection(validTicker);
+                                            }}
+                                            className={`cursor-pointer transition-colors ${
+                                              selectedTickers.has(validTicker)
+                                                ? 'text-primary-600 font-semibold underline'
+                                                : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                            }`}
+                                          >
+                                            {item.company_name || '-'}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-600">
+                                            {item.company_name || '-'}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-sm text-success-700">+${(item.value / 1000000).toFixed(2)}M</td>
+                                      <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
+                                    </tr>
+                                  )
+                                })}
                             </tbody>
                           </table>
                         </div>
@@ -759,28 +808,38 @@ export default function FundTracker() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {soldPositions.map((item: any, index: number) => (
-                                  <tr key={index} className="table-row">
-                                    <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                      <span
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleTickerSelection(item.ticker);
-                                        }}
-                                        className={`cursor-pointer transition-colors ${
-                                          selectedTickers.has(item.ticker)
-                                            ? 'text-primary-600 font-semibold underline'
-                                            : 'text-gray-600 hover:text-primary-500 hover:underline'
-                                        }`}
-                                      >
-                                        {item.company_name || '-'}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-sm text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</td>
-                                    <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
-                                  </tr>
-                                ))}
+                                {soldPositions.map((item: any, index: number) => {
+                                  const validTicker = item.actual_ticker
+                                  const isValid = isValidTicker(validTicker)
+                                  return (
+                                    <tr key={index} className="table-row">
+                                      <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                      <td className="px-4 py-3 text-sm">
+                                        {isValid ? (
+                                          <span
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleTickerSelection(validTicker);
+                                            }}
+                                            className={`cursor-pointer transition-colors ${
+                                              selectedTickers.has(validTicker)
+                                                ? 'text-primary-600 font-semibold underline'
+                                                : 'text-gray-600 hover:text-primary-500 hover:underline'
+                                            }`}
+                                          >
+                                            {item.company_name || '-'}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-600">
+                                            {item.company_name || '-'}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-sm text-danger-700">${(item.value_change / 1000000).toFixed(2)}M</td>
+                                      <td className="px-4 py-3 text-right text-sm">{item.percentage?.toFixed(2)}%</td>
+                                    </tr>
+                                  )
+                                })}
                               </tbody>
                             </table>
                           </div>

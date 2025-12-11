@@ -83,6 +83,20 @@ def research_stock(
             })
             data_sources["stock_info"] = {"type": "api", "name": "yahoo_finance"}
 
+            # Fetch company description
+            description = stock_info.get("description")
+
+            # TODO: Add web scraping fallback when MCP server integration is available
+            # If Yahoo Finance doesn't return description, could fallback to web scraping
+            # from configurable URL (see web_scraping section in config.yaml)
+            # This requires MCP Playwright server to be running and accessible from backend
+
+            result["description"] = description
+            if description:
+                data_sources["company_description"] = {"type": "api", "name": "yahoo_finance"}
+            else:
+                logger.info("No company description available from API", ticker=ticker)
+
             # Step 2: Fetch fundamentals (40%)
             await set_job_progress(job_id, "running", 30, "Fetching fundamentals...")
             await update_job_status(job_id, ticker, "running", 30, "Fetching fundamentals...")

@@ -77,16 +77,20 @@ def is_cusip(identifier: str) -> bool:
     return len(identifier) == 9 and identifier.isalnum()
 
 
-def get_ticker_or_cusip(identifier: str) -> str:
+def get_ticker_or_cusip(identifier: str) -> str | None:
     """Get ticker symbol from identifier, or return original if not CUSIP.
 
     Args:
         identifier: CUSIP or ticker symbol
 
     Returns:
-        Ticker symbol if CUSIP found in mapping, otherwise original identifier
+        Ticker symbol if CUSIP found in mapping, None if CUSIP not found,
+        or original identifier if it's already a ticker symbol
     """
     if is_cusip(identifier):
+        # If it's a CUSIP, only return the ticker if found in mapping
+        # Return None if CUSIP is not mapped (don't return the CUSIP itself)
         ticker = cusip_to_ticker(identifier)
-        return ticker if ticker else identifier
+        return ticker
+    # If not a CUSIP, assume it's already a ticker symbol
     return identifier

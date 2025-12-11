@@ -28,7 +28,18 @@
       "mcp__playwright__browser_close",
       "Bash(docker cp:*)",
       "Bash(python:*)",
-      "mcp__playwright__browser_network_requests"
+      "mcp__playwright__browser_network_requests",
+      "Bash(find:*)",
+      "Bash(make db-upgrade:*)",
+      "Bash(cat:*)",
+      "Bash(docker ps:*)",
+      "Bash(ls -la \"D:\\Docs\\Coding\\stockinfo2\\backend\\app\\tasks\"\" 2>/dev/null || echo \"Path not found, trying alternative \")",
+      "Bash(ls -la \"D:\\Docs\\Coding\\stockinfo2\\backend\\app\\api\\routes\"\" 2>/dev/null || echo \"Path not found \")",
+      "Bash(docker-compose stop:*)",
+      "Bash(docker-compose rm:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []
