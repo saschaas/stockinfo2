@@ -5,54 +5,93 @@
 #
 # Fixes the error: "open sysctl net.ipv4.ip_unprivileged_port_start file:
 # reopen fd 8: permission denied"
+#
+# Uses host networking mode to bypass all network namespace restrictions
 
 version: '3.8'
 
 services:
   postgres:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    # Remove ports mapping as host networking directly binds to host ports
+    ports: []
 
   redis:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    ports: []
 
   ollama:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    ports: []
 
   backend:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    ports: []
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@localhost:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://localhost:6379/0
+      - CELERY_BROKER_URL=redis://localhost:6379/1
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/2
+      - OLLAMA_BASE_URL=http://localhost:11434
 
   celery-worker:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@localhost:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://localhost:6379/0
+      - CELERY_BROKER_URL=redis://localhost:6379/1
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/2
+      - OLLAMA_BASE_URL=http://localhost:11434
+      - OLLAMA_HOST=http://localhost:11434
 
   celery-beat:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@localhost:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://localhost:6379/0
+      - CELERY_BROKER_URL=redis://localhost:6379/1
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/2
 
   dagster:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    ports: []
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@localhost:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://localhost:6379/0
+      - OLLAMA_BASE_URL=http://localhost:11434
 
   frontend:
+    network_mode: "host"
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined
     userns_mode: "host"
+    ports: []

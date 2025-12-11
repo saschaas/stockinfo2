@@ -88,9 +88,9 @@ If you need to use port 80 (requires root/sudo):
 1. Run Docker with elevated privileges, OR
 2. Set up a reverse proxy (nginx/caddy) that runs on port 80 and forwards to 8080
 
-**Cause 2**: Docker security restrictions (AppArmor/SELinux) preventing sysctl modifications
+**Cause 2**: Docker security restrictions (AppArmor/SELinux) preventing sysctl modifications during network namespace creation
 
-**Solution**: Use the provided `docker-compose.override.yml` file which disables these restrictions:
+**Solution**: Use the provided `docker-compose.override.yml` file which uses host networking mode to bypass these restrictions:
 
 ```bash
 # The override file is automatically used by docker-compose
@@ -98,10 +98,17 @@ docker-compose up -d
 ```
 
 The `docker-compose.override.yml` file adds these settings to all services:
+- `network_mode: host` - **Uses host networking (bypasses network namespaces entirely)**
 - `security_opt: [apparmor=unconfined, seccomp=unconfined]` - Disables AppArmor and seccomp
 - `userns_mode: host` - Uses host user namespace
 
-**Note**: These settings reduce container isolation but are necessary on some restricted systems. Only use on trusted development/internal servers.
+**Important**: With host networking mode:
+- All services bind directly to the host's network interfaces
+- Services are accessible on their respective ports: postgres (5432), redis (6379), ollama (11434), backend (8000), frontend (8080), dagster (3001)
+- Container-to-container communication works via `localhost` instead of service names
+- The application is pre-configured to work with both modes (it connects to localhost by default)
+
+**Note**: These settings significantly reduce container isolation but are necessary on systems with strict security policies. Only use on trusted development/internal servers.
 
 ### Ollama Not Responding
 
