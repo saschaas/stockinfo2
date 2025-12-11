@@ -90,14 +90,21 @@ If you need to use port 80 (requires root/sudo):
 
 **Cause 2**: Docker security restrictions (AppArmor/SELinux) preventing sysctl modifications during network namespace creation
 
-**Solution**: Use the provided `docker-compose.override.yml` file which uses host networking mode to bypass these restrictions:
+**Solution**: Use the provided `docker-compose.override.remote.yml` file which uses host networking mode to bypass these restrictions:
 
 ```bash
-# The override file is automatically used by docker-compose
+# For remote Linux servers with restricted permissions, use the override file
+docker-compose -f docker-compose.yml -f docker-compose.override.remote.yml up -d
+```
+
+**IMPORTANT**: The `docker-compose.override.remote.yml` file is **ONLY for remote Linux servers** with strict security policies. **DO NOT use it for local Windows/WSL2 or Mac development** as host networking mode doesn't work the same way on these platforms.
+
+For local development on Windows/WSL2 or Mac, use the standard command:
+```bash
 docker-compose up -d
 ```
 
-The `docker-compose.override.yml` file adds these settings to all services:
+The `docker-compose.override.remote.yml` file adds these settings to all services:
 - `network_mode: host` - **Uses host networking (bypasses network namespaces entirely)**
 - `security_opt: [apparmor=unconfined, seccomp=unconfined]` - Disables AppArmor and seccomp
 - `userns_mode: host` - Uses host user namespace
