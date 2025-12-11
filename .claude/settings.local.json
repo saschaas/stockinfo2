@@ -39,7 +39,13 @@
       "Bash(docker-compose rm:*)",
       "Bash(docker stop:*)",
       "Bash(docker rm:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(pkill:*)",
+      "Bash(docker inspect:*)",
+      "Bash(ls:*)",
+      "Bash(fold:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

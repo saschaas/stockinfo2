@@ -1,15 +1,39 @@
 import axios from 'axios'
 
-// Use relative URL to go through nginx proxy (works with both normal and host networking)
-// In production/deployment, nginx proxies /api/* to backend:8000/api/*
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+// Construct API URL based on current page URL (works with both normal and host networking)
+// This allows API calls to work when accessing via IP address or domain
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  // Use current page's host and protocol to construct full origin
+  const protocol = window.location.protocol
+  const host = window.location.host // includes port if present
+  return `${protocol}//${host}`
+}
 
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
   },
 })
+
+// Add request interceptor to set baseURL dynamically on each request
+api.interceptors.request.use(
+  (config) => {
+    // Set baseURL on every request to ensure it uses current window location
+    const baseURL = `${getApiBaseUrl()}/api/v1`
+    config.baseURL = baseURL
+
+    // Don't add trailing slashes - they cause redirects that lose the port
+    // FastAPI will accept URLs without trailing slashes just fine
+
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
 
 // Market endpoints
 export async function fetchMarketSentiment() {
