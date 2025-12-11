@@ -106,7 +106,10 @@ The `docker-compose.override.yml` file adds these settings to all services:
 - All services bind directly to the host's network interfaces
 - Services are accessible on their respective ports: postgres (5432), redis (6379), ollama (11434), backend (8000), frontend (8080), dagster (3001)
 - Container-to-container communication works via `localhost` instead of service names
-- The application is pre-configured to work with both modes (it connects to localhost by default)
+- The override file includes a special `nginx.host.conf` that:
+  - Listens on port 8080 (instead of 80) to avoid privileged port issues
+  - Uses `localhost` (instead of service names) for proxy_pass directives
+- The application is fully configured to work with host networking mode
 
 **Note**: These settings significantly reduce container isolation but are necessary on systems with strict security policies. Only use on trusted development/internal servers.
 
