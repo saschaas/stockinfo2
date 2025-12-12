@@ -479,8 +479,6 @@ def research_stock(
                         "risk_score": result.get("risk_score"),
                         "risk_level": result.get("risk_level"),
                         "upside_potential": result.get("upside_potential"),
-                        "price_target_base": result.get("price_target_base"),
-                        "price_target_optimistic": result.get("price_target_optimistic"),
                         "key_strengths": result.get("key_strengths", []),
                         "key_risks": result.get("key_risks", []),
                         "data_completeness_score": result.get("data_completeness_score"),

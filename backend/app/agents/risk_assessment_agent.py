@@ -544,55 +544,13 @@ class RiskAssessmentAgent:
             if resistance_levels:
                 rr.nearest_resistance = resistance_levels[0]
 
-        # Get price targets from growth analysis (if available)
-        price_target_base = 0.0
-        price_target_optimistic = 0.0
-        upside_potential = 0.0
-        if growth:
-            price_target_base = self._safe_float(growth.get("price_target_base", 0))
-            price_target_optimistic = self._safe_float(growth.get("price_target_optimistic", 0))
-            upside_potential = self._safe_float(growth.get("upside_potential", 0))
-            logger.info(
-                "Risk/Reward calculation - Price targets from growth analysis",
-                price_target_base=price_target_base,
-                price_target_optimistic=price_target_optimistic,
-                upside_potential=upside_potential,
-                nearest_resistance=rr.nearest_resistance,
-                growth_data_keys=list(growth.keys()) if growth else None
-            )
-
-        # Determine the best target for reward calculation
-        # Priority: Use price target if significantly higher than resistance, else use resistance
-        best_target = rr.nearest_resistance
-        if price_target_base > 0:
-            if rr.nearest_resistance > 0:
-                # Use price target if it's within reasonable range (not too far from resistance)
-                # If price target is much higher, use a blend
-                if price_target_base > rr.nearest_resistance * 1.5:
-                    # Price target is very optimistic, use weighted average
-                    best_target = (rr.nearest_resistance * 0.4 + price_target_base * 0.6)
-                    logger.info("Using blended target (base > 1.5x resistance)", blended_target=best_target, base=price_target_base, resistance=rr.nearest_resistance)
-                else:
-                    # Use the higher of the two
-                    best_target = max(rr.nearest_resistance, price_target_base)
-                    logger.info("Using max of base and resistance", best_target=best_target, base=price_target_base, resistance=rr.nearest_resistance)
-            else:
-                # No resistance level, use price target directly
-                best_target = price_target_base
-                logger.info("Using base target directly (no resistance)", best_target=best_target)
-        else:
-            logger.warning("No price_target_base available, defaulting to resistance", resistance=rr.nearest_resistance)
-
         # Calculate risk distance (to support/stop)
         if current_price > 0 and rr.nearest_support > 0:
             rr.risk_distance_pct = ((current_price - rr.nearest_support) / current_price) * 100
 
-        # Calculate reward distance (to target)
-        if current_price > 0 and best_target > 0:
-            rr.reward_distance_pct = ((best_target - current_price) / current_price) * 100
-        elif current_price > 0 and upside_potential > 0:
-            # Fallback to upside potential if no target available
-            rr.reward_distance_pct = upside_potential
+        # Calculate reward distance (to resistance)
+        if current_price > 0 and rr.nearest_resistance > 0:
+            rr.reward_distance_pct = ((rr.nearest_resistance - current_price) / current_price) * 100
 
         # Calculate risk/reward ratio
         if rr.risk_distance_pct > 0:
@@ -615,8 +573,8 @@ class RiskAssessmentAgent:
         elif rr.nearest_support > 0:
             rr.suggested_stop = rr.nearest_support * 0.97  # 3% below support
 
-        # Target: Use the calculated best_target (incorporates price targets)
-        rr.suggested_target = best_target if best_target > 0 else rr.nearest_resistance
+        # Target: Use nearest resistance
+        rr.suggested_target = rr.nearest_resistance
 
         return rr
 
