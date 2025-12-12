@@ -35,6 +35,12 @@ api.interceptors.request.use(
   }
 )
 
+// Health check endpoint
+export async function fetchHealthStatus() {
+  const { data } = await api.get('/health')
+  return data
+}
+
 // Market endpoints
 export async function fetchMarketSentiment() {
   const { data } = await api.get('/market/sentiment')

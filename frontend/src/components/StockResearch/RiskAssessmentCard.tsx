@@ -98,8 +98,22 @@ export default function RiskAssessmentCard({ data }: RiskAssessmentCardProps) {
       <div className="p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           {/* Risk/Reward Ratio */}
-          <div className="bg-cream rounded-xl p-4">
-            <div className="text-xs text-gray-500 mb-1">Risk/Reward</div>
+          <div className="bg-cream rounded-xl p-4 relative group">
+            <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+              Risk/Reward
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowDetails(true)
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Show calculation details"
+              >
+                <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            </div>
             <div className={`text-xl font-bold ${data.risk_reward?.is_favorable ? 'text-success-700' : 'text-warning-700'}`}>
               1:{safeToFixed(data.risk_reward?.risk_reward_ratio, 1)}
             </div>
@@ -246,7 +260,96 @@ export default function RiskAssessmentCard({ data }: RiskAssessmentCardProps) {
                       +{safeToFixed((data.risk_reward.suggested_target - data.current_price) / data.current_price * 100, 1)}%
                     </div>
                   )}
-                  <div className="text-xs text-gray-400 mt-1">Resistance</div>
+                  <div className="text-xs text-gray-400 mt-1">Growth Analysis Base</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Risk/Reward Calculation Details */}
+          {data.risk_reward && (
+            <div className="bg-primary-50 rounded-xl p-5 border border-primary-100">
+              <h5 className="font-medium text-primary-800 mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Risk/Reward Calculation Details
+              </h5>
+
+              <div className="space-y-3 text-sm">
+                {/* Current Price */}
+                <div className="flex justify-between items-start">
+                  <span className="text-primary-700 font-medium">Current Price:</span>
+                  <span className="text-primary-900">${safeToFixed(data.current_price, 2)}</span>
+                </div>
+
+                {/* Risk Calculation */}
+                <div className="border-t border-primary-200 pt-3">
+                  <div className="font-medium text-primary-800 mb-2">Risk Calculation (Downside):</div>
+                  <div className="pl-4 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-primary-600">Entry Point:</span>
+                      <span className="text-primary-900 font-mono">${safeToFixed(data.risk_reward.suggested_entry || data.risk_reward.nearest_support, 2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-primary-600">Stop Loss (2x ATR below support):</span>
+                      <span className="text-primary-900 font-mono">${safeToFixed(data.risk_reward.suggested_stop, 2)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-primary-200 pt-1 mt-1">
+                      <span className="text-primary-700 font-medium">Risk Distance:</span>
+                      <span className="text-danger-700 font-bold font-mono">{safeToFixed(data.risk_reward.risk_distance_pct, 2)}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reward Calculation */}
+                <div className="border-t border-primary-200 pt-3">
+                  <div className="font-medium text-primary-800 mb-2">Reward Calculation (Upside):</div>
+                  <div className="pl-4 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-primary-600">Current Price:</span>
+                      <span className="text-primary-900 font-mono">${safeToFixed(data.current_price, 2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-primary-600">Target Price (from Growth Analysis):</span>
+                      <span className="text-primary-900 font-mono">${safeToFixed(data.risk_reward.suggested_target, 2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-primary-500 italic">
+                      <span>• Uses "Base" price target from Growth Analysis</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-primary-500 italic">
+                      <span>• Blends with resistance if &gt;50% higher</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-primary-500 italic">
+                      <span>• Falls back to resistance if no analyst target</span>
+                    </div>
+                    <div className="flex justify-between border-t border-primary-200 pt-1 mt-1">
+                      <span className="text-primary-700 font-medium">Reward Distance:</span>
+                      <span className="text-success-700 font-bold font-mono">+{safeToFixed(data.risk_reward.reward_distance_pct, 2)}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Final Ratio */}
+                <div className="border-t-2 border-primary-300 pt-3">
+                  <div className="flex justify-between items-center bg-white rounded-lg p-3">
+                    <div>
+                      <div className="text-xs text-primary-600 mb-1">Risk/Reward Ratio:</div>
+                      <div className="text-xs text-primary-500">
+                        Reward ({safeToFixed(data.risk_reward.reward_distance_pct, 2)}%) ÷ Risk ({safeToFixed(data.risk_reward.risk_distance_pct, 2)}%)
+                      </div>
+                    </div>
+                    <div className={`text-2xl font-bold ${data.risk_reward.is_favorable ? 'text-success-700' : 'text-warning-700'}`}>
+                      1:{safeToFixed(data.risk_reward.risk_reward_ratio, 1)}
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-center">
+                    {data.risk_reward.is_favorable ? (
+                      <span className="text-success-700 font-medium">✓ Favorable (Ratio ≥ 2.0 recommended)</span>
+                    ) : (
+                      <span className="text-warning-700 font-medium">⚠ Unfavorable (Ratio &lt; 2.0)</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.app.api.routes import market, stocks, funds, reports, websocket
+from backend.app.api.routes import market, stocks, funds, reports, websocket, health
 from backend.app.config import get_settings
 from backend.app.core.exceptions import StockResearchException
 from backend.app.db.session import close_db, init_db
@@ -194,6 +194,7 @@ async def readiness_check() -> dict:
 
 
 # Include routers
+app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market"])
 app.include_router(stocks.router, prefix="/api/v1/stocks", tags=["Stocks"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["Funds"])

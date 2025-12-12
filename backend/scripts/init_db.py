@@ -83,9 +83,9 @@ async def seed_funds(session: AsyncSession, funds: list[dict]) -> int:
     count = 0
 
     for fund_data in funds:
-        # Check if fund already exists
+        # Check if fund already exists (use LIMIT 1 to handle duplicates)
         result = await session.execute(
-            text("SELECT id FROM funds WHERE cik = :cik"),
+            text("SELECT id FROM funds WHERE cik = :cik LIMIT 1"),
             {"cik": fund_data["cik"]}
         )
         existing = result.scalar_one_or_none()

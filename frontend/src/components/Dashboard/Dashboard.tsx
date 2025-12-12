@@ -1,17 +1,35 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchMarketSentiment, CombinedMarketResponse } from '../../services/api'
+import { fetchMarketSentiment, refreshMarketSentiment, CombinedMarketResponse } from '../../services/api'
 import MarketOverview from './MarketOverview'
 import SentimentCard from './SentimentCard'
 import WebScrapedMarketCard from './WebScrapedMarketCard'
+import DataSourceHealth from './DataSourceHealth'
 
 export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'traditional' | 'web-scraped' | 'both'>('both')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const { data: combinedData, isLoading, error } = useQuery<CombinedMarketResponse>({
+  const { data: combinedData, isLoading, error, refetch } = useQuery<CombinedMarketResponse>({
     queryKey: ['marketSentiment'],
     queryFn: fetchMarketSentiment,
   })
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      // Trigger backend refresh
+      await refreshMarketSentiment()
+      // Wait a bit for the task to complete, then refetch
+      setTimeout(() => {
+        refetch()
+        setIsRefreshing(false)
+      }, 3000)
+    } catch (err) {
+      console.error('Failed to refresh market data:', err)
+      setIsRefreshing(false)
+    }
+  }
 
   const sentiment = combinedData?.traditional
   const webScraped = combinedData?.web_scraped
@@ -51,6 +69,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Data Source Health Status */}
+      <DataSourceHealth />
+
       {/* Page Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -58,6 +79,29 @@ export default function Dashboard() {
           <p className="text-gray-500 text-sm mt-1">Market overview and sentiment analysis</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Refresh Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="btn btn-primary-outline flex items-center gap-2"
+            title="Refresh market data"
+          >
+            <svg
+              className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+
           {/* View Mode Toggle */}
           <div className="inline-flex rounded-lg border border-gray-200 p-1">
             <button

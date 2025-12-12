@@ -27,11 +27,28 @@ async def get_market_sentiment(
     Returns both traditional and web-scraped market data including:
     - Traditional: Major index performance, sentiment scores, sectors, news
     - Web-scraped: Market summary, sentiment, sectors, themes from configured website
+
+    Auto-triggers a refresh if no data exists or if data has all zero values (placeholder).
     """
     # Get the latest traditional sentiment
     stmt = select(MarketSentiment).order_by(MarketSentiment.date.desc()).limit(1)
     result = await db.execute(stmt)
     sentiment = result.scalar_one_or_none()
+
+    # Auto-trigger refresh if:
+    # 1. No data exists
+    # 2. Data has all zero values (placeholder)
+    # 3. Data is not from today (stale)
+    should_refresh = (
+        not sentiment or
+        (sentiment.sp500_close == 0 and sentiment.nasdaq_close == 0 and sentiment.dow_close == 0) or
+        sentiment.date < date.today()
+    )
+
+    if should_refresh:
+        from backend.app.tasks.market import refresh_market_sentiment as refresh_task
+        refresh_task.delay()
+        # Note: This will be async, so first load may show stale data, but subsequent loads will have fresh data
 
     if not sentiment:
         traditional_response = MarketSentimentResponse(
