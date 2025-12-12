@@ -1,3 +1,18 @@
 Risk/reward Ratio
 
-For the Risk/reward Ration, calculated in the Risk assessment of the stock Research part of the tool, I think the wrong target Price is sued. Please make sure to use the Target Price shown in the Quick metrics instead of the one displayed in the Risk assessment. Please make sure to doulble check if that makes sense. Then recalculate the Risk reward Ratio based on the new target Price. Make sure to know where the target Price in the quick metrics is coming from and why this value was not initially used. If you think the target Price newds to be changed after confirming, please update the calculation of the Risk reward value.
+For the Risk/reward Ration, calculated in the Risk assessment of the stock Research part of the tool, I think the wrong target Price is used. Please make sure to use the Target Price shown in the Quick metrics instead of the one displayed in the Risk assessment. Please make sure to doulble check if that makes sense. Then recalculate the Risk reward Ratio based on the new target Price. Make sure to know where the target Price in the quick metrics is coming from and why this value was not initially used. If you think the target Price newds to be changed after confirming, please update the calculation of the Risk reward value. Please also include Information on how the Risk and reward were calculated in an expandable field that Shows the Details, but all in the Risk Assessment Card.
+
+
+Config tab
+I would like to redo the Configuration tab of the app. Please review all relevant configuration Settings from any config file and make the relevant ones editable via the Configuration tab. Please Change the layout of the Configurationtab to have all config Settings on one site and not the step by step Approach.
+The must haves on the Configuration tab are:
+- API keys
+- selection of AI models for the different parts (stock Research with Analysis, Sentiment Analysis in the Dashboard, web scraping, agents, and add if I forgot something). The available models should be selectable via a drop down. Plus there should be the possibility to add a new model.
+- number of funds to Display in the recent changes part of the Fund Tracker.
+- number of items in the "Research History" in the stock Research part
+
+The "Fund Selection" that is currently in the Configuration tab is not needed anymore as this is handled in the Fund Tracker. By Default of of These should be in teh Fund Tracker!
+
+The "Analysis Settings" is not needed anymore! All Analysis should be performed by Default!
+
+Can you please analyse in Depth the nneded configurations and make a plan on how to Change this in the best way with a Minimum of changes to other parts. Please Keep the design modern and stick to the current design. Make sure to arrange the different Settings in meaningful categories, so it is easy for the user to find everything.

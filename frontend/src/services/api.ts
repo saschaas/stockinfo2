@@ -300,4 +300,73 @@ export async function checkHealth() {
   return data
 }
 
+// Configuration types
+export interface AIModelSettings {
+  default_model?: string
+  stock_research_model?: string
+  market_sentiment_model?: string
+  web_scraping_model?: string
+  temperature?: number
+  max_tokens?: number
+}
+
+export interface DisplayPreferences {
+  research_history_items?: number
+  fund_recent_changes_items?: number
+  holdings_per_fund?: number
+  peers_in_comparison?: number
+}
+
+export interface WebsiteInfo {
+  name: string
+  url: string
+}
+
+export interface MarketScrapingSettings {
+  website_key?: string
+  scraping_model?: string
+  analysis_model?: string
+  custom_websites?: Record<string, WebsiteInfo>
+}
+
+export interface ConfigSettings {
+  ai_models: AIModelSettings
+  display_preferences: DisplayPreferences
+  market_scraping: MarketScrapingSettings
+}
+
+export interface ConfigResponse {
+  settings: ConfigSettings
+  has_alpha_vantage_key: boolean
+  has_fmp_key: boolean
+  has_sec_user_agent: boolean
+}
+
+export interface TestAPIKeyRequest {
+  provider: string
+  api_key: string
+}
+
+export interface TestAPIKeyResponse {
+  valid: boolean
+  message: string
+  provider: string
+}
+
+// Configuration endpoints
+export async function fetchConfigSettings(): Promise<ConfigResponse> {
+  const { data } = await api.get('/config/settings')
+  return data
+}
+
+export async function updateConfigSettings(settings: ConfigSettings): Promise<{ status: string; message: string }> {
+  const { data } = await api.put('/config/settings', settings)
+  return data
+}
+
+export async function testAPIKey(request: TestAPIKeyRequest): Promise<TestAPIKeyResponse> {
+  const { data } = await api.post('/config/test-api-key', request)
+  return data
+}
+
 export default api
