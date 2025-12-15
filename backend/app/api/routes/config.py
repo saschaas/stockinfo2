@@ -266,16 +266,24 @@ async def test_api_key(request: TestAPIKeyRequest) -> TestAPIKeyResponse:
                         )
 
         elif request.provider == "fmp":
-            # Test FMP API key with a profile request
+            # Test FMP API key with a profile request (using stable API endpoint)
             import aiohttp
 
-            url = f"https://financialmodelingprep.com/api/v3/profile/MSFT"
-            params = {"apikey": request.api_key}
+            # Use the new stable API endpoint instead of deprecated v3
+            url = "https://financialmodelingprep.com/stable/profile"
+            params = {"symbol": "MSFT", "apikey": request.api_key}
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, params=params, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
+                        # Check for error message in response
+                        if isinstance(data, dict) and "Error Message" in data:
+                            return TestAPIKeyResponse(
+                                valid=False,
+                                message=data.get("Error Message", "API error"),
+                                provider="fmp",
+                            )
                         if isinstance(data, list) and len(data) > 0:
                             return TestAPIKeyResponse(
                                 valid=True,
@@ -286,6 +294,12 @@ async def test_api_key(request: TestAPIKeyRequest) -> TestAPIKeyResponse:
                         return TestAPIKeyResponse(
                             valid=False,
                             message="Invalid API key",
+                            provider="fmp",
+                        )
+                    elif response.status == 403:
+                        return TestAPIKeyResponse(
+                            valid=False,
+                            message="Access denied - check your FMP subscription plan",
                             provider="fmp",
                         )
 

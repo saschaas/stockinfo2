@@ -100,6 +100,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://172.18.0.1:6379/2
       - OLLAMA_BASE_URL=http://172.18.0.1:11434
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - FMP_API_KEY=${FMP_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
       - DEBUG=${DEBUG:-false}
     depends_on:
@@ -130,6 +131,7 @@ services:
       - OLLAMA_HOST=http://172.18.0.1:11434
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - FMP_API_KEY=${FMP_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
     depends_on:
       nordvpn:

@@ -28,7 +28,8 @@
       "WebFetch(domain:github.com)",
       "mcp__playwright__browser_snapshot",
       "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_click"
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type"
     ],
     "deny": [],
     "ask": []

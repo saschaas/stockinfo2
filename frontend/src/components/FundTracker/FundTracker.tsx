@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds, startStockResearch } from '../../services/api'
+import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds, startStockResearch, refreshFundHoldings } from '../../services/api'
 
 interface SearchResult {
   cik: string
@@ -27,6 +27,8 @@ export default function FundTracker() {
   const hasValidated = useRef(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [modalFunds, setModalFunds] = useState<{ ticker: string; companyName: string; fundNames: string[] } | null>(null)
+  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'refreshing' | 'success' | 'error'>('idle')
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
 
   // Stock selection state for batch analysis
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set())
@@ -156,6 +158,44 @@ export default function FundTracker() {
     },
   })
 
+  // Mutation for refreshing all fund holdings
+  const refreshMutation = useMutation({
+    mutationFn: refreshFundHoldings,
+    onSuccess: (data) => {
+      // Show success message after the minimum refresh display time
+      setRefreshMessage(data.message || 'Refresh started successfully')
+      // Keep refreshing state for a bit longer since actual work happens in background
+      setTimeout(() => {
+        setRefreshStatus('success')
+        // Invalidate queries to reload data
+        queryClient.invalidateQueries({ queryKey: ['funds'] })
+        queryClient.invalidateQueries({ queryKey: ['fundHoldings'] })
+        queryClient.invalidateQueries({ queryKey: ['fundChanges'] })
+      }, 3000)
+      // Reset status after total 8 seconds
+      setTimeout(() => {
+        setRefreshStatus('idle')
+        setRefreshMessage(null)
+      }, 8000)
+    },
+    onError: (error: any) => {
+      setRefreshStatus('error')
+      setRefreshMessage(error.response?.data?.detail || 'Failed to start refresh')
+      setTimeout(() => {
+        setRefreshStatus('idle')
+        setRefreshMessage(null)
+      }, 5000)
+    },
+  })
+
+  const handleRefresh = () => {
+    if (refreshStatus !== 'refreshing') {
+      setRefreshStatus('refreshing')
+      setRefreshMessage('Checking for new 13F filings...')
+      refreshMutation.mutate()
+    }
+  }
+
   // Validate all funds on startup and remove invalid ones
   useEffect(() => {
     const validateAllFunds = async () => {
@@ -276,9 +316,43 @@ export default function FundTracker() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Fund Tracker</h1>
-        <p className="text-gray-500 text-sm mt-1">Track institutional fund holdings and changes</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Fund Tracker</h1>
+          <p className="text-gray-500 text-sm mt-1">Track institutional fund holdings and changes</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {refreshMessage && (
+            <span className={`text-sm ${
+              refreshStatus === 'success' ? 'text-success-600' :
+              refreshStatus === 'error' ? 'text-danger-600' :
+              'text-gray-500'
+            }`}>
+              {refreshMessage}
+            </span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshStatus === 'refreshing'}
+            className="btn-primary flex items-center gap-2"
+            title="Check for new 13F filings and update holdings data"
+          >
+            <svg
+              className={`w-4 h-4 ${refreshStatus === 'refreshing' ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {refreshStatus === 'refreshing' ? 'Refreshing...' : 'Refresh All'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
