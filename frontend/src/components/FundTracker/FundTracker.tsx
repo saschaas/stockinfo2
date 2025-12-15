@@ -544,7 +544,7 @@ export default function FundTracker() {
                                 const isValid = isValidTicker(validTicker)
                                 return (
                                   <tr key={index} className="table-row">
-                                    <td className="px-4 py-3 font-semibold text-gray-900">{holding.ticker}</td>
+                                    <td className="px-4 py-3 font-semibold text-gray-900">{validTicker || '-'}</td>
                                     <td className="px-4 py-3 text-sm">
                                       {isValid ? (
                                         <span
@@ -637,7 +637,8 @@ export default function FundTracker() {
                                                   : 'text-gray-900 hover:text-primary-500 hover:underline'
                                               }`}
                                             >
-                                              {item.company_name || item.ticker}
+                                              <span className="text-primary-600 font-bold mr-1">{validTicker}</span>
+                                              {item.company_name}
                                             </span>
                                           ) : (
                                             <span className="text-gray-900">
@@ -686,7 +687,8 @@ export default function FundTracker() {
                                                   : 'text-gray-900 hover:text-primary-500 hover:underline'
                                               }`}
                                             >
-                                              {item.company_name || item.ticker}
+                                              <span className="text-primary-600 font-bold mr-1">{validTicker}</span>
+                                              {item.company_name}
                                             </span>
                                           ) : (
                                             <span className="text-gray-900">
@@ -743,7 +745,7 @@ export default function FundTracker() {
                                   const isValid = isValidTicker(validTicker)
                                   return (
                                     <tr key={index} className="table-row">
-                                      <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                      <td className="px-4 py-3 font-semibold text-gray-900">{validTicker || '-'}</td>
                                       <td className="px-4 py-3 text-sm">
                                         {isValid ? (
                                           <span
@@ -813,7 +815,7 @@ export default function FundTracker() {
                                   const isValid = isValidTicker(validTicker)
                                   return (
                                     <tr key={index} className="table-row">
-                                      <td className="px-4 py-3 font-semibold text-gray-900">{item.ticker}</td>
+                                      <td className="px-4 py-3 font-semibold text-gray-900">{validTicker || '-'}</td>
                                       <td className="px-4 py-3 text-sm">
                                         {isValid ? (
                                           <span

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.exceptions import NotFoundException
 from backend.app.db.models import Fund, FundHolding
 from backend.app.db.session import get_db
-from backend.app.services.cusip_mapper import get_ticker_or_cusip
+from backend.app.services.cusip_mapper import get_ticker_or_cusip, lookup_cusips_batch, is_cusip
 from backend.app.schemas.funds import (
     FundListResponse,
     FundHoldingsResponse,
@@ -147,9 +147,8 @@ async def get_aggregated_holdings(
             total_value=0,
         )
 
-    # Get all holdings for active funds at their respective latest filing dates
-    # For each fund, we need to get their latest filing date
-    aggregated_holdings = {}
+    # Step 1: Aggregate holdings by CUSIP first (without ticker lookup)
+    aggregated_holdings: dict[str, dict] = {}
     total_value = 0
 
     for fund in active_funds:
@@ -173,17 +172,13 @@ async def get_aggregated_holdings(
         holdings_result = await db.execute(holdings_stmt)
         holdings = holdings_result.scalars().all()
 
-        # Aggregate by normalized ticker (actual_ticker) to avoid duplicates
         for h in holdings:
-            # Get normalized ticker (converts CUSIP to ticker if possible)
-            actual_ticker = get_ticker_or_cusip(h.ticker)
-            # Use actual_ticker if available, otherwise use CUSIP + company combo as key
-            key = actual_ticker if actual_ticker else f"{h.ticker}_{h.company_name}"
+            # Use CUSIP + company name as aggregation key
+            key = f"{h.ticker}_{h.company_name}"
 
             if key not in aggregated_holdings:
                 aggregated_holdings[key] = {
                     "ticker": h.ticker,
-                    "actual_ticker": actual_ticker,
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -197,13 +192,33 @@ async def get_aggregated_holdings(
                 aggregated_holdings[key]["fund_names"].append(fund.name)
             total_value += float(h.value)
 
-    # Convert to list and calculate percentages
+    # Step 2: Sort by value and get top N + buffer for merging
+    # We take more than limit because some might merge after ticker resolution
+    sorted_holdings = sorted(
+        aggregated_holdings.values(),
+        key=lambda x: x["value"],
+        reverse=True
+    )[:limit * 2]  # Take 2x limit as buffer
+
+    # Step 3: Batch lookup CUSIPs only for the top holdings
+    cusips_to_lookup = list(set(
+        h["ticker"] for h in sorted_holdings if is_cusip(h["ticker"])
+    ))
+    cusip_to_ticker_map = await lookup_cusips_batch(cusips_to_lookup)
+
+    # Step 4: Build final list with resolved tickers
     holdings_list = []
-    for data in aggregated_holdings.values():
+    for data in sorted_holdings:
+        ticker = data["ticker"]
+        if is_cusip(ticker):
+            actual_ticker = cusip_to_ticker_map.get(ticker)
+        else:
+            actual_ticker = ticker
+
         percentage = (data["value"] / total_value * 100) if total_value > 0 else 0
         holdings_list.append({
-            "ticker": data["ticker"],
-            "actual_ticker": data["actual_ticker"],
+            "ticker": ticker,
+            "actual_ticker": actual_ticker,
             "company_name": data["company_name"],
             "shares": data["shares"],
             "value": data["value"],
@@ -214,8 +229,7 @@ async def get_aggregated_holdings(
             "shares_change": None,
         })
 
-    # Sort by value and limit
-    holdings_list.sort(key=lambda x: x["value"], reverse=True)
+    # Limit to requested size
     holdings_list = holdings_list[:limit]
 
     return FundHoldingsResponse(
@@ -268,8 +282,8 @@ async def get_aggregated_changes(
             sold=[],
         )
 
-    # Aggregate changes by type and ticker
-    aggregated_changes = {
+    # Step 1: Aggregate changes by CUSIP first (without ticker lookup)
+    aggregated_changes: dict[str, dict[str, dict]] = {
         "new": {},
         "increased": {},
         "decreased": {},
@@ -323,17 +337,13 @@ async def get_aggregated_changes(
             else:
                 value_change = 0.0
 
-            # Aggregate by normalized ticker and change type to avoid duplicates
+            # Use CUSIP + company name as aggregation key
+            key = f"{h.ticker}_{h.company_name}"
             change_dict = aggregated_changes[h.change_type]
-            # Get normalized ticker (converts CUSIP to ticker if possible)
-            actual_ticker = get_ticker_or_cusip(h.ticker)
-            # Use actual_ticker if available, otherwise use CUSIP + company combo as key
-            key = actual_ticker if actual_ticker else f"{h.ticker}_{h.company_name}"
 
             if key not in change_dict:
                 change_dict[key] = {
                     "ticker": h.ticker,
-                    "actual_ticker": actual_ticker,
                     "company_name": h.company_name,
                     "shares": 0,
                     "value": 0,
@@ -351,20 +361,46 @@ async def get_aggregated_changes(
             if fund.name not in change_dict[key]["fund_names"]:
                 change_dict[key]["fund_names"].append(fund.name)
 
-    # Convert to lists and calculate percentages
-    result_changes = {
+    # Step 2: Sort each category and get top entries
+    TOP_CHANGES_LIMIT = 50
+    sorted_changes: dict[str, list[dict]] = {}
+    for change_type, changes_dict in aggregated_changes.items():
+        sorted_changes[change_type] = sorted(
+            changes_dict.values(),
+            key=lambda x: abs(x["value_change"]),
+            reverse=True
+        )[:TOP_CHANGES_LIMIT]
+
+    # Step 3: Collect unique CUSIPs from top changes only
+    cusips_to_lookup = set()
+    for change_type, changes in sorted_changes.items():
+        for data in changes:
+            if is_cusip(data["ticker"]):
+                cusips_to_lookup.add(data["ticker"])
+
+    # Step 4: Batch lookup CUSIPs
+    cusip_to_ticker_map = await lookup_cusips_batch(list(cusips_to_lookup))
+
+    # Step 5: Build final result with resolved tickers
+    result_changes: dict[str, list[dict]] = {
         "new": [],
         "increased": [],
         "decreased": [],
         "sold": []
     }
 
-    for change_type, changes_dict in aggregated_changes.items():
-        for data in changes_dict.values():
+    for change_type, changes in sorted_changes.items():
+        for data in changes:
+            ticker = data["ticker"]
+            if is_cusip(ticker):
+                actual_ticker = cusip_to_ticker_map.get(ticker)
+            else:
+                actual_ticker = ticker
+
             percentage = (data["value"] / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
             result_changes[change_type].append({
-                "ticker": data["ticker"],
-                "actual_ticker": data["actual_ticker"],
+                "ticker": ticker,
+                "actual_ticker": actual_ticker,
                 "company_name": data["company_name"],
                 "shares": data["shares"],
                 "value": data["value"],
@@ -374,13 +410,6 @@ async def get_aggregated_changes(
                 "fund_count": data["fund_count"],
                 "fund_names": data["fund_names"],
             })
-
-    # Sort each list by value (descending)
-    for change_type in result_changes:
-        result_changes[change_type].sort(
-            key=lambda x: abs(x["value_change"]),
-            reverse=True
-        )
 
     return FundChangesResponse(
         fund_id=0,
@@ -445,6 +474,10 @@ async def get_fund_holdings(
     result = await db.execute(total_stmt)
     total_value = result.scalar() or 0
 
+    # Batch lookup CUSIPs
+    cusips_to_lookup = list(set(h.ticker for h in holdings if is_cusip(h.ticker)))
+    cusip_to_ticker_map = await lookup_cusips_batch(cusips_to_lookup)
+
     return FundHoldingsResponse(
         fund_id=fund_id,
         fund_name=fund.name,
@@ -452,7 +485,7 @@ async def get_fund_holdings(
         holdings=[
             {
                 "ticker": h.ticker,
-                "actual_ticker": get_ticker_or_cusip(h.ticker),
+                "actual_ticker": cusip_to_ticker_map.get(h.ticker) if is_cusip(h.ticker) else h.ticker,
                 "company_name": h.company_name,
                 "shares": h.shares,
                 "value": float(h.value),
@@ -512,6 +545,10 @@ async def get_fund_changes(
     result = await db.execute(holdings_stmt)
     holdings = result.scalars().all()
 
+    # Batch lookup CUSIPs
+    cusips_to_lookup = list(set(h.ticker for h in holdings if is_cusip(h.ticker)))
+    cusip_to_ticker_map = await lookup_cusips_batch(cusips_to_lookup)
+
     for h in holdings:
         # Calculate value_change based on change type
         if h.change_type == "new":
@@ -526,7 +563,7 @@ async def get_fund_changes(
 
         change_data = {
             "ticker": h.ticker,
-            "actual_ticker": get_ticker_or_cusip(h.ticker),
+            "actual_ticker": cusip_to_ticker_map.get(h.ticker) if is_cusip(h.ticker) else h.ticker,
             "company_name": h.company_name,
             "shares": h.shares,
             "value": float(h.value),

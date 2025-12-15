@@ -5,7 +5,14 @@
       "Bash(docker-compose:*)",
       "Bash(curl:*)",
       "Bash(docker cp:*)",
-      "Bash(python -m json.tool:*)"
+      "Bash(python -m json.tool:*)",
+      "WebFetch(domain:www.sec.gov)",
+      "WebSearch",
+      "WebFetch(domain:www.openfigi.com)",
+      "Bash(python:*)",
+      "Bash(xargs:*)",
+      "Bash(for i in 1 2 3)",
+      "Bash(do docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\" sleep 1 done docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\")"
     ],
     "deny": [],
     "ask": []
