@@ -1,4 +1,34 @@
 services:
+  # NordVPN - Routes external API traffic through VPN
+  # Required env vars: NORDVPN_TOKEN (get from https://my.nordaccount.com/dashboard/nordvpn/access-tokens/)
+  nordvpn:
+    image: ghcr.io/bubuntux/nordvpn
+    container_name: stockinfo-nordvpn
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    environment:
+      - TOKEN=${NORDVPN_TOKEN}
+      - CONNECT=${NORDVPN_COUNTRY:-United_States}
+      - TECHNOLOGY=NordLynx
+      - NETWORK=192.168.0.0/16;10.0.0.0/8;172.16.0.0/12
+      # Use Docker's embedded DNS for internal name resolution, with NordVPN DNS as fallback
+      - DNS=127.0.0.11,103.86.96.100,103.86.99.100
+    ports:
+      # Backend API port (routed through VPN)
+      - "8000:8000"
+      # Dagster UI port (routed through VPN)
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s https://api.nordvpn.com/v1/helpers/ips/insights | grep -q 'protected.*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
@@ -55,36 +85,33 @@ services:
     #           count: all
     #           capabilities: [gpu]
 
-  # Backend API
+  # Backend API (routes through NordVPN for external API calls)
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: stockinfo-backend
+    network_mode: "service:nordvpn"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # Use Docker gateway IP (172.18.0.1) to reach services on host-exposed ports
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@172.18.0.1:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://172.18.0.1:6379/0
+      - CELERY_BROKER_URL=redis://172.18.0.1:6379/1
+      - CELERY_RESULT_BACKEND=redis://172.18.0.1:6379/2
+      - OLLAMA_BASE_URL=http://172.18.0.1:11434
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
       - DEBUG=${DEBUG:-false}
-    ports:
-      - "8000:8000"
     depends_on:
+      nordvpn:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
 
-  # Celery Worker
+  # Celery Worker (routes through NordVPN for external API calls)
   celery-worker:
     build:
       context: .
@@ -92,42 +119,46 @@ services:
       args:
         INSTALL_EXTRAS: dagster
     container_name: stockinfo-celery-worker
+    network_mode: "service:nordvpn"
     command: celery -A backend.app.celery_app worker --loglevel=info --concurrency=4
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_HOST=http://ollama:11434
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@172.18.0.1:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://172.18.0.1:6379/0
+      - CELERY_BROKER_URL=redis://172.18.0.1:6379/1
+      - CELERY_RESULT_BACKEND=redis://172.18.0.1:6379/2
+      - OLLAMA_BASE_URL=http://172.18.0.1:11434
+      - OLLAMA_HOST=http://172.18.0.1:11434
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
     depends_on:
-      - postgres
-      - redis
+      nordvpn:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Celery Beat Scheduler
+  # Celery Beat Scheduler (routes through NordVPN for external API calls)
   celery-beat:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: stockinfo-celery-beat
+    network_mode: "service:nordvpn"
     command: bash backend/scripts/start_beat_with_refresh.sh
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@172.18.0.1:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://172.18.0.1:6379/0
+      - CELERY_BROKER_URL=redis://172.18.0.1:6379/1
+      - CELERY_RESULT_BACKEND=redis://172.18.0.1:6379/2
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
     depends_on:
-      - celery-worker
-      - redis
+      nordvpn:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
     restart: unless-stopped
 
-  # Dagster for data pipelines
+  # Dagster for data pipelines (routes through NordVPN for external API calls)
   dagster:
     build:
       context: .
@@ -135,20 +166,21 @@ services:
       args:
         INSTALL_EXTRAS: dagster
     container_name: stockinfo-dagster
+    network_mode: "service:nordvpn"
     user: root
     command: sh -c "mkdir -p /app/dagster_home && chown -R stockinfo:stockinfo /app/dagster_home && su stockinfo -c 'dagster-webserver -m pipelines.definitions -h 0.0.0.0 -p 3000'"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
-      - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@172.18.0.1:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://172.18.0.1:6379/0
+      - OLLAMA_BASE_URL=http://172.18.0.1:11434
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
       - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
       - DAGSTER_HOME=/app/dagster_home
     volumes:
       - dagster_home:/app/dagster_home
-    ports:
-      - "3001:3000"
     depends_on:
+      nordvpn:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     restart: unless-stopped

@@ -48,6 +48,15 @@ class ConfigSettings(BaseModel):
     market_scraping: MarketScrapingSettings = Field(default_factory=MarketScrapingSettings)
 
 
+class VPNStatus(BaseModel):
+    """VPN connection status."""
+
+    enabled: bool = Field(..., description="Whether VPN mode is enabled in config")
+    connected: bool = Field(..., description="Whether VPN is currently connected")
+    location: Optional[str] = Field(None, description="VPN connection location")
+    message: str = Field(..., description="Status message")
+
+
 class ConfigResponse(BaseModel):
     """Response for configuration endpoints."""
 
@@ -55,6 +64,7 @@ class ConfigResponse(BaseModel):
     has_alpha_vantage_key: bool = Field(False, description="Whether Alpha Vantage API key is configured")
     has_fmp_key: bool = Field(False, description="Whether FMP API key is configured")
     has_sec_user_agent: bool = Field(False, description="Whether SEC user agent is configured")
+    vpn_status: Optional[VPNStatus] = Field(None, description="VPN connection status")
 
 
 class TestAPIKeyRequest(BaseModel):

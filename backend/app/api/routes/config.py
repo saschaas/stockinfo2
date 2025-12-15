@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import insert
 from backend.app.config import get_settings
 from backend.app.db.models import UserConfig
 from backend.app.db.session import async_session_factory
+import httpx
+
 from backend.app.schemas.config import (
     ConfigResponse,
     ConfigSettings,
@@ -19,11 +21,74 @@ from backend.app.schemas.config import (
     AIModelSettings,
     DisplayPreferences,
     MarketScrapingSettings,
+    VPNStatus,
 )
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+
+
+async def _get_vpn_status() -> VPNStatus:
+    """Get current VPN connection status."""
+    # Check if VPN mode is enabled via environment variable
+    vpn_enabled = os.getenv("VPN_ENABLED", "true").lower() != "false"
+
+    if not vpn_enabled:
+        return VPNStatus(
+            enabled=False,
+            connected=False,
+            location=None,
+            message="VPN mode disabled in configuration",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://api.nordvpn.com/v1/helpers/ips/insights"
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                is_protected = data.get("protected", False)
+                country = data.get("country", "Unknown")
+                city = data.get("city", "Unknown")
+
+                if is_protected:
+                    return VPNStatus(
+                        enabled=True,
+                        connected=True,
+                        location=f"{city}, {country}",
+                        message=f"Connected via {city}, {country}",
+                    )
+                else:
+                    return VPNStatus(
+                        enabled=True,
+                        connected=False,
+                        location=None,
+                        message="VPN enabled but not connected",
+                    )
+            else:
+                return VPNStatus(
+                    enabled=True,
+                    connected=False,
+                    location=None,
+                    message=f"Could not verify VPN status (HTTP {response.status_code})",
+                )
+    except httpx.TimeoutException:
+        return VPNStatus(
+            enabled=True,
+            connected=False,
+            location=None,
+            message="VPN status check timed out",
+        )
+    except Exception as e:
+        return VPNStatus(
+            enabled=True,
+            connected=False,
+            location=None,
+            message=f"VPN status check failed: {str(e)}",
+        )
 
 
 async def _get_config_value(key: str) -> Optional[dict]:
@@ -78,6 +143,9 @@ async def get_config_settings() -> ConfigResponse:
         has_fmp = bool(settings.fmp_api_key)
         has_sec_agent = bool(settings.sec_user_agent)
 
+        # Get VPN status
+        vpn_status = await _get_vpn_status()
+
         return ConfigResponse(
             settings=ConfigSettings(
                 ai_models=ai_models,
@@ -87,6 +155,7 @@ async def get_config_settings() -> ConfigResponse:
             has_alpha_vantage_key=has_alpha_vantage,
             has_fmp_key=has_fmp,
             has_sec_user_agent=has_sec_agent,
+            vpn_status=vpn_status,
         )
 
     except Exception as e:

@@ -1,0 +1,91 @@
+# Docker Compose override for running WITHOUT VPN
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.no-vpn.yml up -d
+#
+# This configuration:
+# - Disables the NordVPN container
+# - Removes network_mode: service:nordvpn from backend services
+# - Routes services directly to the default Docker network
+#
+# Note: External APIs may rate-limit your IP when not using VPN.
+# Yahoo Finance in particular may return HTTP 429 errors without VPN.
+
+services:
+  # Disable NordVPN by not starting it
+  nordvpn:
+    deploy:
+      replicas: 0
+
+  # Backend API - direct network without VPN
+  backend:
+    network_mode: bridge
+    ports:
+      - "8000:8000"
+    environment:
+      # Use container names for service discovery (default Docker network)
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
+      - DEBUG=${DEBUG:-false}
+      - VPN_ENABLED=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Worker - direct network without VPN
+  celery-worker:
+    network_mode: bridge
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_HOST=http://ollama:11434
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
+      - VPN_ENABLED=false
+    depends_on:
+      - backend
+
+  # Celery Beat - direct network without VPN
+  celery-beat:
+    network_mode: bridge
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
+      - VPN_ENABLED=false
+    depends_on:
+      - celery-worker
+
+  # Dagster - direct network without VPN
+  dagster:
+    network_mode: bridge
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-stockinfo}:${POSTGRES_PASSWORD:-stockinfo_dev}@postgres:5432/${POSTGRES_DB:-stockinfo}
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - SEC_EDGAR_USER_AGENT=${SEC_EDGAR_USER_AGENT:-StockInfo/1.0}
+      - DAGSTER_HOME=/app/dagster_home
+      - VPN_ENABLED=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Frontend - update nginx config to use container names
+  frontend:
+    environment:
+      - VPN_ENABLED=false

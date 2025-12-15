@@ -49,6 +49,10 @@ DATA_SOURCE_INFO = {
         "description": "Background task processing",
         "type": "infrastructure",
     },
+    "nordvpn": {
+        "description": "VPN for external API requests",
+        "type": "infrastructure",
+    },
 }
 
 # Tab to data source mappings
@@ -167,8 +171,8 @@ async def check_ollama() -> dict[str, Any]:
     """Check Ollama LLM service."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            # Check if Ollama is running
-            response = await client.get("http://ollama:11434/api/tags")
+            # Check if Ollama is running - use gateway IP since backend runs through VPN
+            response = await client.get("http://172.18.0.1:11434/api/tags")
 
             if response.status_code == 200:
                 data = response.json()
@@ -284,7 +288,11 @@ async def check_alpha_vantage() -> dict[str, Any]:
 async def check_yahoo_finance() -> dict[str, Any]:
     """Check Yahoo Finance API."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        # Yahoo Finance requires a browser-like User-Agent header
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
             # Test endpoint
             response = await client.get(
                 "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
@@ -410,6 +418,56 @@ async def check_openfigi() -> dict[str, Any]:
         }
 
 
+async def check_nordvpn() -> dict[str, Any]:
+    """Check NordVPN connection status."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Check NordVPN API for connection status
+            response = await client.get(
+                "https://api.nordvpn.com/v1/helpers/ips/insights"
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                is_protected = data.get("protected", False)
+                country = data.get("country", "Unknown")
+                city = data.get("city", "Unknown")
+
+                if is_protected:
+                    return {
+                        "name": "NordVPN",
+                        "status": "healthy",
+                        "message": f"Connected via {city}, {country}",
+                        "protected": True,
+                        "location": f"{city}, {country}",
+                    }
+                else:
+                    return {
+                        "name": "NordVPN",
+                        "status": "unhealthy",
+                        "message": "VPN not active - traffic not protected",
+                        "protected": False,
+                    }
+            else:
+                return {
+                    "name": "NordVPN",
+                    "status": "unhealthy",
+                    "message": f"HTTP {response.status_code}",
+                }
+    except httpx.TimeoutException:
+        return {
+            "name": "NordVPN",
+            "status": "unhealthy",
+            "message": "Request timeout (10s)",
+        }
+    except Exception as e:
+        return {
+            "name": "NordVPN",
+            "status": "unhealthy",
+            "message": f"Check failed: {str(e)}",
+        }
+
+
 @router.get("/health")
 async def health_check() -> dict[str, Any]:
     """
@@ -429,6 +487,7 @@ async def health_check() -> dict[str, Any]:
         check_database(),
         check_redis(),
         check_celery(),
+        check_nordvpn(),
         check_ollama(),
         check_alpha_vantage(),
         check_yahoo_finance(),
@@ -436,9 +495,9 @@ async def health_check() -> dict[str, Any]:
     )
 
     # Categorize results
-    infrastructure = results[0:3]  # Database, Redis, Celery
-    ai_services = [results[3]]  # Ollama
-    external_apis = results[4:7]  # Alpha Vantage, Yahoo, SEC
+    infrastructure = results[0:4]  # Database, Redis, Celery, NordVPN
+    ai_services = [results[4]]  # Ollama
+    external_apis = results[5:8]  # Alpha Vantage, Yahoo, SEC
 
     # Determine overall status
     statuses = [r["status"] for r in results]
@@ -478,6 +537,7 @@ async def data_sources_overview() -> dict[str, Any]:
         check_database(),
         check_redis(),
         check_celery(),
+        check_nordvpn(),
         check_ollama(),
         check_alpha_vantage(),
         check_yahoo_finance(),
@@ -490,11 +550,12 @@ async def data_sources_overview() -> dict[str, Any]:
         "database": results[0],
         "redis": results[1],
         "celery": results[2],
-        "ollama": results[3],
-        "alpha_vantage": results[4],
-        "yahoo_finance": results[5],
-        "sec_edgar": results[6],
-        "openfigi": results[7],
+        "nordvpn": results[3],
+        "ollama": results[4],
+        "alpha_vantage": results[5],
+        "yahoo_finance": results[6],
+        "sec_edgar": results[7],
+        "openfigi": results[8],
     }
 
     # Build sources dict with status and descriptions

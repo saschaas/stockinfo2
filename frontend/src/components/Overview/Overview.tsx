@@ -12,6 +12,7 @@ const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   database: 'PostgreSQL',
   redis: 'Redis Cache',
   celery: 'Celery Workers',
+  nordvpn: 'NordVPN',
 }
 
 // Icons for different source types

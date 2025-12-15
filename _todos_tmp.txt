@@ -1,18 +1,13 @@
-Risk/reward Ratio
+Overview
+Can you add an overview tab that should Show which data from which tab is pulled from which data source. Please make sure to make this intuitiv to view for the end user. It should be very clear which data is linked to which data source. There should also be the possibility to see alternative data Sources, if the main data source is not available and when this is triggered or if there is no alternative.
+I will add more data Sources in the future and I Need a good view on this to know which data is handled by which source. All data Sources not available at the Moment should be marked and a short description on why the source is not available should be included.
+Please make sure to analyse the structure of the tool and the different data Sources before you begin implementing anything. It is crucial to understand the structure in Depth.
+Please try to make this very graphical to get a good overview very fast. 
 
-For the Risk/reward Ration, calculated in the Risk assessment of the stock Research part of the tool, I think the wrong target Price is used. Please make sure to use the Target Price shown in the Quick metrics instead of the one displayed in the Risk assessment. Please make sure to doulble check if that makes sense. Then recalculate the Risk reward Ratio based on the new target Price. Make sure to know where the target Price in the quick metrics is coming from and why this value was not initially used. If you think the target Price newds to be changed after confirming, please update the calculation of the Risk reward value. Please also include Information on how the Risk and reward were calculated in an expandable field that Shows the Details, but all in the Risk Assessment Card.
 
 
-Config tab
-I would like to redo the Configuration tab of the app. Please review all relevant configuration Settings from any config file and make the relevant ones editable via the Configuration tab. Please Change the layout of the Configurationtab to have all config Settings on one site and not the step by step Approach.
-The must haves on the Configuration tab are:
-- API keys
-- selection of AI models for the different parts (stock Research with Analysis, Sentiment Analysis in the Dashboard, web scraping, agents, and add if I forgot something). The available models should be selectable via a drop down. Plus there should be the possibility to add a new model.
-- number of funds to Display in the recent changes part of the Fund Tracker.
-- number of items in the "Research History" in the stock Research part
-
-The "Fund Selection" that is currently in the Configuration tab is not needed anymore as this is handled in the Fund Tracker. By Default of of These should be in teh Fund Tracker!
-
-The "Analysis Settings" is not needed anymore! All Analysis should be performed by Default!
-
-Can you please analyse in Depth the nneded configurations and make a plan on how to Change this in the best way with a Minimum of changes to other parts. Please Keep the design modern and stick to the current design. Make sure to arrange the different Settings in meaningful categories, so it is easy for the user to find everything.
+Proxy:
+I found a Proxy tool here: https://github.com/bluet/proxybroker2
+Can you please include this Proxy tool into the tool to use a Proxy for specific data Sources. These data Sources should be configurable via the Configuration tab.
+For the configured data Sources all requests should be handeld via the Proxy tool. At start up a heralth check should be done to see if the Proxy tool is working. This tool should also be displayed in the Dashboard at the top with the other data Sources and a green indication if working.
+The Proxy tool should be run as docker (see Website for more Information: https://github.com/bluet/proxybroker2). Use playwright-mcp to read the Website. This will also give you infromation on how to install and use the tool.

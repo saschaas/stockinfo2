@@ -16,7 +16,19 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_wait_for",
       "mcp__playwright__browser_take_screenshot",
-      "mcp__playwright__browser_close"
+      "mcp__playwright__browser_close",
+      "Bash(docker inspect:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker run:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(git checkout:*)",
+      "Bash(docker network inspect:*)",
+      "WebFetch(domain:github.com)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_click"
     ],
     "deny": [],
     "ask": []

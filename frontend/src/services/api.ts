@@ -380,11 +380,19 @@ export interface ConfigSettings {
   market_scraping: MarketScrapingSettings
 }
 
+export interface VPNStatus {
+  enabled: boolean
+  connected: boolean
+  location: string | null
+  message: string
+}
+
 export interface ConfigResponse {
   settings: ConfigSettings
   has_alpha_vantage_key: boolean
   has_fmp_key: boolean
   has_sec_user_agent: boolean
+  vpn_status?: VPNStatus
 }
 
 export interface TestAPIKeyRequest {
