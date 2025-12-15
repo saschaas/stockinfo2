@@ -8,6 +8,7 @@ export default function Layout() {
     { path: '/research', label: 'Stock Research', icon: '🔍' },
     { path: '/funds', label: 'Fund Tracker', icon: '💼' },
     { path: '/config', label: 'Configuration', icon: '⚙️' },
+    { path: '/overview', label: 'Overview', icon: '🔗' },
   ]
 
   return (

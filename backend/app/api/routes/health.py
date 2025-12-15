@@ -1,6 +1,7 @@
 """Health check API routes for data sources."""
 
 import asyncio
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -12,6 +13,74 @@ from backend.app.config import settings
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+
+
+# Data source configurations with descriptions and tab mappings
+DATA_SOURCE_INFO = {
+    "alpha_vantage": {
+        "description": "Stock prices and technical indicators",
+        "type": "api",
+    },
+    "yahoo_finance": {
+        "description": "Stock fundamentals and backup price data",
+        "type": "api",
+    },
+    "sec_edgar": {
+        "description": "13F filings and institutional holdings",
+        "type": "api",
+    },
+    "ollama": {
+        "description": "AI-powered stock analysis",
+        "type": "service",
+    },
+    "openfigi": {
+        "description": "CUSIP to ticker symbol resolution",
+        "type": "api",
+    },
+    "database": {
+        "description": "PostgreSQL data storage",
+        "type": "infrastructure",
+    },
+    "redis": {
+        "description": "Caching and job queue",
+        "type": "infrastructure",
+    },
+    "celery": {
+        "description": "Background task processing",
+        "type": "infrastructure",
+    },
+}
+
+# Tab to data source mappings
+TAB_DATA_MAPPINGS = {
+    "Dashboard": {
+        "data_types": [
+            {"name": "Market Sentiment", "primary": "alpha_vantage", "fallback": "yahoo_finance"},
+            {"name": "Top Movers", "primary": "yahoo_finance", "fallback": None},
+            {"name": "System Health", "primary": "database", "fallback": None},
+        ]
+    },
+    "Stock Research": {
+        "data_types": [
+            {"name": "Stock Prices", "primary": "alpha_vantage", "fallback": "yahoo_finance"},
+            {"name": "Technical Indicators", "primary": "alpha_vantage", "fallback": None},
+            {"name": "Fundamentals", "primary": "yahoo_finance", "fallback": None},
+            {"name": "AI Analysis", "primary": "ollama", "fallback": None},
+        ]
+    },
+    "Fund Tracker": {
+        "data_types": [
+            {"name": "13F Holdings", "primary": "sec_edgar", "fallback": None},
+            {"name": "Ticker Resolution", "primary": "openfigi", "fallback": None},
+        ]
+    },
+    "Watchlist": {
+        "data_types": [
+            {"name": "Price Updates", "primary": "yahoo_finance", "fallback": None},
+            {"name": "Saved Data", "primary": "database", "fallback": None},
+        ]
+    },
+}
 
 
 async def check_database() -> dict[str, Any]:
@@ -290,6 +359,57 @@ async def check_sec_edgar() -> dict[str, Any]:
         }
 
 
+async def check_openfigi() -> dict[str, Any]:
+    """Check OpenFIGI API."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # Test with a known CUSIP (Apple)
+            response = await client.post(
+                "https://api.openfigi.com/v3/mapping",
+                headers={"Content-Type": "application/json"},
+                json=[{"idType": "ID_CUSIP", "idValue": "037833100"}],
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0 and "data" in data[0]:
+                    return {
+                        "name": "OpenFIGI API",
+                        "status": "healthy",
+                        "message": "API responding correctly",
+                    }
+                else:
+                    return {
+                        "name": "OpenFIGI API",
+                        "status": "degraded",
+                        "message": "Unexpected response format",
+                    }
+            elif response.status_code == 429:
+                return {
+                    "name": "OpenFIGI API",
+                    "status": "degraded",
+                    "message": "Rate limit reached",
+                }
+            else:
+                return {
+                    "name": "OpenFIGI API",
+                    "status": "unhealthy",
+                    "message": f"HTTP {response.status_code}",
+                }
+    except httpx.TimeoutException:
+        return {
+            "name": "OpenFIGI API",
+            "status": "unhealthy",
+            "message": "Request timeout (5s)",
+        }
+    except Exception as e:
+        return {
+            "name": "OpenFIGI API",
+            "status": "unhealthy",
+            "message": f"Connection failed: {str(e)}",
+        }
+
+
 @router.get("/health")
 async def health_check() -> dict[str, Any]:
     """
@@ -331,11 +451,92 @@ async def health_check() -> dict[str, Any]:
 
     return {
         "status": overall_status,
-        "timestamp": "2025-12-12T10:00:00Z",  # Will be replaced with actual timestamp
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "services": {
             "infrastructure": infrastructure,
             "ai_services": ai_services,
             "external_apis": external_apis,
         },
         "checks": results,
+    }
+
+
+@router.get("/health/data-sources")
+async def data_sources_overview() -> dict[str, Any]:
+    """
+    Get data sources overview for the Overview tab.
+
+    Returns:
+    - Status of all data sources with descriptions
+    - Tab-to-source mappings with fallback information
+    - Timestamp of when the check was performed
+    """
+    logger.info("Running data sources overview check")
+
+    # Run all source checks concurrently
+    results = await asyncio.gather(
+        check_database(),
+        check_redis(),
+        check_celery(),
+        check_ollama(),
+        check_alpha_vantage(),
+        check_yahoo_finance(),
+        check_sec_edgar(),
+        check_openfigi(),
+    )
+
+    # Map results to source names
+    source_checks = {
+        "database": results[0],
+        "redis": results[1],
+        "celery": results[2],
+        "ollama": results[3],
+        "alpha_vantage": results[4],
+        "yahoo_finance": results[5],
+        "sec_edgar": results[6],
+        "openfigi": results[7],
+    }
+
+    # Build sources dict with status and descriptions
+    sources = {}
+    for source_id, info in DATA_SOURCE_INFO.items():
+        check_result = source_checks.get(source_id, {"status": "unknown", "message": "Not checked"})
+        sources[source_id] = {
+            "status": check_result["status"],
+            "description": info["description"],
+            "type": info["type"],
+            "message": check_result.get("message", ""),
+        }
+
+    # Collect warnings for unavailable sources
+    warnings = []
+    for source_id, source_data in sources.items():
+        if source_data["status"] == "unhealthy":
+            # Find which tabs are affected
+            affected_tabs = []
+            for tab_name, tab_info in TAB_DATA_MAPPINGS.items():
+                for data_type in tab_info["data_types"]:
+                    if data_type["primary"] == source_id:
+                        fallback = data_type.get("fallback")
+                        has_fallback = fallback and sources.get(fallback, {}).get("status") == "healthy"
+                        affected_tabs.append({
+                            "tab": tab_name,
+                            "data_type": data_type["name"],
+                            "fallback": fallback,
+                            "fallback_available": has_fallback,
+                        })
+
+            if affected_tabs:
+                warnings.append({
+                    "source": source_id,
+                    "source_name": source_checks[source_id].get("name", source_id),
+                    "message": source_data["message"],
+                    "affected": affected_tabs,
+                })
+
+    return {
+        "sources": sources,
+        "tabs": TAB_DATA_MAPPINGS,
+        "warnings": warnings,
+        "checked_at": datetime.utcnow().isoformat() + "Z",
     }

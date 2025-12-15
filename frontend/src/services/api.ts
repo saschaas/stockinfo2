@@ -300,6 +300,51 @@ export async function checkHealth() {
   return data
 }
 
+// Data sources overview types
+export interface DataSourceInfo {
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'
+  description: string
+  type: 'api' | 'service' | 'infrastructure'
+  message: string
+}
+
+export interface DataTypeMapping {
+  name: string
+  primary: string
+  fallback: string | null
+}
+
+export interface TabMapping {
+  data_types: DataTypeMapping[]
+}
+
+export interface AffectedTab {
+  tab: string
+  data_type: string
+  fallback: string | null
+  fallback_available: boolean
+}
+
+export interface DataSourceWarning {
+  source: string
+  source_name: string
+  message: string
+  affected: AffectedTab[]
+}
+
+export interface DataSourcesResponse {
+  sources: Record<string, DataSourceInfo>
+  tabs: Record<string, TabMapping>
+  warnings: DataSourceWarning[]
+  checked_at: string
+}
+
+// Data sources overview endpoint
+export async function fetchDataSourcesHealth(): Promise<DataSourcesResponse> {
+  const { data } = await api.get('/health/data-sources')
+  return data
+}
+
 // Configuration types
 export interface AIModelSettings {
   default_model?: string

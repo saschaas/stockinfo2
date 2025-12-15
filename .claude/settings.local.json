@@ -12,7 +12,11 @@
       "Bash(python:*)",
       "Bash(xargs:*)",
       "Bash(for i in 1 2 3)",
-      "Bash(do docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\" sleep 1 done docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\")"
+      "Bash(do docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\" sleep 1 done docker exec stockinfo-backend curl -s \"http://localhost:8000/api/v1/funds/aggregate/holdings?limit=100\")",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_close"
     ],
     "deny": [],
     "ask": []

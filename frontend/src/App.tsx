@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard/Dashboard'
 import StockResearch from './components/StockResearch/StockResearch'
 import FundTracker from './components/FundTracker/FundTracker'
 import Configuration from './components/Configuration/Configuration'
+import Overview from './components/Overview/Overview'
 import Layout from './components/Layout/Layout'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
           <Route path="research" element={<StockResearch />} />
           <Route path="funds" element={<FundTracker />} />
           <Route path="config" element={<Configuration />} />
+          <Route path="overview" element={<Overview />} />
         </Route>
       </Routes>
     </BrowserRouter>
