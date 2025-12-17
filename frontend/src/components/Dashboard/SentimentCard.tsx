@@ -65,27 +65,40 @@ export default function SentimentCard({
     <div className="bg-white rounded-lg shadow p-6">
       <h3 className="text-lg font-medium text-gray-900 mb-4">{title}</h3>
 
+      {/* Overall Sentiment with Label */}
       <div className="flex items-center justify-center mb-4">
         <div className="text-center">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Overall Sentiment</p>
           <p className={`text-4xl font-bold ${getSentimentColor(score)}`}>
             {score != null ? `${(score * 100).toFixed(0)}%` : 'N/A'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">{getSentimentLabel(score)}</p>
+          <p className={`text-sm font-medium mt-1 ${getSentimentColor(score)}`}>{getSentimentLabel(score)}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="text-center p-3 bg-green-50 rounded-lg">
-          <p className="text-sm text-green-600 font-medium">Bullish</p>
-          <p className="text-lg font-semibold text-green-700">
-            {bullish != null ? `${(bullish * 100).toFixed(0)}%` : 'N/A'}
-          </p>
+      {/* Bullish vs Bearish Bar */}
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <span>Bullish Signals</span>
+          <span>Bearish Signals</span>
         </div>
-        <div className="text-center p-3 bg-red-50 rounded-lg">
-          <p className="text-sm text-red-600 font-medium">Bearish</p>
-          <p className="text-lg font-semibold text-red-700">
+        <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
+          <div
+            className="bg-green-500 transition-all"
+            style={{ width: `${bullish != null ? bullish * 100 : 50}%` }}
+          />
+          <div
+            className="bg-red-500 transition-all"
+            style={{ width: `${bearish != null ? bearish * 100 : 50}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs mt-1">
+          <span className="text-green-600 font-medium">
+            {bullish != null ? `${(bullish * 100).toFixed(0)}%` : 'N/A'}
+          </span>
+          <span className="text-red-600 font-medium">
             {bearish != null ? `${(bearish * 100).toFixed(0)}%` : 'N/A'}
-          </p>
+          </span>
         </div>
       </div>
 

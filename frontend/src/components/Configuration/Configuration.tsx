@@ -1,16 +1,34 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchConfigSettings,
   updateConfigSettings,
   testAPIKey,
   fetchAvailableModels,
   getMarketScrapingConfig,
+  fetchDataUseCategories,
+  fetchScrapedWebsites,
+  createScrapedWebsite,
+  updateScrapedWebsite,
+  deleteScrapedWebsite,
+  testScrapeWebsite,
+  testExistingWebsite,
+  fetchCategoryMappings,
+  updateCategoryMappings,
+  refreshCategoryData,
   ConfigSettings,
   OllamaModelsResponse,
+  ScrapedWebsite,
+  ScrapedWebsiteCreate,
+  ScrapedWebsiteUpdate,
+  ScrapedWebsiteTestResponse,
+  DataUseCategoriesResponse,
+  CategoryMappingsResponse,
 } from '../../services/api'
 
 export default function Configuration() {
+  const queryClient = useQueryClient()
+
   // State for form values
   const [apiKeys, setApiKeys] = useState({
     alphaVantage: '',
@@ -40,18 +58,37 @@ export default function Configuration() {
     analysis_model: '',
   })
 
+  // Legacy custom websites (kept for backward compatibility)
   const [customWebsites, setCustomWebsites] = useState<Record<string, { name: string; url: string }>>({})
+
+  // New enhanced website form
   const [showAddWebsite, setShowAddWebsite] = useState(false)
-  const [newWebsite, setNewWebsite] = useState({
+  const [newWebsite, setNewWebsite] = useState<ScrapedWebsiteCreate>({
     key: '',
     name: '',
     url: '',
+    description: '',
+    data_use: ['dashboard_sentiment'],  // Now an array for multiple selection
   })
+
+  // Test scraping state
+  const [testingWebsite, setTestingWebsite] = useState<string | null>(null)
+  const [testPreviewResult, setTestPreviewResult] = useState<ScrapedWebsiteTestResponse | null>(null)
+  const [showTestPreview, setShowTestPreview] = useState(false)
+
+  // Edit website state
+  const [editingWebsite, setEditingWebsite] = useState<ScrapedWebsite | null>(null)
+  const [editWebsiteData, setEditWebsiteData] = useState<ScrapedWebsiteUpdate>({})
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
   const [saveMessage, setSaveMessage] = useState('')
   const [testingKey, setTestingKey] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, { valid: boolean; message: string }>>({})
+
+  // Category mappings state
+  const [categoryMappings, setCategoryMappings] = useState<Record<string, string[]>>({})
+  const [mappingsSaveStatus, setMappingsSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
+  const [refreshingCategory, setRefreshingCategory] = useState<string | null>(null)
 
   // Fetch current configuration
   const { data: configData, isLoading: configLoading } = useQuery({
@@ -69,6 +106,24 @@ export default function Configuration() {
   const { data: scrapingConfig } = useQuery({
     queryKey: ['marketScrapingConfig'],
     queryFn: getMarketScrapingConfig,
+  })
+
+  // Fetch data use categories and templates
+  const { data: categoriesData } = useQuery<DataUseCategoriesResponse>({
+    queryKey: ['dataUseCategories'],
+    queryFn: fetchDataUseCategories,
+  })
+
+  // Fetch user's custom scraped websites
+  const { data: scrapedWebsites, refetch: refetchWebsites } = useQuery<ScrapedWebsite[]>({
+    queryKey: ['scrapedWebsites'],
+    queryFn: () => fetchScrapedWebsites(),
+  })
+
+  // Fetch category mappings
+  const { data: categoryMappingsData, refetch: refetchCategoryMappings } = useQuery<CategoryMappingsResponse>({
+    queryKey: ['categoryMappings'],
+    queryFn: fetchCategoryMappings,
   })
 
   // Update form when config data is loaded
@@ -100,6 +155,13 @@ export default function Configuration() {
     }
   }, [configData])
 
+  // Update category mappings when data is loaded
+  useEffect(() => {
+    if (categoryMappingsData) {
+      setCategoryMappings(categoryMappingsData.mappings || {})
+    }
+  }, [categoryMappingsData])
+
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: (settings: ConfigSettings) => updateConfigSettings(settings),
@@ -130,30 +192,127 @@ export default function Configuration() {
     saveMutation.mutate(settings)
   }
 
-  const handleAddWebsite = () => {
-    if (!newWebsite.key || !newWebsite.name || !newWebsite.url) {
-      alert('Please fill in all fields')
+  // Test scrape before adding a website
+  const handleTestScrape = async () => {
+    if (!newWebsite.url || !newWebsite.data_use) {
+      alert('Please provide a URL and select a data category')
       return
     }
 
-    if (customWebsites[newWebsite.key]) {
-      alert('A website with this key already exists')
-      return
-    }
+    setTestingWebsite('new')
+    setTestPreviewResult(null)
 
-    setCustomWebsites({
-      ...customWebsites,
-      [newWebsite.key]: {
-        name: newWebsite.name,
+    try {
+      const result = await testScrapeWebsite({
         url: newWebsite.url,
-      },
-    })
-
-    setNewWebsite({ key: '', name: '', url: '' })
-    setShowAddWebsite(false)
+        description: newWebsite.description,
+        data_use: newWebsite.data_use,
+      })
+      setTestPreviewResult(result)
+      setShowTestPreview(true)
+    } catch (error: any) {
+      setTestPreviewResult({
+        success: false,
+        error: error.response?.data?.detail || 'Test scraping failed',
+        response_time_ms: 0,
+        extraction_prompt_used: '',
+      })
+      setShowTestPreview(true)
+    } finally {
+      setTestingWebsite(null)
+    }
   }
 
-  const handleRemoveWebsite = (key: string) => {
+  // Test an existing website
+  const handleTestExistingWebsite = async (key: string) => {
+    setTestingWebsite(key)
+    setTestPreviewResult(null)
+
+    try {
+      const result = await testExistingWebsite(key)
+      setTestPreviewResult(result)
+      setShowTestPreview(true)
+      // Refetch websites to get updated last_test_* fields
+      refetchWebsites()
+    } catch (error: any) {
+      setTestPreviewResult({
+        success: false,
+        error: error.response?.data?.detail || 'Test scraping failed',
+        response_time_ms: 0,
+        extraction_prompt_used: '',
+      })
+      setShowTestPreview(true)
+    } finally {
+      setTestingWebsite(null)
+    }
+  }
+
+  // Add a new website using the new API
+  const handleAddWebsite = async () => {
+    const dataUseArray = Array.isArray(newWebsite.data_use) ? newWebsite.data_use : [newWebsite.data_use]
+    if (!newWebsite.key || !newWebsite.name || !newWebsite.url || dataUseArray.length === 0) {
+      alert('Please fill in all required fields (Key, Name, URL, and at least one Data Category)')
+      return
+    }
+
+    // Validate key format (no spaces, alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]+$/.test(newWebsite.key)) {
+      alert('Key must contain only letters, numbers, and underscores')
+      return
+    }
+
+    try {
+      await createScrapedWebsite(newWebsite)
+      setNewWebsite({
+        key: '',
+        name: '',
+        url: '',
+        description: '',
+        data_use: ['dashboard_sentiment'],
+      })
+      setShowAddWebsite(false)
+      setTestPreviewResult(null)
+      setShowTestPreview(false)
+      refetchWebsites()
+      // Refetch the scraping config to update the dropdown
+      queryClient.invalidateQueries({ queryKey: ['marketScrapingConfig'] })
+      setSaveStatus('success')
+      setSaveMessage('Website added successfully!')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch (error: any) {
+      setSaveStatus('error')
+      setSaveMessage(error.response?.data?.detail || 'Failed to add website')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    }
+  }
+
+  // Delete a website using the new API
+  const handleRemoveWebsite = async (key: string) => {
+    if (!confirm(`Are you sure you want to remove this website?`)) {
+      return
+    }
+
+    try {
+      await deleteScrapedWebsite(key)
+      refetchWebsites()
+      // Refetch the scraping config to update the dropdown
+      queryClient.invalidateQueries({ queryKey: ['marketScrapingConfig'] })
+      // If the removed website was selected, clear the selection
+      if (marketScraping.website_key === key) {
+        setMarketScraping({ ...marketScraping, website_key: '' })
+      }
+      setSaveStatus('success')
+      setSaveMessage('Website removed successfully!')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch (error: any) {
+      setSaveStatus('error')
+      setSaveMessage(error.response?.data?.detail || 'Failed to remove website')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    }
+  }
+
+  // Legacy handler for backward compatibility with old custom_websites
+  const handleRemoveLegacyWebsite = (key: string) => {
     const updated = { ...customWebsites }
     delete updated[key]
     setCustomWebsites(updated)
@@ -161,6 +320,46 @@ export default function Configuration() {
     // If the removed website was selected, clear the selection
     if (marketScraping.website_key === key) {
       setMarketScraping({ ...marketScraping, website_key: '' })
+    }
+  }
+
+  // Start editing a website
+  const handleStartEdit = (website: ScrapedWebsite) => {
+    setEditingWebsite(website)
+    setEditWebsiteData({
+      name: website.name,
+      url: website.url,
+      description: website.description || '',
+      data_use: website.data_use_list,
+      is_active: website.is_active,
+    })
+    // Close add form if open
+    setShowAddWebsite(false)
+  }
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingWebsite(null)
+    setEditWebsiteData({})
+  }
+
+  // Save edited website
+  const handleSaveEdit = async () => {
+    if (!editingWebsite) return
+
+    try {
+      await updateScrapedWebsite(editingWebsite.key, editWebsiteData)
+      setEditingWebsite(null)
+      setEditWebsiteData({})
+      refetchWebsites()
+      queryClient.invalidateQueries({ queryKey: ['marketScrapingConfig'] })
+      setSaveStatus('success')
+      setSaveMessage('Website updated successfully!')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch (error: any) {
+      setSaveStatus('error')
+      setSaveMessage(error.response?.data?.detail || 'Failed to update website')
+      setTimeout(() => setSaveStatus('idle'), 5000)
     }
   }
 
@@ -190,6 +389,56 @@ export default function Configuration() {
       })
     } finally {
       setTestingKey(null)
+    }
+  }
+
+  // Toggle a source in a category mapping
+  const handleToggleCategorySource = (category: string, sourceKey: string) => {
+    setCategoryMappings((prev) => {
+      const currentSources = prev[category] || []
+      if (currentSources.includes(sourceKey)) {
+        return { ...prev, [category]: currentSources.filter((s) => s !== sourceKey) }
+      } else {
+        return { ...prev, [category]: [...currentSources, sourceKey] }
+      }
+    })
+  }
+
+  // Save category mappings
+  const handleSaveCategoryMappings = async () => {
+    setMappingsSaveStatus('saving')
+    try {
+      await updateCategoryMappings(categoryMappings)
+      setMappingsSaveStatus('success')
+      refetchCategoryMappings()
+      setTimeout(() => setMappingsSaveStatus('idle'), 3000)
+    } catch (error: any) {
+      setMappingsSaveStatus('error')
+      setSaveMessage(error.response?.data?.detail || 'Failed to save category mappings')
+      setTimeout(() => setMappingsSaveStatus('idle'), 5000)
+    }
+  }
+
+  // Refresh data for a category
+  const handleRefreshCategory = async (category: string) => {
+    setRefreshingCategory(category)
+    try {
+      const result = await refreshCategoryData(category)
+      if (result.status === 'queued') {
+        setSaveStatus('success')
+        setSaveMessage(`Triggered refresh for ${result.jobs.length} data source(s)`)
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      } else {
+        setSaveStatus('error')
+        setSaveMessage(result.message)
+        setTimeout(() => setSaveStatus('idle'), 5000)
+      }
+    } catch (error: any) {
+      setSaveStatus('error')
+      setSaveMessage(error.response?.data?.detail || 'Failed to refresh category data')
+      setTimeout(() => setSaveStatus('idle'), 5000)
+    } finally {
+      setRefreshingCategory(null)
     }
   }
 
@@ -540,9 +789,16 @@ export default function Configuration() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Default Model */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Default Model</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Default Model
+              {!aiModels.default_model && modelsData?.default_model && (
+                <span className="ml-2 text-xs text-gray-500 font-normal">
+                  (using system default: {modelsData.default_model})
+                </span>
+              )}
+            </label>
             <select
-              value={aiModels.default_model}
+              value={aiModels.default_model || modelsData?.default_model || ''}
               onChange={(e) => setAiModels({ ...aiModels, default_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
@@ -564,7 +820,9 @@ export default function Configuration() {
               onChange={(e) => setAiModels({ ...aiModels, stock_research_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Use default model</option>
+              <option value="">
+                Use default model {aiModels.default_model || modelsData?.default_model ? `(${aiModels.default_model || modelsData?.default_model})` : ''}
+              </option>
               {availableModels.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.display_name}
@@ -582,7 +840,9 @@ export default function Configuration() {
               onChange={(e) => setAiModels({ ...aiModels, market_sentiment_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Use default model</option>
+              <option value="">
+                Use default model {aiModels.default_model || modelsData?.default_model ? `(${aiModels.default_model || modelsData?.default_model})` : ''}
+              </option>
               {availableModels.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.display_name}
@@ -600,7 +860,9 @@ export default function Configuration() {
               onChange={(e) => setAiModels({ ...aiModels, web_scraping_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Use default model</option>
+              <option value="">
+                Use default model {aiModels.default_model || modelsData?.default_model ? `(${aiModels.default_model || modelsData?.default_model})` : ''}
+              </option>
               {availableModels.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.display_name}
@@ -825,35 +1087,37 @@ export default function Configuration() {
 
           {/* Add Website Form */}
           {showAddWebsite && (
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900">Add Custom Website</h3>
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900">Add New Website to Scrape</h3>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Website Key (ID)</label>
-                <input
-                  type="text"
-                  value={newWebsite.key}
-                  onChange={(e) => setNewWebsite({ ...newWebsite, key: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g., custom_market_watch"
-                />
-                <p className="mt-1 text-xs text-gray-500">Unique identifier (no spaces, use underscores)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Website Key (ID) *</label>
+                  <input
+                    type="text"
+                    value={newWebsite.key}
+                    onChange={(e) => setNewWebsite({ ...newWebsite, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g., custom_market_watch"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Unique identifier (letters, numbers, underscores)</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Data Source Name *</label>
+                  <input
+                    type="text"
+                    value={newWebsite.name}
+                    onChange={(e) => setNewWebsite({ ...newWebsite, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g., MarketWatch Daily"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Display name for this data source</p>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Website Name</label>
-                <input
-                  type="text"
-                  value={newWebsite.name}
-                  onChange={(e) => setNewWebsite({ ...newWebsite, name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="e.g., Custom Market Watch"
-                />
-                <p className="mt-1 text-xs text-gray-500">Display name for the website</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Website URL</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Website URL *</label>
                 <input
                   type="url"
                   value={newWebsite.url}
@@ -861,22 +1125,128 @@ export default function Configuration() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="https://example.com/market-data"
                 />
-                <p className="mt-1 text-xs text-gray-500">Full URL of the website to scrape</p>
+                <p className="mt-1 text-xs text-gray-500">Full URL of the page to scrape</p>
               </div>
 
-              <div className="flex gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Data Categories * (select multiple)</label>
+                <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-2 space-y-1">
+                  {categoriesData?.categories.map((cat) => {
+                    const dataUseArray = Array.isArray(newWebsite.data_use) ? newWebsite.data_use : [newWebsite.data_use]
+                    const isSelected = dataUseArray.includes(cat.value)
+                    return (
+                      <label
+                        key={cat.value}
+                        className={`flex items-start gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-primary-50 border border-primary-200' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const currentArray = Array.isArray(newWebsite.data_use) ? newWebsite.data_use : [newWebsite.data_use]
+                            if (e.target.checked) {
+                              setNewWebsite({ ...newWebsite, data_use: [...currentArray, cat.value] })
+                            } else {
+                              setNewWebsite({ ...newWebsite, data_use: currentArray.filter(v => v !== cat.value) })
+                            }
+                          }}
+                          className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">{cat.label}</div>
+                          <div className="text-xs text-gray-500">{cat.description}</div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Select which features/functions will use this data (can select multiple)</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Scraping Description</label>
+                <textarea
+                  value={newWebsite.description || ''}
+                  onChange={(e) => setNewWebsite({ ...newWebsite, description: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Describe what specific data should be extracted from this page..."
+                  rows={3}
+                />
+                <p className="mt-1 text-xs text-gray-500">Help the AI understand what data you want to extract</p>
+              </div>
+
+              {/* Test Preview Results */}
+              {showTestPreview && testPreviewResult && (
+                <div className={`p-4 rounded-lg border ${testPreviewResult.success ? 'bg-success-50 border-success-200' : 'bg-danger-50 border-danger-200'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {testPreviewResult.success ? (
+                      <svg className="w-5 h-5 text-success-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-danger-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                    <span className={`text-sm font-semibold ${testPreviewResult.success ? 'text-success-800' : 'text-danger-800'}`}>
+                      {testPreviewResult.success ? 'Test Successful' : 'Test Failed'}
+                    </span>
+                    <span className="text-xs text-gray-500">({testPreviewResult.response_time_ms}ms)</span>
+                  </div>
+
+                  {testPreviewResult.success && testPreviewResult.scraped_data && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-gray-700 mb-1">Extracted Data Preview:</p>
+                      <pre className="p-2 bg-white rounded border text-xs overflow-auto max-h-48">
+                        {JSON.stringify(testPreviewResult.scraped_data, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {testPreviewResult.error && (
+                    <p className="text-sm text-danger-700 mt-2">{testPreviewResult.error}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleTestScrape}
+                  disabled={testingWebsite === 'new' || !newWebsite.url}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  {testingWebsite === 'new' ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Test Scraping
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={handleAddWebsite}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                  disabled={!newWebsite.key || !newWebsite.name || !newWebsite.url}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Add Website
                 </button>
                 <button
                   onClick={() => {
                     setShowAddWebsite(false)
-                    setNewWebsite({ key: '', name: '', url: '' })
+                    setNewWebsite({ key: '', name: '', url: '', description: '', data_use: ['dashboard_sentiment'] })
+                    setTestPreviewResult(null)
+                    setShowTestPreview(false)
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-colors"
+                  className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-colors"
                 >
                   Cancel
                 </button>
@@ -884,14 +1254,210 @@ export default function Configuration() {
             </div>
           )}
 
-          {/* Custom Websites List */}
+          {/* Scraped Websites List (from database) */}
+          {scrapedWebsites && scrapedWebsites.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-900">Your Configured Websites</h3>
+              {scrapedWebsites.map((website) => (
+                <div key={website.key}>
+                  {/* Edit Form */}
+                  {editingWebsite?.key === website.key ? (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-gray-900">Edit Website: {website.key}</h4>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Data Source Name</label>
+                          <input
+                            type="text"
+                            value={editWebsiteData.name || ''}
+                            onChange={(e) => setEditWebsiteData({ ...editWebsiteData, name: e.target.value })}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                          <select
+                            value={editWebsiteData.is_active ? 'active' : 'inactive'}
+                            onChange={(e) => setEditWebsiteData({ ...editWebsiteData, is_active: e.target.value === 'active' })}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Website URL</label>
+                        <input
+                          type="url"
+                          value={editWebsiteData.url || ''}
+                          onChange={(e) => setEditWebsiteData({ ...editWebsiteData, url: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Data Categories</label>
+                        <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2 space-y-1">
+                          {categoriesData?.categories.map((cat) => {
+                            const currentDataUse = Array.isArray(editWebsiteData.data_use) ? editWebsiteData.data_use : []
+                            const isSelected = currentDataUse.includes(cat.value)
+                            return (
+                              <label
+                                key={cat.value}
+                                className={`flex items-start gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-primary-50 border border-primary-200' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditWebsiteData({ ...editWebsiteData, data_use: [...currentDataUse, cat.value] })
+                                    } else {
+                                      setEditWebsiteData({ ...editWebsiteData, data_use: currentDataUse.filter(v => v !== cat.value) })
+                                    }
+                                  }}
+                                  className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                />
+                                <div className="flex-1">
+                                  <div className="text-sm font-medium text-gray-900">{cat.label}</div>
+                                  <div className="text-xs text-gray-500">{cat.description}</div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Scraping Description</label>
+                        <textarea
+                          value={editWebsiteData.description || ''}
+                          onChange={(e) => setEditWebsiteData({ ...editWebsiteData, description: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="Describe what specific data should be extracted..."
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={handleSaveEdit}
+                          className="flex-1 px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                        >
+                          Save Changes
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Display Mode */
+                    <div className={`p-3 rounded-lg border ${website.is_active ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">{website.name}</span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              website.is_active ? 'bg-success-100 text-success-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {website.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">
+                              {website.data_use_display}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">{website.url}</div>
+                          {website.description && (
+                            <div className="text-xs text-gray-500 mt-1 italic">{website.description}</div>
+                          )}
+                          {website.last_test_at && (
+                            <div className="flex items-center gap-2 mt-2 text-xs">
+                              <span className="text-gray-500">Last tested: {new Date(website.last_test_at).toLocaleString()}</span>
+                              {website.last_test_success !== null && (
+                                <span className={`px-1.5 py-0.5 rounded ${website.last_test_success ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-700'}`}>
+                                  {website.last_test_success ? 'Passed' : 'Failed'}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 ml-3">
+                          <button
+                            onClick={() => handleStartEdit(website)}
+                            className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                            title="Edit website"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleTestExistingWebsite(website.key)}
+                            disabled={testingWebsite === website.key}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50"
+                            title="Test scraping"
+                          >
+                            {testingWebsite === website.key ? (
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleRemoveWebsite(website.key)}
+                            className="p-2 text-danger-600 hover:bg-danger-100 rounded-lg transition-colors"
+                            title="Remove website"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Legacy Custom Websites List (backward compatibility) */}
           {Object.keys(customWebsites).length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-900">Your Custom Websites</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Legacy Custom Websites</h3>
+              <p className="text-xs text-gray-500">These websites use the old format. Consider re-adding them with the new form for better functionality.</p>
               {Object.entries(customWebsites).map(([key, value]) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg"
+                  className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
                 >
                   <div className="flex-1">
                     <div className="text-sm font-medium text-gray-900">{value.name}</div>
@@ -899,11 +1465,7 @@ export default function Configuration() {
                     <div className="text-xs text-gray-500 mt-1">Key: {key}</div>
                   </div>
                   <button
-                    onClick={() => {
-                      if (confirm(`Remove custom website "${value.name}"?`)) {
-                        handleRemoveWebsite(key)
-                      }
-                    }}
+                    onClick={() => handleRemoveLegacyWebsite(key)}
                     className="ml-3 p-2 text-danger-600 hover:bg-danger-100 rounded-lg transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -930,7 +1492,9 @@ export default function Configuration() {
               onChange={(e) => setMarketScraping({ ...marketScraping, scraping_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Use default scraping model</option>
+              <option value="">
+                Use default model {aiModels.web_scraping_model || aiModels.default_model || modelsData?.default_model ? `(${aiModels.web_scraping_model || aiModels.default_model || modelsData?.default_model})` : ''}
+              </option>
               {availableModels.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.display_name}
@@ -950,7 +1514,9 @@ export default function Configuration() {
               onChange={(e) => setMarketScraping({ ...marketScraping, analysis_model: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Use default analysis model</option>
+              <option value="">
+                Use default model {aiModels.market_sentiment_model || aiModels.default_model || modelsData?.default_model ? `(${aiModels.market_sentiment_model || aiModels.default_model || modelsData?.default_model})` : ''}
+              </option>
               {availableModels.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.display_name}
@@ -958,6 +1524,141 @@ export default function Configuration() {
               ))}
             </select>
             <p className="mt-1 text-xs text-gray-500">Override model for sentiment analysis of scraped data</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 5: Category Data Source Mappings */}
+      <div className="card card-body bg-white">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Category Data Source Mappings</h2>
+            <p className="text-sm text-gray-500">Configure which data sources to use for each dashboard category</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Select one or more data sources for each category. When the Dashboard loads, data from all selected sources
+            will be fetched and combined for display.
+          </p>
+
+          {/* Mappings Save Status */}
+          {mappingsSaveStatus !== 'idle' && (
+            <div
+              className={`p-3 rounded-lg ${
+                mappingsSaveStatus === 'success'
+                  ? 'bg-success-50 border border-success-200 text-success-800'
+                  : mappingsSaveStatus === 'error'
+                  ? 'bg-danger-50 border border-danger-200 text-danger-800'
+                  : 'bg-primary-50 border border-primary-200 text-primary-800'
+              }`}
+            >
+              {mappingsSaveStatus === 'saving' ? 'Saving mappings...' :
+               mappingsSaveStatus === 'success' ? 'Category mappings saved successfully!' :
+               'Failed to save category mappings'}
+            </div>
+          )}
+
+          {/* Category Mappings Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {categoryMappingsData?.categories.map((catInfo) => (
+              <div
+                key={catInfo.category}
+                className="p-4 border border-gray-200 rounded-lg bg-gray-50"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">{catInfo.display_name}</h3>
+                    <p className="text-xs text-gray-500">
+                      {(categoryMappings[catInfo.category] || []).length} source(s) selected
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRefreshCategory(catInfo.category)}
+                    disabled={refreshingCategory === catInfo.category || (categoryMappings[catInfo.category] || []).length === 0}
+                    className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh data from all sources"
+                  >
+                    {refreshingCategory === catInfo.category ? (
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+
+                {catInfo.available_sources.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">No data sources configured for this category</p>
+                ) : (
+                  <div className="space-y-1">
+                    {catInfo.available_sources.map((source) => {
+                      const isSelected = (categoryMappings[catInfo.category] || []).includes(source.key)
+                      return (
+                        <label
+                          key={source.key}
+                          className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-white ${
+                            isSelected ? 'bg-primary-50 border border-primary-200' : 'border border-transparent'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleCategorySource(catInfo.category, source.key)}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{source.name}</div>
+                            <div className="text-xs text-gray-500 truncate">{source.url}</div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Save Mappings Button */}
+          <div className="flex justify-end pt-4 border-t border-gray-200">
+            <button
+              onClick={handleSaveCategoryMappings}
+              disabled={mappingsSaveStatus === 'saving'}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {mappingsSaveStatus === 'saving' ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save Category Mappings
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

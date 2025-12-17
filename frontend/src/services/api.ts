@@ -100,6 +100,71 @@ export async function fetchIndicesHistory(days: number = 90) {
   return data
 }
 
+// Scraped category data types
+export interface ScrapedStockData {
+  ticker: string
+  name?: string
+  price?: number
+  change_pct: number
+  change_abs?: number
+  volume?: number
+  reason?: string
+  sentiment?: string
+}
+
+export interface ScrapedCategorySource {
+  source_key: string
+  source_url: string
+  date: string
+  scraping_model?: string
+}
+
+export interface ScrapedCategoryDataResponse {
+  success: boolean
+  category: string
+  category_display: string
+  date_range: {
+    start: string
+    end: string
+  }
+  sources: ScrapedCategorySource[]
+  data: ScrapedStockData[]
+  count: number
+  error?: string
+  configured_sources?: string[] | null
+  has_configured_sources?: boolean
+}
+
+export interface ScrapedCategorySummary {
+  category: string
+  display_name: string
+  source_count: number
+  date: string
+}
+
+export interface ScrapedCategoriesResponse {
+  success: boolean
+  date: string
+  categories: ScrapedCategorySummary[]
+}
+
+// Fetch scraped data for a specific category (e.g., top_gainers, top_losers)
+export async function fetchScrapedCategoryData(
+  category: string,
+  days: number = 1
+): Promise<ScrapedCategoryDataResponse> {
+  const { data } = await api.get(`/market/scraped-data/${category}`, {
+    params: { days },
+  })
+  return data
+}
+
+// Fetch summary of all available scraped categories
+export async function fetchScrapedCategories(): Promise<ScrapedCategoriesResponse> {
+  const { data } = await api.get('/market/scraped-data')
+  return data
+}
+
 // Type definitions for market data
 export interface CombinedMarketResponse {
   traditional: MarketSentimentResponse
@@ -419,6 +484,155 @@ export async function updateConfigSettings(settings: ConfigSettings): Promise<{ 
 
 export async function testAPIKey(request: TestAPIKeyRequest): Promise<TestAPIKeyResponse> {
   const { data } = await api.post('/config/test-api-key', request)
+  return data
+}
+
+// Scraped Websites types
+export interface DataUseCategory {
+  value: string
+  label: string
+  description: string
+}
+
+export interface DataTemplate {
+  description: string
+  template: Record<string, any>
+}
+
+export interface ScrapedWebsite {
+  id: number
+  key: string
+  name: string
+  url: string
+  description?: string
+  data_use: string  // Comma-separated for storage
+  data_use_list: string[]  // List of categories
+  data_use_display: string
+  extraction_template?: Record<string, any>
+  is_active: boolean
+  last_test_at?: string
+  last_test_result?: Record<string, any>
+  last_test_success?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ScrapedWebsiteCreate {
+  key: string
+  name: string
+  url: string
+  description?: string
+  data_use: string | string[]  // Can be single string or array
+  extraction_template?: Record<string, any>
+}
+
+export interface ScrapedWebsiteUpdate {
+  name?: string
+  url?: string
+  description?: string
+  data_use?: string | string[]  // Can be single string or array
+  extraction_template?: Record<string, any>
+  is_active?: boolean
+}
+
+export interface ScrapedWebsiteTestRequest {
+  url: string
+  description?: string
+  data_use: string | string[]  // Can be single string or array
+}
+
+export interface ScrapedWebsiteTestResponse {
+  success: boolean
+  scraped_data?: Record<string, any>
+  error?: string
+  response_time_ms: number
+  extraction_prompt_used: string
+}
+
+export interface DataUseCategoriesResponse {
+  categories: DataUseCategory[]
+  templates: Record<string, DataTemplate>
+}
+
+// Scraped Websites endpoints
+export async function fetchDataUseCategories(): Promise<DataUseCategoriesResponse> {
+  const { data } = await api.get('/websites/categories')
+  return data
+}
+
+export async function fetchScrapedWebsites(dataUse?: string, isActive?: boolean): Promise<ScrapedWebsite[]> {
+  const params: Record<string, any> = {}
+  if (dataUse) params.data_use = dataUse
+  if (isActive !== undefined) params.is_active = isActive
+  const { data } = await api.get('/websites', { params })
+  return data
+}
+
+export async function fetchScrapedWebsite(key: string): Promise<ScrapedWebsite> {
+  const { data } = await api.get(`/websites/${key}`)
+  return data
+}
+
+export async function createScrapedWebsite(website: ScrapedWebsiteCreate): Promise<ScrapedWebsite> {
+  const { data } = await api.post('/websites', website)
+  return data
+}
+
+export async function updateScrapedWebsite(key: string, website: ScrapedWebsiteUpdate): Promise<ScrapedWebsite> {
+  const { data } = await api.put(`/websites/${key}`, website)
+  return data
+}
+
+export async function deleteScrapedWebsite(key: string): Promise<void> {
+  await api.delete(`/websites/${key}`)
+}
+
+export async function testScrapeWebsite(request: ScrapedWebsiteTestRequest): Promise<ScrapedWebsiteTestResponse> {
+  const { data } = await api.post('/websites/test', request)
+  return data
+}
+
+export async function testExistingWebsite(key: string): Promise<ScrapedWebsiteTestResponse> {
+  const { data } = await api.post(`/websites/${key}/test`)
+  return data
+}
+
+// Category mapping types
+export interface CategorySource {
+  key: string
+  name: string
+  url: string
+}
+
+export interface CategoryInfo {
+  category: string
+  display_name: string
+  selected_sources: string[]
+  available_sources: CategorySource[]
+}
+
+export interface CategoryMappingsResponse {
+  categories: CategoryInfo[]
+  mappings: Record<string, string[]>
+}
+
+// Category mapping endpoints
+export async function fetchCategoryMappings(): Promise<CategoryMappingsResponse> {
+  const { data } = await api.get('/config/category-mappings')
+  return data
+}
+
+export async function updateCategoryMappings(
+  mappings: Record<string, string[]>
+): Promise<{ status: string; message: string; mappings: Record<string, string[]> }> {
+  const { data } = await api.put('/config/category-mappings', mappings)
+  return data
+}
+
+export async function refreshCategoryData(
+  category: string
+): Promise<{ status: string; message: string; jobs: Array<{ source_key: string; job_id: string }> }> {
+  const { data } = await api.post(`/config/refresh-category/${category}`)
   return data
 }
 

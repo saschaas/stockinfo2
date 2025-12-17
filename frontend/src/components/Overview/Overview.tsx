@@ -1,18 +1,35 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchDataSourcesHealth, DataSourcesResponse } from '../../services/api'
+import {
+  fetchDataSourcesHealth,
+  DataSourcesResponse,
+  fetchScrapedWebsites,
+  ScrapedWebsite,
+} from '../../services/api'
 
-// Human-readable names for data sources
+// Human-readable names for data sources and categories
 const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   alpha_vantage: 'Alpha Vantage',
   yahoo_finance: 'Yahoo Finance',
   sec_edgar: 'SEC EDGAR',
   ollama: 'Ollama LLM',
   openfigi: 'OpenFIGI',
+  web_scraping: 'Web Scraping',
   database: 'PostgreSQL',
   redis: 'Redis Cache',
   celery: 'Celery Workers',
   nordvpn: 'NordVPN',
+  // Data use categories
+  dashboard_sentiment: 'Dashboard Sentiment',
+  hot_stocks: 'Hot Stocks',
+  hot_sectors: 'Hot Sectors',
+  bad_sectors: 'Bad Sectors',
+  analyst_ratings: 'Analyst Ratings',
+  news: 'News',
+  etf_holdings: 'ETF Holdings',
+  etf_holding_changes: 'ETF Holding Changes',
+  fund_holdings: 'Fund Holdings',
+  fund_holding_changes: 'Fund Holding Changes',
 }
 
 // Icons for different source types
@@ -272,6 +289,124 @@ const SourceStatusCard = ({
   )
 }
 
+// Scraped Websites Card Component
+const ScrapedWebsitesCard = ({ websites }: { websites: ScrapedWebsite[] }) => {
+  if (!websites || websites.length === 0) {
+    return (
+      <div className="card card-body bg-white">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Web Scraping Sources</h2>
+            <p className="text-sm text-gray-500">Custom websites configured for data scraping</p>
+          </div>
+        </div>
+        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+          <p className="text-sm text-gray-500">No custom websites configured yet.</p>
+          <p className="text-xs text-gray-400 mt-1">Go to Configuration to add websites for scraping.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Group websites by data_use categories (websites can appear in multiple categories)
+  const groupedWebsites = websites.reduce((acc, website) => {
+    // Use data_use_list if available, otherwise parse data_use
+    const categories = website.data_use_list || website.data_use.split(',').map(s => s.trim())
+    categories.forEach(cat => {
+      const displayName = SOURCE_DISPLAY_NAMES[cat] || cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      if (!acc[displayName]) acc[displayName] = []
+      // Avoid duplicates
+      if (!acc[displayName].some(w => w.key === website.key)) {
+        acc[displayName].push(website)
+      }
+    })
+    return acc
+  }, {} as Record<string, ScrapedWebsite[]>)
+
+  return (
+    <div className="card card-body bg-white">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Web Scraping Sources</h2>
+          <p className="text-sm text-gray-500">{websites.length} custom website(s) configured for data scraping</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {Object.entries(groupedWebsites).map(([category, categoryWebsites]) => (
+          <div key={category} className="bg-gray-50 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{category}</span>
+              <span className="text-gray-400 text-xs font-normal">({categoryWebsites.length} source{categoryWebsites.length !== 1 ? 's' : ''})</span>
+            </h3>
+            <div className="space-y-2">
+              {categoryWebsites.map((website) => (
+                <div
+                  key={website.key}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                    website.is_active
+                      ? website.last_test_success
+                        ? 'bg-success-50 border-success-200'
+                        : website.last_test_success === false
+                        ? 'bg-danger-50 border-danger-200'
+                        : 'bg-white border-gray-200'
+                      : 'bg-gray-100 border-gray-300'
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{website.name}</span>
+                      {!website.is_active && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-gray-200 text-gray-600">Inactive</span>
+                      )}
+                      {website.last_test_success === true && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-success-100 text-success-700 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Verified
+                        </span>
+                      )}
+                      {website.last_test_success === false && (
+                        <span className="px-2 py-0.5 text-xs rounded-full bg-danger-100 text-danger-700 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Failed
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 truncate">{website.url}</p>
+                    {website.description && (
+                      <p className="text-xs text-gray-400 mt-1 italic">{website.description}</p>
+                    )}
+                  </div>
+                  {website.last_test_at && (
+                    <div className="text-right text-xs text-gray-400">
+                      <div>Last tested:</div>
+                      <div>{new Date(website.last_test_at).toLocaleDateString()}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Overview() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -279,6 +414,12 @@ export default function Overview() {
     queryKey: ['dataSourcesHealth'],
     queryFn: fetchDataSourcesHealth,
     staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
+  // Fetch scraped websites
+  const { data: scrapedWebsites } = useQuery<ScrapedWebsite[]>({
+    queryKey: ['scrapedWebsites'],
+    queryFn: () => fetchScrapedWebsites(),
   })
 
   const handleRefresh = async () => {
@@ -369,6 +510,9 @@ export default function Overview() {
           ))}
         </div>
       </div>
+
+      {/* Web Scraping Sources */}
+      <ScrapedWebsitesCard websites={scrapedWebsites || []} />
 
       {/* Tab Data Flow Diagram */}
       <div className="card card-body bg-white">

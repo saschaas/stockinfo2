@@ -177,6 +177,7 @@ def refresh_web_scraped_market(
             "analysis": analysis_result,
             "analysis_model": analysis_llm,
             "response_time_ms": scraped_data.get("response_time_ms", 0),
+            "data_categories": scraped_data.get("data_categories", []),
         }
 
         record_id = await save_web_scraped_data_to_db(result)

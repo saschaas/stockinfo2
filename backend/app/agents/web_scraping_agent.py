@@ -14,13 +14,21 @@ from typing import Any, Dict, Optional
 import time
 import json
 
-import ollama
+import os
+
+from ollama import Client
 import structlog
 
 from backend.app.config import get_settings
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+
+# Initialize Ollama client with configured URL
+def _get_ollama_client() -> Client:
+    """Get Ollama client with proper host configuration."""
+    ollama_url = settings.ollama_base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    return Client(host=ollama_url)
 
 
 @dataclass
@@ -138,6 +146,53 @@ class WebScrapingAgent:
             url = url.replace(placeholder, value)
         return url
 
+    async def _handle_consent_dialogs(self, page) -> bool:
+        """
+        Try to dismiss common cookie/privacy consent dialogs.
+
+        Returns:
+            True if a consent dialog was found and clicked
+        """
+        # Common consent button selectors (in order of preference)
+        consent_selectors = [
+            # Generic accept buttons
+            'button:has-text("Accept all")',
+            'button:has-text("Accept All")',
+            'button:has-text("Accept")',
+            'button:has-text("I agree")',
+            'button:has-text("I Agree")',
+            'button:has-text("Agree")',
+            'button:has-text("OK")',
+            'button:has-text("Got it")',
+            # Yahoo specific
+            'button[name="agree"]',
+            'button.accept-all',
+            '[data-testid="consent-accept-all"]',
+            # Common consent frameworks
+            '#onetrust-accept-btn-handler',
+            '.cookie-consent-accept',
+            '#cookie-accept',
+            '#gdpr-consent-accept',
+            '.gdpr-accept',
+            # Reject tracking but accept necessary (fallback)
+            'button:has-text("Reject all")',
+            'button:has-text("Reject All")',
+        ]
+
+        for selector in consent_selectors:
+            try:
+                button = page.locator(selector).first
+                if await button.is_visible(timeout=1000):
+                    await button.click()
+                    logger.debug("Clicked consent button", selector=selector)
+                    # Wait a bit for dialog to dismiss
+                    await page.wait_for_timeout(1500)
+                    return True
+            except Exception:
+                continue
+
+        return False
+
     async def _extract_with_playwright(
         self,
         url: str,
@@ -153,6 +208,7 @@ class WebScrapingAgent:
         Returns:
             Extracted data dictionary
         """
+        import asyncio
         from playwright.async_api import async_playwright
 
         async with async_playwright() as p:
@@ -161,12 +217,30 @@ class WebScrapingAgent:
             page = await browser.new_page()
 
             try:
-                # Navigate to page
+                # Navigate to page - wait for domcontentloaded first (faster)
                 logger.debug("Navigating to page", url=url)
-                await page.goto(url, timeout=config.timeout * 1000)
+                await page.goto(url, timeout=config.timeout * 1000, wait_until="domcontentloaded")
 
-                # Wait for page to load
-                await page.wait_for_load_state("networkidle", timeout=config.timeout * 1000)
+                # Try networkidle with shorter timeout, but don't fail if it times out
+                # (Some sites like Perplexity have constant network activity)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15000)  # 15 second max
+                except Exception:
+                    logger.debug("networkidle timed out, proceeding with current content")
+
+                # Handle cookie/privacy consent dialogs
+                consent_handled = await self._handle_consent_dialogs(page)
+                if consent_handled:
+                    logger.debug("Consent dialog handled, waiting for content to load")
+                    # Wait for page to reload/update after consent
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(2)
+
+                # Additional wait for dynamic content to render
+                await asyncio.sleep(2)  # Give JS time to render
 
                 # Get page content (text)
                 logger.debug("Extracting page content")
@@ -199,25 +273,62 @@ class WebScrapingAgent:
         Returns:
             Extracted data dictionary
         """
-        # Construct full prompt
-        full_prompt = f"""{extraction_prompt}
+        # Truncate page text if too long (LLMs have context limits)
+        max_chars = 15000
+        if len(page_text) > max_chars:
+            page_text = page_text[:max_chars] + "\n\n[Content truncated due to length]"
 
-Here is the webpage content:
+        # Count how many categories are being requested
+        category_count = extraction_prompt.count("---")
 
+        # Construct full prompt - make it clear we're providing content, not asking to access URLs
+        if category_count > 2:
+            # Multiple categories - request combined JSON
+            full_prompt = f"""You are analyzing text content that has already been extracted from a webpage.
+Your task is to extract specific information from this text and return it as a SINGLE combined JSON object.
+
+IMPORTANT: You must return ALL requested data categories in ONE JSON object. Combine the data structures.
+
+EXTRACTION REQUIREMENTS (extract ALL of these):
+{extraction_prompt}
+
+TEXT CONTENT TO ANALYZE:
+---
 {page_text}
+---
 
-Extract the requested information and return it as a JSON object.
-If the information is not found, return an empty object {{}}.
+Return a SINGLE valid JSON object containing ALL the requested categories combined.
+For example, if asked for news AND hot_stocks, return: {{"articles": [...], "hot_stocks": [...], ...}}
+If specific information cannot be found, use empty arrays.
+Return ONLY the JSON - no explanations or markdown.
+"""
+        else:
+            # Single category - simpler prompt
+            full_prompt = f"""You are analyzing text content that has already been extracted from a webpage.
+Your task is to extract specific information from this text and return it as JSON.
+
+EXTRACTION REQUIREMENTS:
+{extraction_prompt}
+
+TEXT CONTENT TO ANALYZE:
+---
+{page_text}
+---
+
+Based on the text content above, extract the requested information and return ONLY a valid JSON object.
+If specific information cannot be found in the text, use empty arrays or default values.
+Do not explain or add commentary - just return the JSON.
 """
 
-        # Call Ollama LLM
+        # Call Ollama LLM using configured client
         try:
-            response = ollama.chat(
+            client = _get_ollama_client()
+            response = client.chat(
                 model=self.settings.ollama_model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a precise data extraction assistant. Extract only the information requested from web page snapshots. Return valid JSON only. Never make up information.",
+                        "content": "You are a data extraction assistant. You will be given text content that was scraped from a webpage. Your job is to extract structured information from that text and return it as valid JSON. You do NOT need to access any external URLs - all the content you need is provided in the user's message. Always return valid JSON only, with no additional explanation.",
                     },
                     {
                         "role": "user",
@@ -226,7 +337,7 @@ If the information is not found, return an empty object {{}}.
                 ],
                 options={
                     "temperature": 0.1,  # Low temperature for precision
-                    "num_predict": 500,  # Reasonable max tokens
+                    "num_predict": 8000,  # Large limit for complex multi-category extraction
                 }
             )
 
@@ -285,21 +396,79 @@ If the information is not found, return an empty object {{}}.
 
 
 # Convenience function for creating config from settings
-def load_web_scraping_config(data_type: str) -> Optional[WebScrapingConfig]:
+def load_web_scraping_config(website_key: str) -> Optional[WebScrapingConfig]:
     """
-    Load web scraping configuration for a specific data type.
+    Load web scraping configuration for a specific website key.
 
     Args:
-        data_type: Type of data to scrape (e.g., "company_profile")
+        website_key: Key of the website to scrape (e.g., "market_overview_perplexity" or custom key)
 
     Returns:
-        WebScrapingConfig if found in settings, None otherwise
+        WebScrapingConfig if found, None otherwise
     """
+    from backend.app.schemas.config import DATA_TEMPLATES, DATA_USE_DISPLAY_NAMES
+
     settings = get_settings()
 
-    # This will be populated from config.yaml in the next step
-    # For now, return None to allow graceful fallback
-    if not hasattr(settings, 'web_scraping_configs'):
-        return None
+    # First, check if it's a custom website in the database using sync query
+    website_data = None
+    try:
+        from sqlalchemy import create_engine, select
+        from sqlalchemy.orm import Session
+        from backend.app.db.models import ScrapedWebsite
 
-    return settings.web_scraping_configs.get(data_type)
+        # Create sync engine from async URL
+        database_url = settings.database_url
+        if database_url.startswith("postgresql+asyncpg://"):
+            database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+
+        sync_engine = create_engine(database_url, pool_pre_ping=True)
+        with Session(sync_engine) as session:
+            stmt = select(ScrapedWebsite).where(ScrapedWebsite.key == website_key)
+            db_website = session.execute(stmt).scalar_one_or_none()
+            if db_website:
+                # Copy attributes before session closes
+                website_data = {
+                    "url": db_website.url,
+                    "data_use": db_website.data_use,
+                    "description": db_website.description,
+                }
+        sync_engine.dispose()
+    except Exception as e:
+        logger.warning("Failed to check database for custom website", error=str(e), website_key=website_key)
+        website_data = None
+
+    # Create a simple object from the data
+    website = type('Website', (), website_data)() if website_data else None
+
+    if website:
+        # Build extraction prompt from data_use categories
+        data_use_list = [du.strip() for du in website.data_use.split(",") if du.strip()]
+        extraction_prompts = []
+        for du in data_use_list:
+            template = DATA_TEMPLATES.get(du, {})
+            prompt = template.get("extraction_prompt", "")
+            if prompt:
+                extraction_prompts.append(f"--- {DATA_USE_DISPLAY_NAMES.get(du, du)} ---\n{prompt}")
+
+        extraction_prompt = "\n\n".join(extraction_prompts)
+
+        # Add website's description to the prompt if provided
+        if website.description:
+            extraction_prompt = f"""{extraction_prompt}
+
+Additional context from user:
+{website.description}"""
+
+        return WebScrapingConfig(
+            data_type=website.data_use,
+            url_pattern=website.url,
+            extraction_prompt=extraction_prompt,
+            timeout=120,  # Default timeout for custom websites
+        )
+
+    # Fallback to config.yaml settings
+    if hasattr(settings, 'web_scraping_configs'):
+        return settings.web_scraping_configs.get(website_key)
+
+    return None

@@ -37,6 +37,10 @@ DATA_SOURCE_INFO = {
         "description": "CUSIP to ticker symbol resolution",
         "type": "api",
     },
+    "web_scraping": {
+        "description": "Custom website scraping for market data",
+        "type": "service",
+    },
     "database": {
         "description": "PostgreSQL data storage",
         "type": "infrastructure",
@@ -55,33 +59,43 @@ DATA_SOURCE_INFO = {
     },
 }
 
-# Tab to data source mappings
+# Tab to data source mappings - supports configurable sources
 TAB_DATA_MAPPINGS = {
     "Dashboard": {
         "data_types": [
-            {"name": "Market Sentiment", "primary": "alpha_vantage", "fallback": "yahoo_finance"},
-            {"name": "Top Movers", "primary": "yahoo_finance", "fallback": None},
-            {"name": "System Health", "primary": "database", "fallback": None},
+            {"name": "Top Movers", "primary": "web_scraping", "fallback": None, "configurable": True, "config_category": "top_gainers,top_losers"},
+            {"name": "Market Sentiment", "primary": "alpha_vantage", "fallback": "yahoo_finance", "configurable": False},
+            {"name": "Sector Analysis", "primary": "alpha_vantage", "fallback": "web_scraping", "configurable": True, "config_category": "dashboard_sentiment"},
+            {"name": "Market Summary", "primary": "web_scraping", "fallback": None, "configurable": True, "config_category": "dashboard_sentiment"},
+            {"name": "News Feed", "primary": "alpha_vantage", "fallback": "web_scraping", "configurable": True, "config_category": "news"},
         ]
     },
     "Stock Research": {
         "data_types": [
-            {"name": "Stock Prices", "primary": "alpha_vantage", "fallback": "yahoo_finance"},
-            {"name": "Technical Indicators", "primary": "alpha_vantage", "fallback": None},
-            {"name": "Fundamentals", "primary": "yahoo_finance", "fallback": None},
-            {"name": "AI Analysis", "primary": "ollama", "fallback": None},
+            {"name": "Stock Prices", "primary": "alpha_vantage", "fallback": "yahoo_finance", "configurable": True},
+            {"name": "Technical Indicators", "primary": "alpha_vantage", "fallback": None, "configurable": False},
+            {"name": "Fundamentals", "primary": "yahoo_finance", "fallback": None, "configurable": False},
+            {"name": "AI Analysis", "primary": "ollama", "fallback": None, "configurable": False},
+            {"name": "Analyst Ratings", "primary": "yahoo_finance", "fallback": None, "configurable": True, "alternatives": ["web_scraping"]},
         ]
     },
     "Fund Tracker": {
         "data_types": [
-            {"name": "13F Holdings", "primary": "sec_edgar", "fallback": None},
-            {"name": "Ticker Resolution", "primary": "openfigi", "fallback": None},
+            {"name": "13F Holdings", "primary": "sec_edgar", "fallback": None, "configurable": True, "alternatives": ["web_scraping"]},
+            {"name": "Fund Holding Changes", "primary": "sec_edgar", "fallback": None, "configurable": True, "alternatives": ["web_scraping"]},
+            {"name": "Ticker Resolution", "primary": "openfigi", "fallback": None, "configurable": False},
+        ]
+    },
+    "ETF Tracker": {
+        "data_types": [
+            {"name": "ETF Holdings", "primary": "yahoo_finance", "fallback": None, "configurable": True, "alternatives": ["web_scraping"]},
+            {"name": "ETF Holding Changes", "primary": "yahoo_finance", "fallback": None, "configurable": True, "alternatives": ["web_scraping"]},
         ]
     },
     "Watchlist": {
         "data_types": [
-            {"name": "Price Updates", "primary": "yahoo_finance", "fallback": None},
-            {"name": "Saved Data", "primary": "database", "fallback": None},
+            {"name": "Price Updates", "primary": "yahoo_finance", "fallback": None, "configurable": False},
+            {"name": "Saved Data", "primary": "database", "fallback": None, "configurable": False},
         ]
     },
 }
@@ -418,6 +432,41 @@ async def check_openfigi() -> dict[str, Any]:
         }
 
 
+async def check_web_scraping() -> dict[str, Any]:
+    """Check web scraping capability (Playwright/browser availability)."""
+    try:
+        # Check if there are any configured scraped websites
+        from backend.app.db.session import async_session_factory
+        from backend.app.db.models import ScrapedWebsite
+        from sqlalchemy import select, func
+
+        async with async_session_factory() as session:
+            stmt = select(func.count()).select_from(ScrapedWebsite).where(ScrapedWebsite.is_active == True)
+            result = await session.execute(stmt)
+            active_count = result.scalar() or 0
+
+        if active_count > 0:
+            return {
+                "name": "Web Scraping",
+                "status": "healthy",
+                "message": f"{active_count} active website(s) configured",
+                "active_websites": active_count,
+            }
+        else:
+            return {
+                "name": "Web Scraping",
+                "status": "degraded",
+                "message": "No active websites configured",
+                "active_websites": 0,
+            }
+    except Exception as e:
+        return {
+            "name": "Web Scraping",
+            "status": "unknown",
+            "message": f"Check failed: {str(e)}",
+        }
+
+
 async def check_nordvpn() -> dict[str, Any]:
     """Check NordVPN connection status."""
     try:
@@ -543,6 +592,7 @@ async def data_sources_overview() -> dict[str, Any]:
         check_yahoo_finance(),
         check_sec_edgar(),
         check_openfigi(),
+        check_web_scraping(),
     )
 
     # Map results to source names
@@ -556,6 +606,7 @@ async def data_sources_overview() -> dict[str, Any]:
         "yahoo_finance": results[6],
         "sec_edgar": results[7],
         "openfigi": results[8],
+        "web_scraping": results[9],
     }
 
     # Build sources dict with status and descriptions

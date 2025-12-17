@@ -223,6 +223,46 @@ class WebScrapedMarketData(Base):
     )
 
 
+class ScrapedCategoryData(Base):
+    """Category-specific data extracted from web scraping.
+
+    This table stores data from different categories (top_gainers, top_losers,
+    hot_stocks, etc.) separately, allowing multiple data sources per category.
+    """
+
+    __tablename__ = "scraped_category_data"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+    # Source information
+    source_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    # Category identification
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    # The actual data for this category (JSON)
+    data: Mapped[dict] = mapped_column(PortableJSON, nullable=False)
+
+    # Metadata
+    scraping_model: Mapped[str] = mapped_column(String(50), nullable=True)
+    response_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Composite unique constraint: one record per date/source/category
+    __table_args__ = (
+        Index("ix_scraped_category_data_date_category", "date", "category"),
+        {"sqlite_autoincrement": True},
+    )
+
+
 class StockAnalysis(Base):
     """Comprehensive stock analysis results."""
 
@@ -411,3 +451,48 @@ class UserConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ScrapedWebsite(Base):
+    """User-configured websites for scraping data."""
+
+    __tablename__ = "scraped_websites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)  # Display name
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)  # What data to scrape
+    data_use: Mapped[str] = mapped_column(
+        String(500), nullable=False
+    )  # Comma-separated categories: dashboard_sentiment, hot_stocks, etc.
+    extraction_template: Mapped[dict] = mapped_column(
+        PortableJSON, nullable=True
+    )  # JSON template for expected data format
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_test_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_result: Mapped[dict] = mapped_column(
+        PortableJSON, nullable=True
+    )  # Last test scrape result
+    last_test_success: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+# Data use categories for scraped websites
+DATA_USE_CATEGORIES = [
+    "dashboard_sentiment",
+    "hot_stocks",
+    "hot_sectors",
+    "bad_sectors",
+    "analyst_ratings",
+    "news",
+    "etf_holdings",
+    "etf_holding_changes",
+    "fund_holdings",
+    "fund_holding_changes",
+]

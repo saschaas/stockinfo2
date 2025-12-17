@@ -406,6 +406,96 @@ class YahooFinanceClient:
             logger.warning("Failed to fetch recommendations", ticker=ticker, error=str(e))
             return []
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
+    async def get_top_gainers(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get top gaining stocks for the day.
+
+        Args:
+            limit: Maximum number of stocks to return
+
+        Returns:
+            List of top gainers with ticker, name, price, and change data
+        """
+        cache_key = f"yf:top_gainers:{limit}"
+        cached = await cache.get(cache_key)
+        if cached:
+            return cached
+
+        await self.rate_limiter.wait_for_token()
+
+        try:
+            # Use yfinance screen function for day gainers
+            result = yf.screen("day_gainers", count=limit)
+
+            gainers = []
+            if result and "quotes" in result:
+                for quote in result["quotes"][:limit]:
+                    gainers.append({
+                        "ticker": quote.get("symbol"),
+                        "name": quote.get("shortName") or quote.get("longName"),
+                        "price": self._safe_decimal(quote.get("regularMarketPrice")),
+                        "change_pct": self._safe_decimal(quote.get("regularMarketChangePercent")),
+                        "change_abs": self._safe_decimal(quote.get("regularMarketChange")),
+                        "volume": quote.get("regularMarketVolume"),
+                    })
+
+            # Cache for 5 minutes
+            await cache.set(cache_key, gainers, CacheService.TTL_SHORT)
+            logger.info("Fetched top gainers", count=len(gainers))
+            return gainers
+
+        except Exception as e:
+            logger.error("Failed to fetch top gainers", error=str(e))
+            return []
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
+    async def get_top_losers(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get top losing stocks for the day.
+
+        Args:
+            limit: Maximum number of stocks to return
+
+        Returns:
+            List of top losers with ticker, name, price, and change data
+        """
+        cache_key = f"yf:top_losers:{limit}"
+        cached = await cache.get(cache_key)
+        if cached:
+            return cached
+
+        await self.rate_limiter.wait_for_token()
+
+        try:
+            # Use yfinance screen function for day losers
+            result = yf.screen("day_losers", count=limit)
+
+            losers = []
+            if result and "quotes" in result:
+                for quote in result["quotes"][:limit]:
+                    losers.append({
+                        "ticker": quote.get("symbol"),
+                        "name": quote.get("shortName") or quote.get("longName"),
+                        "price": self._safe_decimal(quote.get("regularMarketPrice")),
+                        "change_pct": self._safe_decimal(quote.get("regularMarketChangePercent")),
+                        "change_abs": self._safe_decimal(quote.get("regularMarketChange")),
+                        "volume": quote.get("regularMarketVolume"),
+                    })
+
+            # Cache for 5 minutes
+            await cache.set(cache_key, losers, CacheService.TTL_SHORT)
+            logger.info("Fetched top losers", count=len(losers))
+            return losers
+
+        except Exception as e:
+            logger.error("Failed to fetch top losers", error=str(e))
+            return []
+
     def _safe_decimal(self, value: Any) -> Decimal | None:
         """Safely convert value to Decimal."""
         if value is None:

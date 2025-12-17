@@ -112,11 +112,15 @@ async def scrape_market_website(
                 "error": result.error,
             }
 
+        # Extract data categories from config.data_type (comma-separated)
+        data_categories = [c.strip() for c in config.data_type.split(",") if c.strip()]
+
         return {
             "success": True,
             "data": result.data,
             "source_url": result.source_url,
             "response_time_ms": result.response_time_ms,
+            "data_categories": data_categories,
         }
 
     except Exception as e:
@@ -172,90 +176,246 @@ async def analyze_scraped_market_data(
     }
 
 
-async def save_web_scraped_data_to_db(data: dict[str, Any]) -> int:
+async def save_web_scraped_data_to_db(data: dict[str, Any]) -> int | None:
     """
     Save web-scraped market data to database.
+
+    Only saves to WebScrapedMarketData if source has 'dashboard_sentiment' category.
+    Always saves category-specific data to ScrapedCategoryData.
 
     Args:
         data: Data to save including raw data and analysis results
 
     Returns:
-        int: Record ID of saved data
+        int | None: Record ID of saved data (None if not saved to WebScrapedMarketData)
     """
     from sqlalchemy import select
     from backend.app.db.session import async_session_factory
     from backend.app.db.models import WebScrapedMarketData
 
-    async with async_session_factory() as session:
-        today = date.today()
+    data_categories = data.get("data_categories", [])
+    record_id = None
 
-        # Check if we already have data for today
-        stmt = select(WebScrapedMarketData).where(WebScrapedMarketData.date == today)
-        result = await session.execute(stmt)
-        existing = result.scalar_one_or_none()
+    # Only save to WebScrapedMarketData if source has 'dashboard_sentiment' category
+    # This ensures Market Summary only shows data from appropriate sources
+    if "dashboard_sentiment" in data_categories:
+        async with async_session_factory() as session:
+            today = date.today()
 
-        analysis = data.get("analysis", {})
+            # Check if we already have data for today from a dashboard_sentiment source
+            stmt = select(WebScrapedMarketData).where(WebScrapedMarketData.date == today)
+            result = await session.execute(stmt)
+            existing = result.scalar_one_or_none()
 
-        if existing:
-            # Update existing record
-            existing.source_url = data["source_url"]
-            existing.source_name = data["source_name"]
-            existing.raw_scraped_data = data["raw_data"]
-            existing.scraping_model = data.get("scraping_model")
-            existing.market_summary = analysis.get("analysis_summary", "")
-            existing.overall_sentiment = Decimal(
-                str(analysis.get("overall_sentiment", 0.5))
-            )
-            existing.bullish_score = Decimal(str(analysis.get("bullish_score", 0.5)))
-            existing.bearish_score = Decimal(str(analysis.get("bearish_score", 0.5)))
-            existing.trending_sectors = [
-                {"name": s} for s in analysis.get("trending_sectors", [])
-            ]
-            existing.declining_sectors = [
-                {"name": s} for s in analysis.get("declining_sectors", [])
-            ]
-            existing.market_themes = analysis.get("market_themes", [])
-            existing.key_events = analysis.get("key_events", [])
-            existing.analysis_model = data.get("analysis_model")
-            existing.analysis_timestamp = datetime.now()
-            existing.confidence_score = Decimal(
-                str(analysis.get("confidence_score", 0.5))
-            )
-            existing.response_time_ms = data.get("response_time_ms", 0)
+            analysis = data.get("analysis", {})
 
-            record_id = existing.id
-            logger.info("Updated existing web-scraped market data", record_id=record_id)
-        else:
-            # Create new record
-            record = WebScrapedMarketData(
-                date=today,
-                source_url=data["source_url"],
-                source_name=data["source_name"],
-                data_type="market_overview",
-                raw_scraped_data=data["raw_data"],
-                scraping_model=data.get("scraping_model"),
-                market_summary=analysis.get("analysis_summary", ""),
-                overall_sentiment=Decimal(str(analysis.get("overall_sentiment", 0.5))),
-                bullish_score=Decimal(str(analysis.get("bullish_score", 0.5))),
-                bearish_score=Decimal(str(analysis.get("bearish_score", 0.5))),
-                trending_sectors=[
+            if existing:
+                # Update existing record
+                existing.source_url = data["source_url"]
+                existing.source_name = data["source_name"]
+                existing.raw_scraped_data = data["raw_data"]
+                existing.scraping_model = data.get("scraping_model")
+                existing.market_summary = analysis.get("analysis_summary", "")
+                existing.overall_sentiment = Decimal(
+                    str(analysis.get("overall_sentiment", 0.5))
+                )
+                existing.bullish_score = Decimal(str(analysis.get("bullish_score", 0.5)))
+                existing.bearish_score = Decimal(str(analysis.get("bearish_score", 0.5)))
+                existing.trending_sectors = [
                     {"name": s} for s in analysis.get("trending_sectors", [])
-                ],
-                declining_sectors=[
+                ]
+                existing.declining_sectors = [
                     {"name": s} for s in analysis.get("declining_sectors", [])
-                ],
-                market_themes=analysis.get("market_themes", []),
-                key_events=analysis.get("key_events", []),
-                analysis_model=data.get("analysis_model"),
-                analysis_timestamp=datetime.now(),
-                confidence_score=Decimal(str(analysis.get("confidence_score", 0.5))),
-                extraction_method="mcp_playwright",
-                response_time_ms=data.get("response_time_ms", 0),
+                ]
+                existing.market_themes = analysis.get("market_themes", [])
+                existing.key_events = analysis.get("key_events", [])
+                existing.analysis_model = data.get("analysis_model")
+                existing.analysis_timestamp = datetime.now()
+                existing.confidence_score = Decimal(
+                    str(analysis.get("confidence_score", 0.5))
+                )
+                existing.response_time_ms = data.get("response_time_ms", 0)
+
+                record_id = existing.id
+                logger.info("Updated existing web-scraped market data", record_id=record_id)
+            else:
+                # Create new record
+                record = WebScrapedMarketData(
+                    date=today,
+                    source_url=data["source_url"],
+                    source_name=data["source_name"],
+                    data_type="market_overview",
+                    raw_scraped_data=data["raw_data"],
+                    scraping_model=data.get("scraping_model"),
+                    market_summary=analysis.get("analysis_summary", ""),
+                    overall_sentiment=Decimal(str(analysis.get("overall_sentiment", 0.5))),
+                    bullish_score=Decimal(str(analysis.get("bullish_score", 0.5))),
+                    bearish_score=Decimal(str(analysis.get("bearish_score", 0.5))),
+                    trending_sectors=[
+                        {"name": s} for s in analysis.get("trending_sectors", [])
+                    ],
+                    declining_sectors=[
+                        {"name": s} for s in analysis.get("declining_sectors", [])
+                    ],
+                    market_themes=analysis.get("market_themes", []),
+                    key_events=analysis.get("key_events", []),
+                    analysis_model=data.get("analysis_model"),
+                    analysis_timestamp=datetime.now(),
+                    confidence_score=Decimal(str(analysis.get("confidence_score", 0.5))),
+                    extraction_method="mcp_playwright",
+                    response_time_ms=data.get("response_time_ms", 0),
+                )
+                session.add(record)
+                await session.flush()
+                record_id = record.id
+                logger.info("Created new web-scraped market data", record_id=record_id)
+
+            await session.commit()
+    else:
+        logger.info(
+            "Skipping WebScrapedMarketData save - source not configured for dashboard_sentiment",
+            source_name=data["source_name"],
+            categories=data_categories,
+        )
+
+    # Always save category-specific data
+    if data.get("raw_data") and data_categories:
+        await save_category_data_to_db(
+            source_key=data["source_name"],
+            source_url=data["source_url"],
+            categories=data_categories,
+            raw_data=data["raw_data"],
+            scraping_model=data.get("scraping_model"),
+            response_time_ms=data.get("response_time_ms", 0),
+        )
+
+    return record_id
+
+
+async def save_category_data_to_db(
+    source_key: str,
+    source_url: str,
+    categories: list[str],
+    raw_data: dict[str, Any],
+    scraping_model: str | None = None,
+    response_time_ms: int = 0,
+) -> list[int]:
+    """
+    Save category-specific scraped data to database.
+
+    This extracts data for each category from the raw_data and saves it
+    to the ScrapedCategoryData table, allowing multiple sources per category.
+
+    Args:
+        source_key: Website configuration key
+        source_url: URL that was scraped
+        categories: List of data categories configured for this website
+        raw_data: Raw LLM extraction results
+        scraping_model: Name of LLM used for scraping
+        response_time_ms: Time taken for scraping
+
+    Returns:
+        list[int]: List of record IDs saved
+    """
+    from sqlalchemy import select, and_
+    from sqlalchemy.dialects.postgresql import insert
+    from backend.app.db.session import async_session_factory
+    from backend.app.db.models import ScrapedCategoryData
+
+    saved_ids = []
+    today = date.today()
+
+    # Category key mappings - maps category name to possible keys in raw_data
+    CATEGORY_DATA_KEYS = {
+        "top_gainers": ["stocks", "gainers", "top_gainers"],
+        "top_losers": ["stocks", "losers", "top_losers"],
+        "hot_stocks": ["stocks", "hot_stocks", "trending_stocks"],
+        "hot_sectors": ["sectors", "hot_sectors", "trending_sectors"],
+        "bad_sectors": ["sectors", "bad_sectors", "declining_sectors"],
+        "analyst_ratings": ["ratings", "analyst_ratings"],
+        "news": ["articles", "news", "headlines"],
+        "dashboard_sentiment": ["market_summary", "sentiment"],
+        "etf_holdings": ["holdings", "etf_holdings"],
+        "etf_holding_changes": ["changes", "etf_holding_changes"],
+        "fund_holdings": ["holdings", "fund_holdings"],
+        "fund_holding_changes": ["changes", "fund_holding_changes"],
+    }
+
+    async with async_session_factory() as session:
+        for category in categories:
+            # Extract data for this category from raw_data
+            category_data = None
+
+            # First, check if raw_data has a key matching the category directly
+            if category in raw_data:
+                category_data = raw_data[category]
+            else:
+                # Try alternative keys for this category
+                possible_keys = CATEGORY_DATA_KEYS.get(category, [])
+                for key in possible_keys:
+                    if key in raw_data and raw_data[key]:
+                        category_data = raw_data[key]
+                        break
+
+            # If we still don't have data, check if the entire raw_data is for a single category
+            if category_data is None and len(categories) == 1:
+                # Single category - the raw_data itself might be the category data
+                category_data = raw_data
+
+            if category_data is None:
+                logger.warning(
+                    "No data found for category",
+                    category=category,
+                    source_key=source_key,
+                    available_keys=list(raw_data.keys()),
+                )
+                continue
+
+            # Check for existing record for today/source/category
+            stmt = select(ScrapedCategoryData).where(
+                and_(
+                    ScrapedCategoryData.date == today,
+                    ScrapedCategoryData.source_key == source_key,
+                    ScrapedCategoryData.category == category,
+                )
             )
-            session.add(record)
-            await session.flush()
-            record_id = record.id
-            logger.info("Created new web-scraped market data", record_id=record_id)
+            result = await session.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Update existing record
+                existing.source_url = source_url
+                existing.data = category_data
+                existing.scraping_model = scraping_model
+                existing.response_time_ms = response_time_ms
+                saved_ids.append(existing.id)
+                logger.info(
+                    "Updated category data",
+                    category=category,
+                    source_key=source_key,
+                    record_id=existing.id,
+                )
+            else:
+                # Create new record
+                record = ScrapedCategoryData(
+                    date=today,
+                    source_key=source_key,
+                    source_url=source_url,
+                    category=category,
+                    data=category_data,
+                    scraping_model=scraping_model,
+                    response_time_ms=response_time_ms,
+                )
+                session.add(record)
+                await session.flush()
+                saved_ids.append(record.id)
+                logger.info(
+                    "Created category data",
+                    category=category,
+                    source_key=source_key,
+                    record_id=record.id,
+                )
 
         await session.commit()
-        return record_id
+
+    return saved_ids
