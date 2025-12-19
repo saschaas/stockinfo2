@@ -6,6 +6,7 @@ Comprehensive analysis framework combining:
 - Weighted scoring for investment recommendations
 - Strict data-driven approach (no hallucination)
 - Portfolio allocation and multiple price targets
+- Company-specific valuation engine (DCF, DDM, relative valuation)
 """
 
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ import ollama
 import structlog
 
 from backend.app.config import get_settings
+from backend.app.services.valuation import ValuationEngine
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -231,6 +233,33 @@ class GrowthAnalysisResult:
     price_target_growth_based: float = 0.0  # Growth rate projection
     price_target_method: str = ""  # Primary method used: "analyst", "pe_based", "growth_based", "composite"
 
+    # === VALUATION ENGINE RESULTS ===
+    # Intrinsic value from DCF, DDM, and relative valuation
+    intrinsic_value: float = 0.0  # Composite fair value per share
+    intrinsic_value_low: float = 0.0  # Conservative estimate
+    intrinsic_value_high: float = 0.0  # Optimistic estimate
+    margin_of_safety: float = 0.0  # (fair_value - price) / fair_value
+    valuation_status: str = ""  # undervalued, fairly_valued, overvalued
+
+    # Company classification
+    valuation_company_type: str = ""  # dividend_payer, high_growth, reit, etc.
+    valuation_classification_confidence: float = 0.0
+    valuation_classification_reasons: List[str] = field(default_factory=list)
+
+    # Discount rates
+    valuation_wacc: float = 0.0  # Weighted average cost of capital
+    valuation_cost_of_equity: float = 0.0  # CAPM-derived cost of equity
+    valuation_risk_free_rate: float = 0.0  # 10Y Treasury rate
+
+    # Method details
+    valuation_methods_used: List[Dict[str, Any]] = field(default_factory=list)
+    valuation_primary_method: str = ""  # Method with highest weight
+    valuation_method_results: Dict[str, Any] = field(default_factory=dict)
+
+    # Valuation quality
+    valuation_confidence: float = 0.0  # Overall confidence score
+    valuation_data_quality: str = ""  # high, medium, low
+
     # Key insights
     key_strengths: List[str] = field(default_factory=list)
     key_risks: List[str] = field(default_factory=list)
@@ -356,20 +385,47 @@ class GrowthAnalysisAgent:
         result.recommendation, result.confidence_score, result.portfolio_allocation = \
             self._generate_recommendation(result.composite_score, result.data_completeness.completeness_score)
 
-        # Step 6: Calculate price targets
+        # Step 6: Run valuation engine for intrinsic value
+        valuation_data = await self._run_valuation_engine(ticker, stock_data)
+        if valuation_data:
+            result.intrinsic_value = valuation_data.get("fair_value", 0.0)
+            result.intrinsic_value_low = valuation_data.get("fair_value_low", 0.0)
+            result.intrinsic_value_high = valuation_data.get("fair_value_high", 0.0)
+            result.margin_of_safety = valuation_data.get("margin_of_safety", 0.0)
+            result.valuation_status = valuation_data.get("valuation_status", "")
+            result.valuation_company_type = valuation_data.get("company_type", "")
+            result.valuation_classification_confidence = valuation_data.get("classification_confidence", 0.0)
+            result.valuation_classification_reasons = valuation_data.get("classification_reasons", [])
+            result.valuation_wacc = valuation_data.get("wacc", 0.0)
+            result.valuation_cost_of_equity = valuation_data.get("cost_of_equity", 0.0)
+            result.valuation_risk_free_rate = valuation_data.get("risk_free_rate", 0.0)
+            result.valuation_methods_used = valuation_data.get("methods_used", [])
+            result.valuation_primary_method = valuation_data.get("primary_method", "")
+            result.valuation_method_results = valuation_data.get("method_results", {})
+            result.valuation_confidence = valuation_data.get("confidence", 0.0)
+            result.valuation_data_quality = valuation_data.get("data_quality", "")
+
+            logger.info(
+                f"Valuation complete for {ticker}",
+                intrinsic_value=result.intrinsic_value,
+                valuation_status=result.valuation_status,
+                company_type=result.valuation_company_type,
+            )
+
+        # Step 7: Calculate price targets (now includes valuation data)
         result = self._calculate_price_targets(result)
 
-        # Step 7: Extract key insights
+        # Step 8: Extract key insights
         result.key_strengths = self._identify_strengths(result)
         result.key_risks = self._identify_key_risks(result)
         result.catalyst_points = self._identify_catalysts(result)
         result.monitoring_points = self._generate_monitoring_points(result)
 
-        # Step 8: Run AI analysis for qualitative insights
+        # Step 9: Run AI analysis for qualitative insights
         result.ai_summary, result.ai_reasoning = await self._run_ai_analysis(result, market_context)
 
-        # Step 9: Track data sources
-        result.data_sources = self._compile_data_sources(stock_data)
+        # Step 10: Track data sources
+        result.data_sources = self._compile_data_sources(stock_data, valuation_data)
 
         logger.info(f"Completed analysis for {ticker}: {result.recommendation.value} ({result.confidence_score:.0f}% confidence)")
 
@@ -884,11 +940,12 @@ class GrowthAnalysisAgent:
 
     def _calculate_price_targets(self, result: GrowthAnalysisResult) -> GrowthAnalysisResult:
         """
-        Calculate price targets using multiple valuation methods:
+        Calculate price targets using multiple valuation methods with new weights:
 
-        1. Analyst Consensus - Uses analyst price targets if available
-        2. P/E Ratio Method - P_future = EPS_future × future_P/E (Comparable Valuation)
-        3. Growth Rate Projection - Future EPS = Current EPS × (1 + g)^t, then apply P/E
+        1. Intrinsic Value (DCF/DDM from valuation engine) - 40%
+        2. Analyst Consensus - Uses analyst price targets if available - 30%
+        3. Relative Valuation (P/E based) - 20%
+        4. Growth Projection - 10%
 
         The final target is a weighted average of available methods.
         """
@@ -917,34 +974,48 @@ class GrowthAnalysisAgent:
             ps_ratio=comp.ps_ratio,
             analyst_target=result.sentiment_data.price_target_avg,
             market_cap=result.company_profile.market_cap,
+            intrinsic_value=result.intrinsic_value,
         )
 
         # ========================================
-        # METHOD 1: Analyst Consensus Targets
+        # METHOD 1: Intrinsic Value (DCF/DDM)
+        # From ValuationEngine - primary valuation method
+        # ========================================
+        if result.intrinsic_value > 0:
+            valid_targets.append(("intrinsic_value", result.intrinsic_value, 0.40))  # 40% weight
+            logger.info(
+                "Intrinsic value available",
+                target=result.intrinsic_value,
+                method=result.valuation_primary_method,
+                company_type=result.valuation_company_type,
+            )
+
+        # ========================================
+        # METHOD 2: Analyst Consensus Targets
         # ========================================
         if result.sentiment_data.price_target_avg > 0:
             result.price_target_analyst = result.sentiment_data.price_target_avg
-            valid_targets.append(("analyst", result.price_target_analyst, 0.50))  # 50% weight
+            valid_targets.append(("analyst", result.price_target_analyst, 0.30))  # 30% weight
             logger.info("Analyst target available", target=result.price_target_analyst)
 
         # ========================================
-        # METHOD 2: P/E Ratio Based Valuation
+        # METHOD 3: P/E Ratio Based Valuation (Relative)
         # Formula: P_future = EPS_future × future_P/E
         # ========================================
         pe_target = self._calculate_pe_based_target(result)
         if pe_target and pe_target > 0:
             result.price_target_pe_based = pe_target
-            valid_targets.append(("pe_based", pe_target, 0.30))  # 30% weight
+            valid_targets.append(("pe_based", pe_target, 0.20))  # 20% weight
             logger.info("P/E based target calculated", target=pe_target)
 
         # ========================================
-        # METHOD 3: Growth Rate Based Projection
+        # METHOD 4: Growth Rate Based Projection
         # Formula: Future EPS = Current EPS × (1 + g)^t
         # ========================================
         growth_target = self._calculate_growth_based_target(result)
         if growth_target and growth_target > 0:
             result.price_target_growth_based = growth_target
-            valid_targets.append(("growth_based", growth_target, 0.20))  # 20% weight
+            valid_targets.append(("growth_based", growth_target, 0.10))  # 10% weight
             logger.info("Growth based target calculated", target=growth_target)
 
         # ========================================
@@ -961,24 +1032,35 @@ class GrowthAnalysisAgent:
             result.price_target_method = primary_method if len(valid_targets) == 1 else "composite"
 
             # Calculate optimistic and pessimistic scenarios
-            # Use analyst high/low if available, otherwise derive from base
+            # Priority: intrinsic value range > analyst targets > derived from base
+            candidates_high = []
+            candidates_low = []
+
+            # Add intrinsic value range if available (highest priority)
+            if result.intrinsic_value_high > 0:
+                candidates_high.append(result.intrinsic_value_high)
+            if result.intrinsic_value_low > 0:
+                candidates_low.append(result.intrinsic_value_low)
+
+            # Add analyst targets
             if result.sentiment_data.price_target_high > 0:
-                result.price_target_optimistic = max(
-                    result.sentiment_data.price_target_high,
-                    result.price_target_base * 1.20
-                )
+                candidates_high.append(result.sentiment_data.price_target_high)
+            if result.sentiment_data.price_target_low > 0:
+                candidates_low.append(result.sentiment_data.price_target_low)
+
+            # Calculate optimistic target
+            if candidates_high:
+                result.price_target_optimistic = max(candidates_high)
             else:
-                # Optimistic: 20-30% above base depending on growth potential
+                # Fallback: 20-30% above base depending on growth potential
                 growth_premium = 1.20 if fin.eps_growth_yoy < 15 else 1.30
                 result.price_target_optimistic = result.price_target_base * growth_premium
 
-            if result.sentiment_data.price_target_low > 0:
-                result.price_target_pessimistic = min(
-                    result.sentiment_data.price_target_low,
-                    result.price_target_base * 0.85
-                )
+            # Calculate pessimistic target
+            if candidates_low:
+                result.price_target_pessimistic = min(candidates_low)
             else:
-                # Pessimistic: 10-20% below base depending on risk
+                # Fallback: 10-20% below base depending on risk
                 risk_discount = 0.85 if result.risk_analysis.risk_score > 5 else 0.90
                 result.price_target_pessimistic = result.price_target_base * risk_discount
 
@@ -1175,6 +1257,14 @@ class GrowthAnalysisAgent:
         if result.competitor_analysis.pe_vs_peers == "discount":
             strengths.append("Trading at discount to peers")
 
+        # Valuation-related strengths
+        if result.valuation_status == "undervalued" and result.margin_of_safety > 0.1:
+            strengths.append(f"Undervalued with {result.margin_of_safety*100:.0f}% margin of safety")
+        elif result.intrinsic_value > 0 and result.technical_indicators.current_price > 0:
+            upside = (result.intrinsic_value - result.technical_indicators.current_price) / result.technical_indicators.current_price
+            if upside > 0.15:
+                strengths.append(f"Intrinsic value {upside*100:.0f}% above current price")
+
         strengths.extend(result.competitor_analysis.competitive_advantages[:2])
 
         return strengths[:6]  # Limit to top 6
@@ -1195,6 +1285,14 @@ class GrowthAnalysisAgent:
         # Add data completeness risk
         if result.data_completeness.completeness_score < 70:
             risks.append(f"Limited data availability ({result.data_completeness.completeness_score:.0f}% complete)")
+
+        # Valuation-related risks
+        if result.valuation_status == "overvalued" and result.margin_of_safety < -0.1:
+            risks.append(f"Overvalued by {abs(result.margin_of_safety)*100:.0f}% vs intrinsic value")
+        elif result.intrinsic_value > 0 and result.technical_indicators.current_price > 0:
+            downside = (result.technical_indicators.current_price - result.intrinsic_value) / result.intrinsic_value
+            if downside > 0.2:
+                risks.append(f"Trading {downside*100:.0f}% above intrinsic value")
 
         return risks[:6]  # Limit to top 6
 
@@ -1275,6 +1373,16 @@ SENTIMENT:
 - Price Target: ${result.sentiment_data.price_target_avg:.2f} (Current: ${result.technical_indicators.current_price:.2f})
 - Institutional Ownership: {result.sentiment_data.institutional_ownership:.1f}%
 
+VALUATION:
+- Company Type: {result.valuation_company_type or 'Not classified'}
+- Intrinsic Value: ${result.intrinsic_value:.2f} (Range: ${result.intrinsic_value_low:.2f} - ${result.intrinsic_value_high:.2f})
+- Current Price: ${result.technical_indicators.current_price:.2f}
+- Valuation Status: {result.valuation_status or 'Unknown'}
+- Margin of Safety: {result.margin_of_safety*100:.1f}%
+- Primary Valuation Method: {result.valuation_primary_method or 'N/A'}
+- WACC: {result.valuation_wacc*100:.2f}%
+- Cost of Equity: {result.valuation_cost_of_equity*100:.2f}%
+
 RISKS:
 - Risk Score: {result.risk_analysis.risk_score:.1f}/10 ({result.risk_analysis.risk_level})
 - Business Risks: {', '.join(result.risk_analysis.business_risks[:2]) if result.risk_analysis.business_risks else 'None identified'}
@@ -1328,9 +1436,9 @@ Respond ONLY with valid JSON."""
 
         return "", ""
 
-    def _compile_data_sources(self, stock_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _compile_data_sources(self, stock_data: Dict[str, Any], valuation_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Track data source attribution"""
-        return {
+        sources = {
             "stock_info": stock_data.get("data_sources", {}).get("stock_info", {}),
             "fundamentals": stock_data.get("data_sources", {}).get("fundamentals", {}),
             "technicals": stock_data.get("data_sources", {}).get("technicals", {}),
@@ -1338,6 +1446,99 @@ Respond ONLY with valid JSON."""
             "analysis_engine": {
                 "type": "agent",
                 "name": "growth_analysis_agent",
-                "version": "1.0.0"
+                "version": "2.0.0"
+            },
+            "valuation_engine": {
+                "type": "engine",
+                "name": "valuation_engine",
+                "version": "1.0.0",
+                "methods_used": [],
             }
         }
+
+        # Add valuation method details if available
+        if valuation_data:
+            sources["valuation_engine"]["methods_used"] = [
+                m.get("method", "") for m in valuation_data.get("methods_used", [])
+            ]
+            sources["valuation_engine"]["primary_method"] = valuation_data.get("primary_method", "")
+            sources["valuation_engine"]["data_quality"] = valuation_data.get("data_quality", "")
+
+        return sources
+
+    async def _run_valuation_engine(
+        self,
+        ticker: str,
+        stock_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run the comprehensive valuation engine for intrinsic value calculation.
+
+        The valuation engine:
+        1. Classifies the company type (dividend payer, high growth, REIT, etc.)
+        2. Selects appropriate valuation methods based on company type
+        3. Calculates fair value using multiple methods (DCF, DDM, relative)
+        4. Returns weighted average intrinsic value with confidence
+
+        Returns:
+            Dict with valuation results or None if valuation failed
+        """
+        try:
+            engine = ValuationEngine()
+
+            # Get stock info from data
+            stock_info = stock_data.get("info", {})
+
+            # Run valuation
+            valuation_result = await engine.calculate_fair_value(ticker, stock_info)
+
+            if valuation_result is None:
+                logger.warning(f"Valuation engine returned no result for {ticker}")
+                return None
+
+            # Convert to dict for storage
+            method_results = {}
+            for method_result in valuation_result.method_results:
+                method_results[method_result.method.value] = {
+                    "fair_value": method_result.fair_value,
+                    "weight": method_result.weight,
+                    "confidence": method_result.confidence,
+                    "data_quality": method_result.data_quality.value if method_result.data_quality else None,
+                    "assumptions": method_result.assumptions,
+                    "low_estimate": method_result.low_estimate,
+                    "high_estimate": method_result.high_estimate,
+                }
+
+            methods_used = [
+                {
+                    "method": mr.method.value,
+                    "weight": mr.weight,
+                    "fair_value": mr.fair_value,
+                    "confidence": mr.confidence,
+                }
+                for mr in valuation_result.method_results
+            ]
+
+            return {
+                "fair_value": valuation_result.fair_value,
+                "fair_value_low": valuation_result.fair_value_low,
+                "fair_value_high": valuation_result.fair_value_high,
+                "upside_potential": valuation_result.upside_potential,
+                "margin_of_safety": valuation_result.margin_of_safety,
+                "valuation_status": valuation_result.valuation_status,
+                "company_type": valuation_result.company_type.value,
+                "classification_confidence": valuation_result.classification_confidence,
+                "classification_reasons": valuation_result.classification_reasons,
+                "wacc": valuation_result.wacc,
+                "cost_of_equity": valuation_result.cost_of_equity,
+                "risk_free_rate": valuation_result.market_inputs.risk_free_rate,
+                "methods_used": methods_used,
+                "primary_method": valuation_result.primary_method.value if valuation_result.primary_method else "",
+                "method_results": method_results,
+                "confidence": valuation_result.overall_confidence,
+                "data_quality": valuation_result.overall_data_quality.value if valuation_result.overall_data_quality else "unknown",
+            }
+
+        except Exception as e:
+            logger.error(f"Valuation engine failed for {ticker}: {e}", exc_info=True)
+            return None

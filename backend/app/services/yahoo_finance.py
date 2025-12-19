@@ -150,6 +150,28 @@ class YahooFinanceClient:
 
                 # Beta
                 "beta": self._safe_decimal(info.get("beta")),
+
+                # camelCase aliases for valuation engine compatibility
+                "currentPrice": self._safe_decimal(info.get("regularMarketPrice")),
+                "regularMarketPrice": self._safe_decimal(info.get("regularMarketPrice")),
+                "marketCap": info.get("marketCap"),
+                "sharesOutstanding": info.get("sharesOutstanding"),
+                "totalDebt": info.get("totalDebt"),
+                "totalCash": info.get("totalCash"),
+                "totalAssets": info.get("totalAssets"),
+                "bookValue": self._safe_decimal(info.get("bookValue")),
+                "trailingEps": self._safe_decimal(info.get("trailingEps")),
+                "forwardEps": self._safe_decimal(info.get("forwardEps")),
+                "dividendRate": self._safe_decimal(info.get("dividendRate")),
+                "dividendYield": self._safe_decimal(info.get("dividendYield")),
+                "payoutRatio": self._safe_decimal(info.get("payoutRatio")),
+                "returnOnEquity": self._safe_decimal(info.get("returnOnEquity")),
+                "earningsGrowth": self._safe_decimal(info.get("earningsGrowth")),
+                "trailingPE": self._safe_decimal(info.get("trailingPE")),
+                "priceToBook": self._safe_decimal(info.get("priceToBook")),
+                "quoteType": info.get("quoteType"),
+                "totalCurrentAssets": info.get("totalCurrentAssets"),
+                "totalCurrentLiabilities": info.get("totalCurrentLiabilities"),
             }
 
             # Cache for 5 minutes

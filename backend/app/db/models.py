@@ -353,6 +353,57 @@ class StockAnalysis(Base):
     # Technical analysis (comprehensive)
     technical_analysis: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
 
+    # === VALUATION ENGINE FIELDS ===
+    # Company classification
+    valuation_company_type: Mapped[str] = mapped_column(
+        String(30), nullable=True
+    )  # dividend_payer, high_growth, mature_growth, value, reit, bank, utility, distressed
+    valuation_classification_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )  # 0-1 confidence
+    valuation_classification_reasons: Mapped[list] = mapped_column(PortableJSON, nullable=True)
+
+    # Intrinsic value results
+    intrinsic_value: Mapped[Decimal] = mapped_column(
+        Numeric(12, 4), nullable=True
+    )  # Composite fair value
+    intrinsic_value_low: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    intrinsic_value_high: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    margin_of_safety: Mapped[Decimal] = mapped_column(
+        Numeric(7, 4), nullable=True
+    )  # % below fair value
+    valuation_status: Mapped[str] = mapped_column(
+        String(30), nullable=True
+    )  # undervalued, fairly_valued, overvalued
+
+    # Discount rates
+    valuation_wacc: Mapped[Decimal] = mapped_column(Numeric(7, 5), nullable=True)  # WACC
+    valuation_cost_of_equity: Mapped[Decimal] = mapped_column(
+        Numeric(7, 5), nullable=True
+    )  # Cost of equity from CAPM
+    valuation_risk_free_rate: Mapped[Decimal] = mapped_column(
+        Numeric(7, 5), nullable=True
+    )  # 10Y Treasury rate used
+
+    # Method breakdown
+    valuation_methods_used: Mapped[list] = mapped_column(
+        PortableJSON, nullable=True
+    )  # List of methods and weights
+    valuation_primary_method: Mapped[str] = mapped_column(
+        String(30), nullable=True
+    )  # Primary valuation method used
+    valuation_method_results: Mapped[dict] = mapped_column(
+        PortableJSON, nullable=True
+    )  # Detailed results from each method
+
+    # Confidence and quality
+    valuation_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )  # 0-100 confidence score
+    valuation_data_quality: Mapped[str] = mapped_column(
+        String(20), nullable=True
+    )  # high, medium, low, insufficient
+
     # Data provenance
     data_sources: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

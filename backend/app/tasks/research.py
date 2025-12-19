@@ -265,6 +265,23 @@ def research_stock(
                     "missing_data_categories": growth_result.data_completeness.missing_critical,
                     "ai_summary": growth_result.ai_summary,
                     "ai_reasoning": growth_result.ai_reasoning,
+                    # Valuation Engine fields
+                    "intrinsic_value": growth_result.intrinsic_value,
+                    "intrinsic_value_low": growth_result.intrinsic_value_low,
+                    "intrinsic_value_high": growth_result.intrinsic_value_high,
+                    "margin_of_safety": growth_result.margin_of_safety,
+                    "valuation_status": growth_result.valuation_status,
+                    "valuation_company_type": growth_result.valuation_company_type,
+                    "valuation_classification_confidence": growth_result.valuation_classification_confidence,
+                    "valuation_classification_reasons": growth_result.valuation_classification_reasons,
+                    "valuation_wacc": growth_result.valuation_wacc,
+                    "valuation_cost_of_equity": growth_result.valuation_cost_of_equity,
+                    "valuation_risk_free_rate": growth_result.valuation_risk_free_rate,
+                    "valuation_methods_used": growth_result.valuation_methods_used,
+                    "valuation_primary_method": growth_result.valuation_primary_method,
+                    "valuation_method_results": growth_result.valuation_method_results,
+                    "valuation_confidence": growth_result.valuation_confidence,
+                    "valuation_data_quality": growth_result.valuation_data_quality,
                 })
 
                 data_sources["growth_analysis"] = {"type": "ai", "name": "growth_analysis_agent"}

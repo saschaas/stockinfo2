@@ -6,6 +6,7 @@ import { useResearchStore } from '../../stores/researchStore'
 import JobProgressManager from '../JobProgressManager/JobProgressManager'
 import DataSourceBadge from '../DataSourceBadge/DataSourceBadge'
 import GrowthAnalysisCard from './GrowthAnalysisCard'
+import ValuationAnalysisCard from './ValuationAnalysisCard'
 import TechnicalAnalysisChart from './TechnicalAnalysisChart'
 import TechnicalIndicatorsPanel from './TechnicalIndicatorsPanel'
 import RiskAssessmentCard from './RiskAssessmentCard'
@@ -47,6 +48,7 @@ const getSimplifiedDecision = (signal?: string, score?: number): { label: string
 interface CollapsedSections {
   technicalIndicators: boolean
   growthAnalysis: boolean
+  valuationAnalysis: boolean
   aiAnalysis: boolean
 }
 
@@ -89,6 +91,7 @@ export default function StockResearch() {
           [job.id]: {
             technicalIndicators: true,  // Collapsed by default
             growthAnalysis: true,       // Collapsed by default
+            valuationAnalysis: true,    // Collapsed by default
             aiAnalysis: true,           // Collapsed by default
           }
         }))
@@ -161,6 +164,7 @@ export default function StockResearch() {
         [data.job_id]: {
           technicalIndicators: true,
           growthAnalysis: true,
+          valuationAnalysis: true,
           aiAnalysis: true,
         }
       }))
@@ -482,6 +486,35 @@ export default function StockResearch() {
                         }
                       >
                         <GrowthAnalysisCard data={activeJobData.result} ticker={activeJobData.ticker} />
+                      </CollapsibleSection>
+                    )
+                  })()}
+
+                  {/* Valuation Analysis Section */}
+                  {activeJobData.result.intrinsic_value !== undefined && activeJobData.result.intrinsic_value > 0 && (() => {
+                    const valuationStatus = activeJobData.result.valuation_status?.toLowerCase()
+                    const valuationDecision = valuationStatus === 'undervalued'
+                      ? { label: 'BUY', color: 'badge-success' }
+                      : valuationStatus === 'overvalued'
+                      ? { label: 'SELL', color: 'badge-danger' }
+                      : { label: 'HOLD', color: 'badge-warning' }
+                    return (
+                      <CollapsibleSection
+                        title="Valuation Analysis"
+                        isOpen={!collapsedStates[activeJobData.id]?.valuationAnalysis}
+                        onToggle={() => toggleSection(activeJobData.id, 'valuationAnalysis')}
+                        icon={
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        }
+                        badge={
+                          <span className={`badge ${valuationDecision.color}`}>
+                            {valuationDecision.label}
+                          </span>
+                        }
+                      >
+                        <ValuationAnalysisCard data={activeJobData.result} />
                       </CollapsibleSection>
                     )
                   })()}

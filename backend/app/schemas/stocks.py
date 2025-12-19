@@ -120,6 +120,33 @@ class StockAnalysisResponse(BaseModel):
     ai_summary: str | None = None
     ai_reasoning: str | None = None
 
+    # === VALUATION ENGINE FIELDS ===
+    # Company classification
+    valuation_company_type: str | None = None  # dividend_payer, high_growth, etc.
+    valuation_classification_confidence: float | None = None
+    valuation_classification_reasons: list[str] | None = None
+
+    # Intrinsic value results
+    intrinsic_value: float | None = None  # Composite fair value
+    intrinsic_value_low: float | None = None
+    intrinsic_value_high: float | None = None
+    margin_of_safety: float | None = None  # % below fair value
+    valuation_status: str | None = None  # undervalued, fairly_valued, overvalued
+
+    # Discount rates
+    valuation_wacc: float | None = None
+    valuation_cost_of_equity: float | None = None
+    valuation_risk_free_rate: float | None = None
+
+    # Method breakdown
+    valuation_methods_used: list[dict[str, Any]] | None = None
+    valuation_primary_method: str | None = None
+    valuation_method_results: dict[str, Any] | None = None
+
+    # Confidence and quality
+    valuation_confidence: float | None = None
+    valuation_data_quality: str | None = None
+
     # Data sources
     data_sources: dict[str, Any] | None = None
 
@@ -185,6 +212,23 @@ class StockAnalysisResponse(BaseModel):
             missing_data_categories=obj.missing_data_categories,
             ai_summary=obj.ai_summary,
             ai_reasoning=obj.ai_reasoning,
+            # Valuation Engine fields
+            valuation_company_type=obj.valuation_company_type if hasattr(obj, 'valuation_company_type') else None,
+            valuation_classification_confidence=float(obj.valuation_classification_confidence) if hasattr(obj, 'valuation_classification_confidence') and obj.valuation_classification_confidence else None,
+            valuation_classification_reasons=obj.valuation_classification_reasons if hasattr(obj, 'valuation_classification_reasons') else None,
+            intrinsic_value=float(obj.intrinsic_value) if hasattr(obj, 'intrinsic_value') and obj.intrinsic_value else None,
+            intrinsic_value_low=float(obj.intrinsic_value_low) if hasattr(obj, 'intrinsic_value_low') and obj.intrinsic_value_low else None,
+            intrinsic_value_high=float(obj.intrinsic_value_high) if hasattr(obj, 'intrinsic_value_high') and obj.intrinsic_value_high else None,
+            margin_of_safety=float(obj.margin_of_safety) if hasattr(obj, 'margin_of_safety') and obj.margin_of_safety else None,
+            valuation_status=obj.valuation_status if hasattr(obj, 'valuation_status') else None,
+            valuation_wacc=float(obj.valuation_wacc) if hasattr(obj, 'valuation_wacc') and obj.valuation_wacc else None,
+            valuation_cost_of_equity=float(obj.valuation_cost_of_equity) if hasattr(obj, 'valuation_cost_of_equity') and obj.valuation_cost_of_equity else None,
+            valuation_risk_free_rate=float(obj.valuation_risk_free_rate) if hasattr(obj, 'valuation_risk_free_rate') and obj.valuation_risk_free_rate else None,
+            valuation_methods_used=obj.valuation_methods_used if hasattr(obj, 'valuation_methods_used') else None,
+            valuation_primary_method=obj.valuation_primary_method if hasattr(obj, 'valuation_primary_method') else None,
+            valuation_method_results=obj.valuation_method_results if hasattr(obj, 'valuation_method_results') else None,
+            valuation_confidence=float(obj.valuation_confidence) if hasattr(obj, 'valuation_confidence') and obj.valuation_confidence else None,
+            valuation_data_quality=obj.valuation_data_quality if hasattr(obj, 'valuation_data_quality') else None,
             data_sources=obj.data_sources,
         )
 
