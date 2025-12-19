@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import Plot from 'react-plotly.js'
 import type { TechnicalAnalysisData } from '../../types/technical-analysis'
 import type { RiskAssessmentData } from '../../types/risk-assessment'
@@ -8,6 +9,23 @@ interface TechnicalAnalysisChartProps {
 }
 
 export default function TechnicalAnalysisChart({ data, riskAssessment }: TechnicalAnalysisChartProps) {
+  const [eurRate, setEurRate] = useState<number | null>(null)
+
+  // Fetch USD to EUR exchange rate on mount
+  useEffect(() => {
+    const fetchExchangeRate = async () => {
+      try {
+        const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR')
+        const data = await response.json()
+        if (data.rates?.EUR) {
+          setEurRate(data.rates.EUR)
+        }
+      } catch (error) {
+        console.warn('Failed to fetch exchange rate:', error)
+      }
+    }
+    fetchExchangeRate()
+  }, [])
   const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
     if (value === undefined || value === null || isNaN(value)) return 'N/A'
     return value.toFixed(decimals)
@@ -33,7 +51,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
     )
   }
 
-  // Main price line (black, bold)
+  // Main price line (black, bold) with custom hover showing USD and EUR
   const priceLine: any = {
     type: 'scatter',
     mode: 'lines',
@@ -43,11 +61,15 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
     line: { color: '#000000', width: 2.5 },
     yaxis: 'y',
     xaxis: 'x',
+    hovertemplate: eurRate
+      ? `<b>Price:</b> $%{y:.2f} (€%{customdata:.2f})<extra></extra>`
+      : `<b>Price:</b> $%{y:.2f}<extra></extra>`,
+    customdata: eurRate ? chartData.ohlcv.close.map((price: number) => price * eurRate) : undefined,
   }
 
   const traces: any[] = [priceLine]
 
-  // Moving Averages
+  // Moving Averages (hover disabled)
   if (showIndicators.sma20 && chartData.moving_averages.sma_20) {
     traces.push({
       type: 'scatter',
@@ -57,6 +79,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'SMA 20',
       line: { color: '#eab308', width: 1.5 },  // Yellow
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
   }
 
@@ -69,6 +92,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'SMA 50',
       line: { color: '#f97316', width: 1.5 },  // Orange
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
   }
 
@@ -81,10 +105,11 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'SMA 200',
       line: { color: '#a855f7', width: 1.5 },  // Purple
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
   }
 
-  // Bollinger Bands
+  // Bollinger Bands (hover disabled)
   if (showIndicators.bollinger && chartData.bollinger_bands) {
     // Upper band
     traces.push({
@@ -95,6 +120,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'BB Upper',
       line: { color: '#94a3b8', width: 1, dash: 'dot' },
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
 
     // Middle band
@@ -106,6 +132,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'BB Middle',
       line: { color: '#64748b', width: 1 },
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
 
     // Lower band
@@ -117,10 +144,11 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       name: 'BB Lower',
       line: { color: '#94a3b8', width: 1, dash: 'dot' },
       yaxis: 'y',
+      hoverinfo: 'skip',
     })
   }
 
-  // Support and Resistance Lines
+  // Support and Resistance Lines (hover disabled)
   if (showIndicators.supportResistance) {
     // Resistance levels (red solid horizontal lines)
     data.resistance_levels.forEach((level, idx) => {
@@ -134,6 +162,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
         yaxis: 'y',
         showlegend: idx === 0,
         legendgroup: 'resistance',
+        hoverinfo: 'skip',
       })
     })
 
@@ -149,11 +178,12 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
         yaxis: 'y',
         showlegend: idx === 0,
         legendgroup: 'support',
+        hoverinfo: 'skip',
       })
     })
   }
 
-  // Volume bars
+  // Volume bars (hover disabled)
   if (showIndicators.volume) {
     traces.push({
       type: 'bar',
@@ -169,6 +199,7 @@ export default function TechnicalAnalysisChart({ data, riskAssessment }: Technic
       },
       yaxis: 'y2',
       xaxis: 'x',
+      hoverinfo: 'skip',
     })
   }
 
