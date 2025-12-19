@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMutation } from '@tanstack/react-query'
 import {
   fetchMarketSentiment,
   refreshMarketSentiment,
+  refreshCategoryData,
   fetchScrapedCategoryData,
   startStockResearch,
   CombinedMarketResponse,
@@ -16,10 +17,16 @@ import MarketOverview from './MarketOverview'
 import SentimentCard from './SentimentCard'
 import DataSourceHealth from './DataSourceHealth'
 
+// Categories to refresh on Dashboard
+const DASHBOARD_CATEGORIES = ['news', 'top_gainers', 'top_losers', 'dashboard_sentiment'] as const
+
 export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'traditional' | 'web-scraped' | 'both'>('both')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshStatus, setRefreshStatus] = useState<string>('')
+  const hasAutoRefreshed = useRef(false)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { addJob } = useResearchStore()
 
   const { data: combinedData, isLoading, error, refetch } = useQuery<CombinedMarketResponse>({
@@ -83,21 +90,134 @@ export default function Dashboard() {
     }
   }
 
-  const handleRefresh = async () => {
+  // Helper to determine news item data source
+  const getNewsSource = (item: any): 'alpha_vantage' | 'yahoo' | 'unknown' => {
+    // Alpha Vantage news has 'published_at' and 'overall_sentiment_label' fields
+    if (item.published_at && item.overall_sentiment_label) return 'alpha_vantage'
+    // Yahoo scraped news doesn't have 'published_at' - it's the main differentiator
+    if (!item.published_at) return 'yahoo'
+    return 'unknown'
+  }
+
+  // Helper to normalize sentiment to category
+  const getSentimentCategory = (item: any): 'positive' | 'negative' | 'neutral' => {
+    const sentiment = item.sentiment || item.overall_sentiment_label || ''
+    const sentimentLower = sentiment.toLowerCase()
+    if (sentimentLower.includes('bullish') || sentimentLower === 'positive') return 'positive'
+    if (sentimentLower.includes('bearish') || sentimentLower === 'negative') return 'negative'
+    return 'neutral'
+  }
+
+  // Helper to generate search URL for items without links
+  const getNewsUrl = (item: any): string | null => {
+    if (item.url && item.url !== '#') return item.url
+    // Generate a Google News search URL for items without direct links
+    const title = item.title || item.headline || item.name
+    if (title) {
+      return `https://news.google.com/search?q=${encodeURIComponent(title)}`
+    }
+    return null
+  }
+
+  // Helper to get source display name
+  const getSourceDisplayName = (item: any): string => {
+    const dataSource = getNewsSource(item)
+    // For Alpha Vantage, show the actual news source (e.g., "MarketBeat")
+    if (dataSource === 'alpha_vantage' && item.source) return item.source
+    // For Yahoo scraped, the summary field often contains the source name
+    if (dataSource === 'yahoo' && item.summary && !item.summary.includes(' ')) return item.summary
+    return dataSource === 'alpha_vantage' ? 'Alpha Vantage' : dataSource === 'yahoo' ? 'Yahoo Finance' : 'Unknown'
+  }
+
+  // Process and organize news data
+  const processedNews = (() => {
+    if (!newsData?.data || newsData.data.length === 0) return { positive: [], negative: [], neutral: [], all: [] }
+
+    const sources = newsData.sources || []
+    const sourceCount = sources.length || 1
+    const itemsPerSource = Math.ceil(30 / sourceCount)
+
+    // Separate items by source
+    const alphaVantageItems = newsData.data.filter((item: any) => getNewsSource(item) === 'alpha_vantage')
+    const yahooItems = newsData.data.filter((item: any) => getNewsSource(item) === 'yahoo')
+
+    // Take even distribution from each source
+    const selectedItems: any[] = []
+    const avCount = Math.min(alphaVantageItems.length, itemsPerSource)
+    const yhCount = Math.min(yahooItems.length, 30 - avCount)
+
+    selectedItems.push(...alphaVantageItems.slice(0, avCount))
+    selectedItems.push(...yahooItems.slice(0, yhCount))
+
+    // Fill remaining slots if needed
+    if (selectedItems.length < 30) {
+      const remaining = 30 - selectedItems.length
+      const moreAv = alphaVantageItems.slice(avCount, avCount + remaining)
+      selectedItems.push(...moreAv)
+    }
+
+    // Categorize by sentiment
+    const positive = selectedItems.filter(item => getSentimentCategory(item) === 'positive')
+    const negative = selectedItems.filter(item => getSentimentCategory(item) === 'negative')
+    const neutral = selectedItems.filter(item => getSentimentCategory(item) === 'neutral')
+
+    return { positive, negative, neutral, all: selectedItems.slice(0, 30) }
+  })()
+
+  // State for news sentiment filter
+  const [newsFilter, setNewsFilter] = useState<'all' | 'positive' | 'negative' | 'neutral'>('all')
+
+  // Function to refresh all Dashboard data sources
+  const handleRefresh = async (showStatus = true) => {
     setIsRefreshing(true)
+    if (showStatus) setRefreshStatus('Starting refresh...')
+
     try {
-      // Trigger backend refresh
+      // Trigger traditional market sentiment refresh
+      if (showStatus) setRefreshStatus('Refreshing market sentiment...')
       await refreshMarketSentiment()
-      // Wait a bit for the task to complete, then refetch
+
+      // Trigger refresh for each Dashboard category (this scrapes web sources)
+      const categoryPromises = DASHBOARD_CATEGORIES.map(async (category) => {
+        try {
+          if (showStatus) setRefreshStatus(`Refreshing ${category.replace('_', ' ')}...`)
+          await refreshCategoryData(category)
+        } catch (err) {
+          console.warn(`Failed to refresh category ${category}:`, err)
+        }
+      })
+
+      await Promise.all(categoryPromises)
+
+      if (showStatus) setRefreshStatus('Waiting for data to process...')
+
+      // Wait for background tasks to complete, then refetch all queries
       setTimeout(() => {
         refetch()
+        // Invalidate category data queries to refetch fresh data
+        queryClient.invalidateQueries({ queryKey: ['scrapedCategoryData'] })
         setIsRefreshing(false)
-      }, 3000)
+        setRefreshStatus('')
+      }, 5000)
     } catch (err) {
       console.error('Failed to refresh market data:', err)
       setIsRefreshing(false)
+      setRefreshStatus('')
     }
   }
+
+  // Auto-refresh on first load
+  useEffect(() => {
+    if (!hasAutoRefreshed.current && !isLoading) {
+      hasAutoRefreshed.current = true
+      // Trigger a background refresh without blocking the UI
+      // Use a small delay to let the initial data load first
+      const timer = setTimeout(() => {
+        handleRefresh(false) // Don't show status for auto-refresh
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [isLoading])
 
   const sentiment = combinedData?.traditional
   const webScraped = combinedData?.web_scraped
@@ -149,10 +269,10 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           {/* Refresh Button */}
           <button
-            onClick={handleRefresh}
+            onClick={() => handleRefresh(true)}
             disabled={isRefreshing}
             className="btn btn-primary-outline flex items-center gap-2"
-            title="Refresh market data"
+            title="Refresh all data sources (including web-scraped)"
           >
             <svg
               className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -167,7 +287,7 @@ export default function Dashboard() {
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
-            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            {isRefreshing ? (refreshStatus || 'Refreshing...') : 'Refresh'}
           </button>
 
           {/* View Mode Toggle */}
@@ -538,121 +658,208 @@ export default function Dashboard() {
 
           {/* News Feed Card */}
           <div className="card card-body">
+            {/* Header with title and source links */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                 </svg>
                 <h3 className="text-lg font-semibold text-gray-900">News Feed</h3>
+                <span className="text-xs text-gray-400">
+                  ({processedNews.all.length} articles)
+                </span>
               </div>
-              {/* Show source attribution based on data source */}
-              {newsData?.has_configured_sources && newsData.sources && newsData.sources.length > 0 ? (
+              {/* Show source attribution */}
+              {newsData?.sources && newsData.sources.length > 0 && (
                 <div className="flex items-center gap-2">
-                  {newsData.sources.slice(0, 2).map((source, idx) => (
+                  {newsData.sources.map((source, idx) => (
                     <a
                       key={idx}
                       href={source.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1"
+                      className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                        source.source_key.includes('alpha')
+                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      }`}
                     >
-                      {source.source_key.replace(/_/g, ' ')}
+                      {source.source_key.includes('alpha') ? 'Alpha Vantage' : 'Yahoo Finance'}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </a>
                   ))}
                 </div>
-              ) : (
-                <a
-                  href="https://www.alphavantage.co/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1"
-                >
-                  Source: Alpha Vantage
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
               )}
             </div>
+
+            {/* Sentiment Filter Tabs */}
+            <div className="flex items-center gap-2 mb-4 border-b border-gray-200 pb-3">
+              <button
+                onClick={() => setNewsFilter('all')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  newsFilter === 'all'
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                All ({processedNews.all.length})
+              </button>
+              <button
+                onClick={() => setNewsFilter('positive')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                  newsFilter === 'positive'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-green-50 text-green-700 hover:bg-green-100'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                Positive ({processedNews.positive.length})
+              </button>
+              <button
+                onClick={() => setNewsFilter('negative')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                  newsFilter === 'negative'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                Negative ({processedNews.negative.length})
+              </button>
+              <button
+                onClick={() => setNewsFilter('neutral')}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                  newsFilter === 'neutral'
+                    ? 'bg-gray-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+                Neutral ({processedNews.neutral.length})
+              </button>
+            </div>
+
+            {/* News Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Show news from configured sources if available */}
-              {newsData?.has_configured_sources && newsData.data && newsData.data.length > 0 ? (
-                newsData.data.slice(0, 30).map((item: any, index: number) => {
-                  // Handle different news item formats (Alpha Vantage vs web-scraped)
-                  const hasUrl = item.url && item.url !== '#'
-                  // For web-scraped news, 'summary' field often contains the source name
-                  const sourceName = item.source || (item.category && item.summary ? item.summary : null)
-                  const sentiment = item.sentiment || item.overall_sentiment_label
+              {processedNews[newsFilter].length > 0 ? (
+                processedNews[newsFilter].map((item: any, index: number) => {
+                  const newsUrl = getNewsUrl(item)
+                  const dataSource = getNewsSource(item)
+                  const sourceName = getSourceDisplayName(item)
+                  const sentimentCategory = getSentimentCategory(item)
+                  const isSearchUrl = newsUrl?.includes('news.google.com')
 
                   return (
-                    <div key={index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      {hasUrl ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-800 font-medium text-sm block mb-2 line-clamp-2"
-                        >
-                          {item.title || item.headline || item.name || 'Untitled'}
-                        </a>
-                      ) : (
-                        <span className="text-gray-800 font-medium text-sm block mb-2 line-clamp-2">
-                          {item.title || item.headline || item.name || 'Untitled'}
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg hover:shadow-md transition-all border-l-4 ${
+                        sentimentCategory === 'positive'
+                          ? 'bg-green-50 border-green-400'
+                          : sentimentCategory === 'negative'
+                          ? 'bg-red-50 border-red-400'
+                          : 'bg-gray-50 border-gray-300'
+                      }`}
+                    >
+                      {/* Title with link */}
+                      <a
+                        href={newsUrl || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`font-medium text-sm block mb-2 line-clamp-2 ${
+                          newsUrl
+                            ? 'text-primary-600 hover:text-primary-800'
+                            : 'text-gray-800 cursor-default'
+                        }`}
+                        title={isSearchUrl ? 'Opens Google News search (no direct link available)' : 'Open article'}
+                      >
+                        {item.title || item.headline || item.name || 'Untitled'}
+                        {isSearchUrl && (
+                          <svg className="w-3 h-3 inline-block ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        )}
+                      </a>
+
+                      {/* Meta info row */}
+                      <div className="flex items-center text-xs gap-2 flex-wrap">
+                        {/* Data source badge */}
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                          dataSource === 'alpha_vantage'
+                            ? 'bg-blue-100 text-blue-700'
+                            : dataSource === 'yahoo'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {dataSource === 'alpha_vantage' ? 'AV' : dataSource === 'yahoo' ? 'YF' : '?'}
                         </span>
-                      )}
-                      <div className="flex items-center text-xs text-gray-500 gap-2 flex-wrap">
-                        {sourceName && <span>{sourceName}</span>}
+
+                        {/* News source (e.g., MarketBeat, Reuters) */}
+                        <span className="text-gray-600">{sourceName}</span>
+
+                        {/* Date if available */}
                         {item.published_at && (
                           <>
-                            <span>•</span>
-                            <span>{new Date(item.published_at).toLocaleDateString()}</span>
+                            <span className="text-gray-300">•</span>
+                            <span className="text-gray-500">
+                              {new Date(item.published_at.replace('T', ' ')).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </>
                         )}
-                        {sentiment && (
-                          <span className={`px-1.5 py-0.5 rounded text-xs ${
-                            sentiment.toLowerCase().includes('bullish') || sentiment === 'positive'
-                              ? 'bg-green-100 text-green-700'
-                              : sentiment.toLowerCase().includes('bearish') || sentiment === 'negative'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {sentiment}
-                          </span>
-                        )}
+
+                        {/* Sentiment label */}
+                        <span className={`ml-auto px-1.5 py-0.5 rounded text-xs ${
+                          sentimentCategory === 'positive'
+                            ? 'bg-green-200 text-green-800'
+                            : sentimentCategory === 'negative'
+                            ? 'bg-red-200 text-red-800'
+                            : 'bg-gray-200 text-gray-700'
+                        }`}>
+                          {sentimentCategory === 'positive' ? 'Bullish' : sentimentCategory === 'negative' ? 'Bearish' : 'Neutral'}
+                        </span>
                       </div>
+
+                      {/* Tickers if available */}
+                      {item.tickers && item.tickers.length > 0 && (
+                        <div className="flex items-center gap-1 mt-2 flex-wrap">
+                          {item.tickers.slice(0, 3).map((ticker: string, tidx: number) => (
+                            <span key={tidx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-mono">
+                              ${ticker}
+                            </span>
+                          ))}
+                          {item.tickers.length > 3 && (
+                            <span className="text-xs text-gray-400">+{item.tickers.length - 3}</span>
+                          )}
+                        </div>
+                      )}
+                      {item.ticker_sentiment && item.ticker_sentiment.length > 0 && (
+                        <div className="flex items-center gap-1 mt-2 flex-wrap">
+                          {item.ticker_sentiment.slice(0, 3).map((ts: any, tidx: number) => (
+                            <span key={tidx} className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-mono">
+                              ${ts.ticker}
+                            </span>
+                          ))}
+                          {item.ticker_sentiment.length > 3 && (
+                            <span className="text-xs text-gray-400">+{item.ticker_sentiment.length - 3}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })
-              ) : sentiment?.top_news && sentiment.top_news.length > 0 ? (
-                /* Fall back to Alpha Vantage news */
-                sentiment.top_news.slice(0, 30).map((item: any, index: number) => (
-                  <div key={index} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary-600 hover:text-primary-800 font-medium text-sm block mb-2 line-clamp-2"
-                    >
-                      {item.title}
-                    </a>
-                    <div className="flex items-center text-xs text-gray-500 gap-2">
-                      {item.source && <span>{item.source}</span>}
-                      {item.published_at && (
-                        <>
-                          <span>•</span>
-                          <span>{new Date(item.published_at).toLocaleDateString()}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
               ) : (
                 <div className="col-span-3 text-center py-6 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">No news available</p>
-                  {newsData?.has_configured_sources === false && (
+                  <p className="text-sm text-gray-500">
+                    {newsFilter === 'all' ? 'No news available' : `No ${newsFilter} news available`}
+                  </p>
+                  {!newsData?.has_configured_sources && (
                     <p className="text-xs text-gray-400 mt-1">
                       Configure a "news" data source in <a href="#" onClick={(e) => { e.preventDefault(); window.location.hash = '#configuration'; }} className="text-primary-600 hover:text-primary-700 underline">Settings</a>
                     </p>

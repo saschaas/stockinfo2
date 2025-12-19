@@ -46,7 +46,7 @@ async def fetch_market_news() -> list[dict[str, Any]]:
         client = await get_alpha_vantage_client()
         news = await client.get_news_sentiment(
             topics="economy,finance,earnings",
-            limit=20,
+            limit=30,
         )
         return news
     except Exception as e:
@@ -188,7 +188,7 @@ async def save_sentiment_to_db(sentiment_data: dict[str, Any]) -> int:
             existing.bearish_score = Decimal(str(analysis.get("bearish_score", 0.5)))
             existing.hot_sectors = [{"name": s} for s in analysis.get("hot_sectors", [])]
             existing.negative_sectors = [{"name": s} for s in analysis.get("negative_sectors", [])]
-            existing.top_news = sentiment_data.get("news", [])[:10]
+            existing.top_news = sentiment_data.get("news", [])[:30]
             existing.news_count = len(sentiment_data.get("news", []))
 
             sentiment_id = existing.id
@@ -207,7 +207,7 @@ async def save_sentiment_to_db(sentiment_data: dict[str, Any]) -> int:
                 bearish_score=Decimal(str(analysis.get("bearish_score", 0.5))),
                 hot_sectors=[{"name": s} for s in analysis.get("hot_sectors", [])],
                 negative_sectors=[{"name": s} for s in analysis.get("negative_sectors", [])],
-                top_news=sentiment_data.get("news", [])[:10],
+                top_news=sentiment_data.get("news", [])[:30],
                 news_count=len(sentiment_data.get("news", [])),
                 analysis_source="ollama",
             )

@@ -246,11 +246,16 @@ class WebScrapingAgent:
                 logger.debug("Extracting page content")
                 page_text = await page.inner_text("body")
 
-                # Use LLM to extract data from page content
+                # Extract links from the page for news articles
+                logger.debug("Extracting links from page")
+                links_data = await self._extract_links(page)
+
+                # Use LLM to extract data from page content (with links)
                 logger.debug("Extracting data with LLM")
                 extracted_data = await self._extract_with_llm(
                     page_text,
                     config.extraction_prompt,
+                    links_data,
                 )
 
                 return extracted_data
@@ -258,10 +263,51 @@ class WebScrapingAgent:
             finally:
                 await browser.close()
 
+    async def _extract_links(self, page) -> list[dict]:
+        """
+        Extract all links from the page with their text and href.
+
+        Args:
+            page: Playwright page object
+
+        Returns:
+            List of dictionaries with link text and URL
+        """
+        try:
+            # Get all anchor tags with href attributes
+            links = await page.evaluate("""
+                () => {
+                    const anchors = document.querySelectorAll('a[href]');
+                    const results = [];
+                    for (const a of anchors) {
+                        const href = a.href;
+                        const text = a.innerText?.trim() || a.textContent?.trim() || '';
+                        // Filter out empty links, javascript links, and very short text
+                        if (href &&
+                            !href.startsWith('javascript:') &&
+                            !href.startsWith('#') &&
+                            text.length > 10) {
+                            results.push({
+                                text: text.substring(0, 200),  // Limit text length
+                                url: href
+                            });
+                        }
+                    }
+                    return results;
+                }
+            """)
+
+            logger.debug("Extracted links from page", count=len(links))
+            return links
+        except Exception as e:
+            logger.warning("Failed to extract links", error=str(e))
+            return []
+
     async def _extract_with_llm(
         self,
         page_text: str,
         extraction_prompt: str,
+        links_data: list[dict] | None = None,
     ) -> Dict[str, Any]:
         """
         Use LLM to extract structured data from page content.
@@ -269,14 +315,45 @@ class WebScrapingAgent:
         Args:
             page_text: Text content extracted from the page
             extraction_prompt: Prompt describing what to extract
+            links_data: Optional list of links with text and URLs
 
         Returns:
             Extracted data dictionary
         """
         # Truncate page text if too long (LLMs have context limits)
-        max_chars = 15000
+        max_chars = 12000  # Reduced to make room for links
         if len(page_text) > max_chars:
             page_text = page_text[:max_chars] + "\n\n[Content truncated due to length]"
+
+        # Format links data for the LLM
+        links_section = ""
+        if links_data and len(links_data) > 0:
+            # Limit to most relevant links (those that look like article links)
+            article_links = [
+                link for link in links_data
+                if len(link.get('text', '')) > 25  # More text = more likely article
+                and not any(x in link.get('url', '').lower() for x in [
+                    'login', 'signup', 'subscribe', 'privacy', 'terms', 'cookie',
+                    'mailto:', 'javascript:', '/user/', '/settings/', '/about/',
+                    '/help/', '/contact/', 'facebook.com', 'twitter.com', 'linkedin.com'
+                ])
+                and any(x in link.get('url', '').lower() for x in [
+                    '/news/', '/article/', '/story/', 'finance.yahoo.com/news',
+                    'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com',
+                    '-news', '.html', '/m/'  # Common article URL patterns
+                ])
+            ][:30]  # Limit to 30 links to keep prompt manageable
+
+            if article_links:
+                links_text = "\n".join([
+                    f"- \"{link['text'][:80]}\" -> {link['url']}"
+                    for link in article_links
+                ])
+                links_section = f"""
+
+ARTICLE LINKS (match article titles to these URLs):
+{links_text}
+"""
 
         # Count how many categories are being requested
         category_count = extraction_prompt.count("---")
@@ -288,6 +365,7 @@ class WebScrapingAgent:
 Your task is to extract specific information from this text and return it as a SINGLE combined JSON object.
 
 IMPORTANT: You must return ALL requested data categories in ONE JSON object. Combine the data structures.
+IMPORTANT: For news articles, you MUST include the URL for each article. Match article titles to the AVAILABLE LINKS section below to find the correct URL.
 
 EXTRACTION REQUIREMENTS (extract ALL of these):
 {extraction_prompt}
@@ -296,9 +374,10 @@ TEXT CONTENT TO ANALYZE:
 ---
 {page_text}
 ---
-
+{links_section}
 Return a SINGLE valid JSON object containing ALL the requested categories combined.
-For example, if asked for news AND hot_stocks, return: {{"articles": [...], "hot_stocks": [...], ...}}
+For news articles, ALWAYS include a "url" field by matching the article title to the available links above.
+For example, if asked for news AND hot_stocks, return: {{"articles": [{{"title": "...", "url": "https://...", ...}}], "hot_stocks": [...], ...}}
 If specific information cannot be found, use empty arrays.
 Return ONLY the JSON - no explanations or markdown.
 """
@@ -307,6 +386,8 @@ Return ONLY the JSON - no explanations or markdown.
             full_prompt = f"""You are analyzing text content that has already been extracted from a webpage.
 Your task is to extract specific information from this text and return it as JSON.
 
+IMPORTANT: For news articles, you MUST include the URL for each article. Match article titles to the AVAILABLE LINKS section below.
+
 EXTRACTION REQUIREMENTS:
 {extraction_prompt}
 
@@ -314,8 +395,9 @@ TEXT CONTENT TO ANALYZE:
 ---
 {page_text}
 ---
-
+{links_section}
 Based on the text content above, extract the requested information and return ONLY a valid JSON object.
+For news articles, ALWAYS include a "url" field by matching the article title to the available links.
 If specific information cannot be found in the text, use empty arrays or default values.
 Do not explain or add commentary - just return the JSON.
 """
@@ -337,7 +419,7 @@ Do not explain or add commentary - just return the JSON.
                 ],
                 options={
                     "temperature": 0.1,  # Low temperature for precision
-                    "num_predict": 8000,  # Large limit for complex multi-category extraction
+                    "num_predict": 16000,  # Large limit for complex multi-category extraction with links
                 }
             )
 
@@ -356,7 +438,7 @@ Do not explain or add commentary - just return the JSON.
 
     def _parse_json_response(self, response_text: str) -> Dict[str, Any]:
         """
-        Parse JSON from LLM response, handling various formats.
+        Parse JSON from LLM response, handling various formats including truncated responses.
 
         Args:
             response_text: LLM response text
@@ -375,6 +457,8 @@ Do not explain or add commentary - just return the JSON.
             try:
                 json_start = response_text.find("```json") + 7
                 json_end = response_text.find("```", json_start)
+                if json_end == -1:
+                    json_end = len(response_text)
                 json_str = response_text[json_start:json_end].strip()
                 return json.loads(json_str)
             except (json.JSONDecodeError, ValueError):
@@ -385,14 +469,70 @@ Do not explain or add commentary - just return the JSON.
             try:
                 json_start = response_text.find("```") + 3
                 json_end = response_text.find("```", json_start)
+                if json_end == -1:
+                    json_end = len(response_text)
                 json_str = response_text[json_start:json_end].strip()
                 return json.loads(json_str)
             except (json.JSONDecodeError, ValueError):
                 pass
 
+        # Try to find JSON object in the response
+        if "{" in response_text:
+            json_start = response_text.find("{")
+            # Try to find matching closing brace
+            json_str = response_text[json_start:]
+
+            # Try parsing as-is
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
+
+            # Try to repair truncated JSON by closing open brackets
+            repaired = self._repair_truncated_json(json_str)
+            if repaired:
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    pass
+
         # If all else fails, return empty dict
-        logger.warning("Could not parse JSON from LLM response", response=response_text[:100])
+        logger.warning("Could not parse JSON from LLM response", response=response_text[:200])
         return {}
+
+    def _repair_truncated_json(self, json_str: str) -> str:
+        """
+        Try to repair truncated JSON by closing open brackets and braces.
+
+        Args:
+            json_str: Potentially truncated JSON string
+
+        Returns:
+            Repaired JSON string or original if repair not possible
+        """
+        # Count open brackets/braces
+        open_braces = json_str.count('{') - json_str.count('}')
+        open_brackets = json_str.count('[') - json_str.count(']')
+
+        # If we have unclosed structures, try to close them
+        if open_braces > 0 or open_brackets > 0:
+            # Find the last complete item (ends with } or ] or ", or number)
+            # and truncate there
+            repaired = json_str.rstrip()
+
+            # Remove trailing incomplete content
+            while repaired and repaired[-1] not in '"}]0123456789':
+                repaired = repaired[:-1].rstrip()
+
+            # Close open brackets
+            for _ in range(open_brackets):
+                repaired += ']'
+            for _ in range(open_braces):
+                repaired += '}'
+
+            return repaired
+
+        return json_str
 
 
 # Convenience function for creating config from settings

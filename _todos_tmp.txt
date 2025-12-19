@@ -11,3 +11,41 @@ I found a Proxy tool here: https://github.com/bluet/proxybroker2
 Can you please include this Proxy tool into the tool to use a Proxy for specific data Sources. These data Sources should be configurable via the Configuration tab.
 For the configured data Sources all requests should be handeld via the Proxy tool. At start up a heralth check should be done to see if the Proxy tool is working. This tool should also be displayed in the Dashboard at the top with the other data Sources and a green indication if working.
 The Proxy tool should be run as docker (see Website for more Information: https://github.com/bluet/proxybroker2). Use playwright-mcp to read the Website. This will also give you infromation on how to install and use the tool.
+Please make as few changes as possible to the current tool. Make sure to analyse the structure of the tool first to find the best way to include the Proxy tool.
+Please think Deep before starting to implement.
+
+If no data souorce is configured to use the Proxy Server, the Proxy Server should not be started. Only if the user activates a data source to use the Proxy, the Proxy Server should be started.
+
+Can you add to the Fund TRacker tab a refresh button that will trigger a check on all funds to load the newest data (Holdings, changes, sells, buys) to the relevant tabs. 
+
+
+Scrpaer
+In the tool a scraping Agent should be implemented to scrape data from different webistes. Can you please review the tool to identify where this scraper is used and for what.
+I noticed that when I add a Website it does not Show up on the drop down in the Configuration tab in the field to select a Website. Can you make sure this data is saved properly.
+
+Configuration tab:
+In the Configuration tab there is a section for adding Websites that will be scraped and the data used in the tool. In this section it would e necessary to have more Inputs when adding a Website:
+New Website to scrpae from:
+- Website URL (already there),
+- Scraping model (already there) -> this will be sued for all Websites, so seperate this setting,
+- Analysis model (already there) -> this will be sued for all Websites, so seperate this setting,
+- a descritpion of what data should be scraped,
+- a Dropdown of possible functions/agents that can use this data (Dashboard Sentiment, hot stocks, hot sectors, bad sectors,analyst Ratings, News, ETF Holdings, ETF Holding changes, Fund Holdings,Fund Holding changes).
+- a Name for the data source.
+Please make sure to adapt the Configuration Website according to the new data above and the table in the database where the Websites are saved and all functions related to this (correct Arguments, fomrats, etc.).
+
+When adding a new Website the tool should make an initial test to see if data can be scraped and if the data is correct and what the user is Looking for. So this test should return to the user the scraped data and then the user can deciode to modify the descritpion of that is scraped or cancel the process. There should also be an Option for existing Websites to check the scrpaing process by the user and see what the scraper Returns. The Agent must make sure the Format fits the fucntions using this data.There should be templates to use for all Kinds of data (Dashboard Sentiment, hot stocks, hot sectors, bad sectors,analyst Ratings, News, ETF Holdings, ETF Holding changes, Fund Holdings,Fund Holding changes).
+When added this will be a new data source that can be used in the tool and will be configured in the Overview tab (see below).
+
+Overview tab:
+In the Overview tab, I don't see the scraper function being used for any data. In this Overview tab it should be possible to make changes to the data source used. The user should be able to switch to a different data source. Make sure to save all changes to the data source i the Database. Make sure that all changes in data source will work (correct data, correct Format, number of Arguments, etc). This sholud be kept in mind when implementing templates for the new categories of data Sources (Dashboard Sentiment, hot stocks, hot sectors, bad sectors,analyst Ratings, News, ETF Holdings, ETF Holding changes, Fund Holdings,Fund Holding changes).
+
+Add data source
+Can you add a section on the Dashboard that Shows the top gainer and top loser stocks. The data should be taken from an available API (Yahoo Finance or Alpha Vantage) if this data is available there. There should also be the possibility to load this data from a different source (web scraped data). To configure this I want to be able to configure the data source or multiple data Sources for the Top Gainer and Top Loser. The user should be able to select one or more data Sources for this and an Agent should be in charge of merging These into one data set. Please make sure that wehn I add a new web scraping Website that this will be added as new data source and I can select this. There will be more categories like Top Gainer or Top Loser in the future, so make this very fexible to add more categories. 
+In the Overview tab I want to be able to select which data Sources are used for what. In the Dashboard section of the Overview tab there is a category of data called "Web Scraped Market Data" which has the data source Web Scraping. This should be more explicit: 
+- for the Dashboard there is News data scraped from Yahoo,
+- Market Sentiment from Yahoo,...
+Please make sure to understand the structure fully before you implement any Changs.
+
+
+In the Dashboard tab I noticed that the data from the webscraped Websites is used not correctly. The idea is that I extract different categores of data from different wesites. This data should then flow into the Dashboard under the reelvant category. If there are multipole Sources for one category the data should be combined. Currently it Looks like if I select for example the top Gainer data source it retrieves all scraped data. I want from the Top Gainer data source only a list of top gainer stocks. Please make also sure to check if the scraping of the Website is implemented correctly. For Top Gainer and Top Loser stocks I want to get a list of stocks with a percentage on how much they moved the day before. Please make sure to understand the structure fully before you implement any Changs.

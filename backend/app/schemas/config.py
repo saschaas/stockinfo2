@@ -323,6 +323,7 @@ If information is not found, return empty arrays.""",
             "articles": [
                 {
                     "title": "Headline",
+                    "url": "https://example.com/article",
                     "summary": "Brief summary",
                     "tickers": ["AAPL"],
                     "sentiment": "positive",
@@ -336,6 +337,7 @@ If information is not found, return empty arrays.""",
 Requirements:
 - Find news articles and headlines
 - Extract title, summary, related tickers
+- IMPORTANT: Include the URL for each article (match title to AVAILABLE LINKS section)
 - Determine sentiment (positive/negative/neutral)
 - Categorize news (earnings, merger, regulation, etc.)
 
@@ -344,6 +346,7 @@ Return ONLY valid JSON in this exact format:
     "articles": [
         {
             "title": "Headline",
+            "url": "https://example.com/article",
             "summary": "Brief summary",
             "tickers": ["AAPL"],
             "sentiment": "positive",
@@ -353,6 +356,7 @@ Return ONLY valid JSON in this exact format:
     "source_date": "2024-01-01"
 }
 
+IMPORTANT: The "url" field is REQUIRED for each article. Find the matching URL from the AVAILABLE LINKS section.
 If information is not found, return empty arrays.""",
     },
     "etf_holdings": {
