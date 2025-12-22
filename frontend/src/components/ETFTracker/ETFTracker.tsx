@@ -57,11 +57,27 @@ export default function ETFTracker() {
   // Modal for showing ETFs holding a stock
   const [modalETFs, setModalETFs] = useState<{ ticker: string; companyName: string; etfNames: string[] } | null>(null)
 
+  // Check if any ETF is pending first scrape
+  const hasPendingETFs = (etfList: Array<{ last_scrape_at: string | null }>) =>
+    etfList.some(etf => !etf.last_scrape_at)
+
   // Queries
   const { data: etfs, isLoading: etfsLoading, error: etfsError } = useQuery({
     queryKey: ['etfs'],
     queryFn: () => fetchETFs(),
+    // Poll every 10 seconds if there are ETFs being scraped for the first time
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (data && hasPendingETFs(data.etfs)) {
+        return 10000 // 10 seconds
+      }
+      return false
+    },
   })
+
+  // Check if selected ETF is pending scrape
+  const selectedETFPending = selectedETF !== null && selectedETF !== 0 &&
+    etfs?.etfs.find(e => e.id === selectedETF)?.last_scrape_at === null
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery({
     queryKey: ['etfHoldings', selectedETF],
@@ -69,6 +85,8 @@ export default function ETFTracker() {
       ? fetchAggregatedETFHoldings()
       : fetchETFHoldings(selectedETF!),
     enabled: selectedETF !== null && activeTab === 'holdings',
+    // Poll every 10 seconds if the selected ETF is pending its first scrape
+    refetchInterval: selectedETFPending ? 10000 : false,
   })
 
   const { data: changes, isLoading: changesLoading } = useQuery({
@@ -92,10 +110,12 @@ export default function ETFTracker() {
     mutationFn: (data: ETFCreateData) => addETF(data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['etfs'] })
-      setAddSuccess(`ETF "${data.name}" added successfully!`)
+      setAddSuccess(`ETF "${data.name}" added successfully! Holdings are being loaded...`)
       setShowAddForm(false)
       resetAddForm()
-      setTimeout(() => setAddSuccess(null), 5000)
+      // Auto-select the newly added ETF
+      setSelectedETF(data.id)
+      setTimeout(() => setAddSuccess(null), 8000)
     },
     onError: (error: any) => {
       setAddError(error.response?.data?.detail || error.message || 'Failed to add ETF')
@@ -342,7 +362,15 @@ export default function ETFTracker() {
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">{etf.ticker}</span>
-                    {hasUpdate && (
+                    {!etf.last_scrape_at ? (
+                      <span className="flex items-center gap-1 text-xs text-amber-600" title="Loading holdings...">
+                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>Loading...</span>
+                      </span>
+                    ) : hasUpdate && (
                       <span className="relative flex h-2 w-2" title="New data available">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
@@ -605,6 +633,15 @@ export default function ETFTracker() {
                         </tbody>
                       </table>
                     </>
+                  ) : selectedETFPending ? (
+                    <div className="text-center py-8">
+                      <svg className="animate-spin h-8 w-8 mx-auto mb-3 text-amber-500" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <p className="text-amber-600 font-medium">Loading holdings data...</p>
+                      <p className="text-gray-500 text-sm mt-1">This may take up to a minute for new ETFs</p>
+                    </div>
                   ) : (
                     <p className="text-center text-gray-500 py-8">No holdings data available</p>
                   )}
