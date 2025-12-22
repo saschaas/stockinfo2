@@ -64,6 +64,7 @@ passlib[bcrypt]>=1.7.4
 python-dotenv>=1.0.0
 beautifulsoup4>=4.12.2
 lxml>=4.9.3
+pdfplumber>=0.10.0
 
 # Development dependencies
 pytest>=7.4.3

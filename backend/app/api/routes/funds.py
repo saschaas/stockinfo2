@@ -422,6 +422,97 @@ async def get_aggregated_changes(
     )
 
 
+class FundUpdateInfo(BaseModel):
+    """Information about a fund's update status."""
+
+    fund_id: int
+    fund_name: str
+    latest_filing_date: str | None
+    last_data_update: str | None  # When we last fetched new data for this fund
+    has_new_data: bool  # True if data was updated since the given timestamp
+
+
+class FundUpdatesResponse(BaseModel):
+    """Response for fund updates check."""
+
+    funds: list[FundUpdateInfo]
+    has_any_updates: bool
+    checked_at: str
+
+
+@router.get("/updates", response_model=FundUpdatesResponse)
+async def check_fund_updates(
+    since: str | None = Query(
+        default=None,
+        description="ISO timestamp to check for updates since (e.g., 2024-01-15T10:30:00Z)"
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> FundUpdatesResponse:
+    """Check which funds have been updated since a given timestamp.
+
+    Returns information about each fund's latest data update, useful for
+    showing notifications when new 13F filings have been fetched.
+    """
+    from datetime import datetime, timezone
+
+    # Parse the 'since' parameter
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid timestamp format. Use ISO format (e.g., 2024-01-15T10:30:00Z)"
+            )
+
+    # Get all active funds
+    funds_stmt = select(Fund).where(Fund.is_active == True).order_by(Fund.priority)
+    funds_result = await db.execute(funds_stmt)
+    active_funds = funds_result.scalars().all()
+
+    fund_updates = []
+    has_any_updates = False
+
+    for fund in active_funds:
+        # Get the latest filing date and most recent data update for this fund
+        stats_stmt = select(
+            func.max(FundHolding.filing_date).label('latest_filing_date'),
+            func.max(FundHolding.created_at).label('last_data_update')
+        ).where(FundHolding.fund_id == fund.id)
+
+        result = await db.execute(stats_stmt)
+        stats = result.first()
+
+        latest_filing_date = stats.latest_filing_date if stats else None
+        last_data_update = stats.last_data_update if stats else None
+
+        # Check if there's new data since the given timestamp
+        has_new_data = False
+        if since_dt and last_data_update:
+            # Make sure both datetimes are comparable (both timezone-aware or both naive)
+            if last_data_update.tzinfo is None:
+                last_data_update = last_data_update.replace(tzinfo=timezone.utc)
+            has_new_data = last_data_update > since_dt
+
+        if has_new_data:
+            has_any_updates = True
+
+        fund_updates.append(FundUpdateInfo(
+            fund_id=fund.id,
+            fund_name=fund.name,
+            latest_filing_date=latest_filing_date.isoformat() if latest_filing_date else None,
+            last_data_update=last_data_update.isoformat() if last_data_update else None,
+            has_new_data=has_new_data,
+        ))
+
+    return FundUpdatesResponse(
+        funds=fund_updates,
+        has_any_updates=has_any_updates,
+        checked_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 @router.get("/{fund_id}/holdings", response_model=FundHoldingsResponse)
 async def get_fund_holdings(
     fund_id: Annotated[int, Path(ge=1)],

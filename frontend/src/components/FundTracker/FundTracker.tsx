@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchFunds, fetchFundHoldings, fetchFundChanges, fetchAggregatedHoldings, fetchAggregatedChanges, addFund, removeFund, validateFund, searchFunds, startStockResearch, refreshFundHoldings } from '../../services/api'
+import { useFundNotificationStore } from '../../stores/fundNotificationStore'
 
 interface SearchResult {
   cik: string
@@ -37,6 +38,17 @@ export default function FundTracker() {
   const MAX_SELECTION = 5
 
   const queryClient = useQueryClient()
+
+  // Fund notification store for tracking updates
+  const { updatedFundIds, clearFundUpdate, checkForUpdates } = useFundNotificationStore()
+
+  // Handle fund selection - clear notification when fund is selected
+  const handleSelectFund = (fundId: number) => {
+    setSelectedFund(fundId)
+    if (fundId !== 0 && updatedFundIds.has(fundId)) {
+      clearFundUpdate(fundId)
+    }
+  }
 
   const handleFundCountClick = (ticker: string, companyName: string, fundNames: string[]) => {
     setModalFunds({ ticker, companyName, fundNames })
@@ -171,6 +183,8 @@ export default function FundTracker() {
         queryClient.invalidateQueries({ queryKey: ['funds'] })
         queryClient.invalidateQueries({ queryKey: ['fundHoldings'] })
         queryClient.invalidateQueries({ queryKey: ['fundChanges'] })
+        // Re-check for fund updates to detect any new data
+        checkForUpdates()
       }, 3000)
       // Reset status after total 8 seconds
       setTimeout(() => {
@@ -373,47 +387,67 @@ export default function FundTracker() {
               <div className="space-y-2 mb-6">
                 {/* ALL FUNDS aggregated view */}
                 <button
-                  onClick={() => setSelectedFund(0)}
+                  onClick={() => handleSelectFund(0)}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
                     selectedFund === 0
                       ? 'bg-primary-50 border-primary-500 text-primary-800'
                       : 'border-border-warm hover:bg-cream hover:border-border-warm-dark'
                   }`}
                 >
-                  <div className="font-bold text-sm">ALL FUNDS</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm">ALL FUNDS</span>
+                    {updatedFundIds.size > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-500 px-1.5 text-[10px] font-bold text-white">
+                        {updatedFundIds.size}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500">Combined holdings across all funds</div>
                 </button>
 
                 {/* Individual funds */}
-                {funds?.funds?.map((fund: any) => (
-                  <div
-                    key={fund.id}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-                      selectedFund === fund.id
-                        ? 'bg-primary-50 border border-primary-200'
-                        : 'hover:bg-cream border border-transparent'
-                    }`}
-                  >
-                    <button
-                      onClick={() => setSelectedFund(fund.id)}
-                      className="flex-1 text-left"
+                {funds?.funds?.map((fund: any) => {
+                  const hasUpdate = updatedFundIds.has(fund.id)
+                  return (
+                    <div
+                      key={fund.id}
+                      className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                        selectedFund === fund.id
+                          ? 'bg-primary-50 border border-primary-200'
+                          : hasUpdate
+                            ? 'bg-primary-50/50 hover:bg-primary-50 border border-primary-200'
+                            : 'hover:bg-cream border border-transparent'
+                      }`}
                     >
-                      <div className="font-medium text-sm text-gray-900">{fund.name}</div>
-                      {fund.ticker && (
-                        <div className="text-xs text-gray-500">{fund.ticker}</div>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleRemoveFund(fund.id, fund.name)}
-                      className="ml-2 p-1.5 text-gray-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                      title="Remove fund"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        onClick={() => handleSelectFund(fund.id)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900">{fund.name}</span>
+                          {hasUpdate && (
+                            <span className="relative flex h-2 w-2" title="New data available">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
+                            </span>
+                          )}
+                        </div>
+                        {fund.ticker && (
+                          <div className="text-xs text-gray-500">{fund.ticker}</div>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveFund(fund.id, fund.name)}
+                        className="ml-2 p-1.5 text-gray-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+                        title="Remove fund"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Add Fund Form */}

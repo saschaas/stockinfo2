@@ -342,6 +342,187 @@ export async function removeFund(fundId: number) {
   return data
 }
 
+// Fund updates/notifications types
+export interface FundUpdateInfo {
+  fund_id: number
+  fund_name: string
+  latest_filing_date: string | null
+  last_data_update: string | null
+  has_new_data: boolean
+}
+
+export interface FundUpdatesResponse {
+  funds: FundUpdateInfo[]
+  has_any_updates: boolean
+  checked_at: string
+}
+
+export async function checkFundUpdates(since?: string): Promise<FundUpdatesResponse> {
+  const { data } = await api.get('/funds/updates', {
+    params: since ? { since } : {},
+  })
+  return data
+}
+
+// ETF endpoints
+export interface ETFInfo {
+  id: number
+  name: string
+  ticker: string
+  url: string
+  agent_command: string
+  description: string | null
+  category: string
+  priority: number
+  is_active: boolean
+  last_scrape_at: string | null
+  last_scrape_success: boolean | null
+  last_scrape_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ETFListResponse {
+  total: number
+  etfs: Array<{
+    id: number
+    name: string
+    ticker: string
+    url: string
+    category: string
+    priority: number
+    is_active: boolean
+    last_scrape_at: string | null
+    last_scrape_success: boolean | null
+  }>
+}
+
+export interface ETFHoldingsResponse {
+  etf_id: number
+  etf_name: string
+  holding_date: string | null
+  holdings: Array<{
+    ticker: string
+    company_name: string | null
+    cusip: string | null
+    shares: number | null
+    market_value: number | null
+    weight_pct: number | null
+    change_type: string | null
+    shares_change: number | null
+    weight_change: number | null
+    etf_count?: number
+    etf_names?: string[]
+  }>
+  total_value: number
+}
+
+export interface ETFChangesResponse {
+  etf_id: number
+  etf_name: string
+  holding_date: string | null
+  new_positions: Array<any>
+  increased: Array<any>
+  decreased: Array<any>
+  sold: Array<any>
+}
+
+export interface ETFUpdateInfo {
+  etf_id: number
+  etf_name: string
+  ticker: string
+  latest_holding_date: string | null
+  last_data_update: string | null
+  has_new_data: boolean
+}
+
+export interface ETFUpdatesResponse {
+  etfs: ETFUpdateInfo[]
+  has_any_updates: boolean
+  checked_at: string
+}
+
+export interface ETFCreateData {
+  name: string
+  ticker: string
+  url: string
+  agent_command: string
+  description?: string
+  category?: string
+}
+
+export interface ETFUpdateData {
+  name?: string
+  url?: string
+  agent_command?: string
+  description?: string
+  category?: string
+  is_active?: boolean
+}
+
+export async function fetchETFs(category?: string, activeOnly: boolean = true): Promise<ETFListResponse> {
+  const { data } = await api.get('/etfs/', {
+    params: { category, active_only: activeOnly },
+  })
+  return data
+}
+
+export async function fetchETFHoldings(etfId: number, limit: number = 50): Promise<ETFHoldingsResponse> {
+  const { data } = await api.get(`/etfs/${etfId}/holdings`, {
+    params: { limit },
+  })
+  return data
+}
+
+export async function fetchETFChanges(etfId: number): Promise<ETFChangesResponse> {
+  const { data } = await api.get(`/etfs/${etfId}/changes`)
+  return data
+}
+
+export async function fetchAggregatedETFHoldings(limit: number = 50): Promise<ETFHoldingsResponse> {
+  const { data } = await api.get('/etfs/aggregate/holdings', {
+    params: { limit },
+  })
+  return data
+}
+
+export async function fetchAggregatedETFChanges(): Promise<ETFChangesResponse> {
+  const { data } = await api.get('/etfs/aggregate/changes')
+  return data
+}
+
+export async function checkETFUpdates(since?: string): Promise<ETFUpdatesResponse> {
+  const { data } = await api.get('/etfs/updates', {
+    params: since ? { since } : {},
+  })
+  return data
+}
+
+export async function addETF(data: ETFCreateData): Promise<ETFInfo> {
+  const { data: response } = await api.post('/etfs/', data)
+  return response
+}
+
+export async function updateETF(etfId: number, data: ETFUpdateData): Promise<ETFInfo> {
+  const { data: response } = await api.put(`/etfs/${etfId}`, data)
+  return response
+}
+
+export async function removeETF(etfId: number) {
+  const { data } = await api.delete(`/etfs/${etfId}`)
+  return data
+}
+
+export async function refreshETFHoldings() {
+  const { data } = await api.post('/etfs/refresh')
+  return data
+}
+
+export async function refreshSingleETF(etfId: number) {
+  const { data } = await api.post(`/etfs/${etfId}/refresh`)
+  return data
+}
+
 // Report endpoints
 export async function getStockReport(ticker: string, format: 'html' | 'pdf' = 'html') {
   const { data } = await api.get(`/reports/stock/${ticker}`, {

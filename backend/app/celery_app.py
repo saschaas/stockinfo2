@@ -16,6 +16,7 @@ celery_app = Celery(
         "backend.app.tasks.research",
         "backend.app.tasks.market",
         "backend.app.tasks.funds",
+        "backend.app.tasks.etfs",
     ],
 )
 
@@ -45,5 +46,9 @@ celery_app.conf.beat_schedule = {
     "fund-holdings-check": {
         "task": "backend.app.tasks.funds.check_fund_holdings",
         "schedule": 14400.0,  # Every 4 hours
+    },
+    "etf-holdings-daily": {
+        "task": "backend.app.tasks.etfs.refresh_all_etfs",
+        "schedule": crontab(hour=0, minute=0),  # Daily at midnight
     },
 }

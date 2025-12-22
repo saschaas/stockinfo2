@@ -1,12 +1,55 @@
+import { useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
+import { useFundNotificationStore } from '../../stores/fundNotificationStore'
+import { useETFNotificationStore } from '../../stores/etfNotificationStore'
 
 export default function Layout() {
   const location = useLocation()
+  const { hasUpdates, updatedFundIds, checkForUpdates, markAsViewed } = useFundNotificationStore()
+  const {
+    hasUpdates: hasETFUpdates,
+    updatedETFIds,
+    checkForUpdates: checkETFUpdates,
+    markAsViewed: markETFAsViewed
+  } = useETFNotificationStore()
+
+  // Check for fund updates on mount and periodically
+  useEffect(() => {
+    // Initial check
+    checkForUpdates()
+
+    // Check every 5 minutes
+    const interval = setInterval(checkForUpdates, 5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [checkForUpdates])
+
+  // Mark as viewed when navigating to Fund Tracker
+  useEffect(() => {
+    if (location.pathname === '/funds') {
+      markAsViewed()
+    }
+  }, [location.pathname, markAsViewed])
+
+  // Check for ETF updates on mount and periodically
+  useEffect(() => {
+    checkETFUpdates()
+    const interval = setInterval(checkETFUpdates, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [checkETFUpdates])
+
+  // Mark ETF as viewed when navigating to ETF Tracker
+  useEffect(() => {
+    if (location.pathname === '/etfs') {
+      markETFAsViewed()
+    }
+  }, [location.pathname, markETFAsViewed])
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
     { path: '/research', label: 'Stock Research', icon: '🔍' },
-    { path: '/funds', label: 'Fund Tracker', icon: '💼' },
+    { path: '/funds', label: 'Fund Tracker', icon: '💼', badge: hasUpdates ? updatedFundIds.size : 0 },
+    { path: '/etfs', label: 'ETF Tracker', icon: '📈', badge: hasETFUpdates ? updatedETFIds.size : 0 },
     { path: '/config', label: 'Configuration', icon: '⚙️' },
     { path: '/overview', label: 'Overview', icon: '🔗' },
   ]
@@ -39,7 +82,7 @@ export default function Layout() {
                       key={item.path}
                       to={item.path}
                       className={`
-                        inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                        relative inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200
                         ${isActive
                           ? 'bg-primary-50 text-primary-700'
                           : 'text-gray-600 hover:bg-cream-dark hover:text-gray-900'
@@ -48,6 +91,11 @@ export default function Layout() {
                     >
                       <span className="mr-2">{item.icon}</span>
                       {item.label}
+                      {'badge' in item && item.badge !== undefined && item.badge > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500 text-[10px] font-bold text-white shadow-sm">
+                          {item.badge > 9 ? '9+' : item.badge}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}
@@ -75,7 +123,7 @@ export default function Layout() {
                   key={item.path}
                   to={item.path}
                   className={`
-                    inline-flex items-center px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200
+                    relative inline-flex items-center px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200
                     ${isActive
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-600 hover:bg-cream-dark'
@@ -84,6 +132,11 @@ export default function Layout() {
                 >
                   <span className="mr-1.5">{item.icon}</span>
                   {item.label}
+                  {'badge' in item && item.badge !== undefined && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary-500 text-[9px] font-bold text-white shadow-sm">
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  )}
                 </Link>
               )
             })}

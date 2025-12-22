@@ -49,3 +49,626 @@ Please make sure to understand the structure fully before you implement any Chan
 
 
 In the Dashboard tab I noticed that the data from the webscraped Websites is used not correctly. The idea is that I extract different categores of data from different wesites. This data should then flow into the Dashboard under the reelvant category. If there are multipole Sources for one category the data should be combined. Currently it Looks like if I select for example the top Gainer data source it retrieves all scraped data. I want from the Top Gainer data source only a list of top gainer stocks. Please make also sure to check if the scraping of the Website is implemented correctly. For Top Gainer and Top Loser stocks I want to get a list of stocks with a percentage on how much they moved the day before. Please make sure to understand the structure fully before you implement any Changs.
+
+
+Valuation
+For the stock Research  want to update the calculation of the fair value of the Company. This new Information must be included in the Overall Analysis of the stock. Please make sure to analyse the current process for the valuation and implement this new feature in the best way. The new valuation process can distinquish between different Kind of comnpanies and Chose the best Approach to calculate the value (see Details below).
+After implementing, please make sure to rebuild all necessary parts of the tool and test this in Depth to verify the correct functioning.
+
+Process for Evaluation:
+# Complete Guide to Company Valuation Methods and Intrinsic Value Formulas
+
+Determining what a company is truly worth requires selecting the right valuation methodology for each unique situation. **No single approach works universally**—a profitable dividend-paying utility demands different methods than a cash-burning SaaS startup. This guide provides complete mathematical formulas for every major valuation technique, practical guidance on implementation using publicly available data, and a decision framework to match methods with company characteristics.
+
+The fundamental insight is that valuation is both science and art: formulas provide structure, but judgment determines inputs. Master the mechanics first, then develop intuition for when each tool applies.
+
+---
+
+## Discounted Cash Flow models remain the theoretical gold standard
+
+DCF analysis projects future cash flows and discounts them to present value using an appropriate rate of return. The approach captures intrinsic value based on fundamentals rather than market sentiment—making it essential for serious equity analysis.
+
+### Free Cash Flow to Firm (FCFF) captures enterprise value
+
+FCFF represents cash available to all capital providers (debt and equity holders) after operating expenses and reinvestment.
+
+**Primary Formula:**
+```
+FCFF = EBIT × (1 - t) + D&A - CapEx - ΔWC
+```
+
+**Alternative formulations:**
+```
+FCFF = Net Income + D&A + Interest × (1 - t) - CapEx - ΔWC
+FCFF = CFO + Interest × (1 - t) - CapEx
+```
+
+**Variable definitions:**
+- **EBIT** = Earnings Before Interest and Taxes (from income statement)
+- **t** = Corporate tax rate (find in 10-K tax footnote)
+- **D&A** = Depreciation & Amortization (cash flow statement)
+- **CapEx** = Capital Expenditures (investing section of cash flow statement)
+- **ΔWC** = Change in Net Working Capital (current assets minus current liabilities, excluding cash)
+
+**Enterprise Value calculation:**
+```
+Enterprise Value = Σ [FCFFₜ / (1 + WACC)ᵗ] + Terminal Value / (1 + WACC)ⁿ
+Equity Value = Enterprise Value - Net Debt
+Value per Share = Equity Value / Diluted Shares Outstanding
+```
+
+**When to use FCFF:** Companies with changing capital structure, negative FCFE but positive FCFF, leveraged buyout analysis, or when valuing entire business units. FCFF excels for capital-intensive industries reducing debt.
+
+### Free Cash Flow to Equity (FCFE) values equity directly
+
+FCFE measures cash available to common shareholders after debt payments and reinvestment.
+
+**Formula:**
+```
+FCFE = Net Income + D&A - CapEx - ΔWC + Net Borrowing
+```
+
+**Direct equity valuation:**
+```
+Equity Value = Σ [FCFEₜ / (1 + re)ᵗ] + Terminal Value / (1 + re)ⁿ
+```
+
+Where **re** = cost of equity (calculated via CAPM). Use FCFE when capital structure is stable and you're valuing from the equity holder's perspective.
+
+### Dividend Discount Models work for mature dividend payers
+
+**Gordon Growth Model (single-stage):**
+```
+P₀ = D₁ / (re - g) = D₀ × (1 + g) / (re - g)
+```
+
+**Two-Stage DDM:**
+```
+P₀ = Σ [D₀ × (1 + gₛ)ᵗ / (1 + re)ᵗ] + [Dₙ × (1 + g∞) / (re - g∞)] × [1 / (1 + re)ⁿ]
+```
+
+**H-Model (linearly declining growth):**
+```
+V₀ = D₀ × [(1 + gL) + H × (gS - gL)] / (re - gL)
+```
+
+Where **H** = half-life of high-growth period, **gS** = initial supernormal growth, **gL** = long-term stable growth. The H-Model captures gradual growth deceleration more realistically than abrupt two-stage transitions.
+
+**Constraints:** Growth rate (g) must be less than the required return (re), and terminal growth should not exceed long-term nominal GDP growth (**2-3% for developed markets**).
+
+### Adjusted Present Value separates financing effects
+
+APV explicitly values the tax benefits of debt separately from operating value—essential when leverage changes over time.
+
+**Formula:**
+```
+APV = NPV(Unlevered Firm) + PV(Interest Tax Shields) - PV(Financial Distress Costs)
+```
+
+**Components:**
+```
+Unlevered Value = Σ [FCFₜ / (1 + rU)ᵗ]  (discount at unlevered cost of equity)
+Tax Shield = Σ [Interest × Tax Rate / (1 + rd)ᵗ]
+```
+
+**When to use APV:** LBOs with aggressive debt paydown, project finance with specific debt schedules, subsidized financing, or when tax shields are uncertain (loss carryforwards).
+
+---
+
+## Relative valuation provides market-based benchmarks
+
+Multiples-based valuation anchors value to how the market prices comparable companies. While less theoretically pure than DCF, relative valuation reflects real market pricing and highlights over/undervaluation versus peers.
+
+### Price-to-Earnings captures profit expectations
+
+**Basic formulas:**
+```
+Trailing P/E = Current Price / LTM EPS
+Forward P/E = Current Price / Next 12 Months EPS (consensus estimate)
+```
+
+**Justified P/E (from fundamentals):**
+```
+P/E = (1 - b) / (re - g)
+```
+
+Where **(1-b)** = dividend payout ratio, **re** = required return, **g** = growth rate. A company with 60% payout, 10% required return, and 3% growth has a justified P/E of **8.6x**.
+
+**PEG Ratio normalizes for growth:**
+```
+PEG = P/E Ratio / Expected EPS Growth Rate (as whole number)
+```
+
+A PEG of **1.0** suggests fair value relative to growth; below 1.0 may indicate undervaluation. However, PEG breaks down for low-growth companies.
+
+### Price-to-Book anchors value to net assets
+
+```
+P/B = Market Price per Share / Book Value per Share
+Book Value per Share = (Shareholders' Equity - Preferred Stock) / Shares Outstanding
+```
+
+**Justified P/B:**
+```
+P/B = (ROE - g) / (re - g)
+```
+
+If ROE exceeds the required return, the company deserves a premium to book value. **P/B is most useful for financial institutions** (banks, insurers) where book value approximates market value of assets, and for asset-heavy industries approaching liquidation scenarios.
+
+### Enterprise Value multiples enable capital structure-neutral comparison
+
+**Enterprise Value:**
+```
+EV = Market Cap + Total Debt + Preferred + Minority Interest - Cash
+```
+
+**EV/EBITDA (most common):**
+```
+EV/EBITDA = Enterprise Value / (EBIT + D&A)
+```
+
+**Typical ranges:** Public companies average **~8x**; private transactions **4-6x**; high-growth tech **15-30x+**.
+
+**EV/Revenue (for unprofitable companies):**
+```
+EV/Revenue = Enterprise Value / Total Revenue
+```
+
+Use EV/Revenue when EBITDA is negative. Tech/SaaS companies often trade at **5-15x revenue**; traditional industries **1-2x**.
+
+### Comparable company analysis requires disciplined peer selection
+
+**Step-by-step methodology:**
+
+1. **Select peers** using same industry (SIC/GICS), similar size (market cap within 0.5x-2x), comparable growth rates, and similar business models. Sources: 10-K competition section, proxy statement compensation peers.
+
+2. **Gather data** for each peer: share price, debt, cash, revenue, EBITDA, earnings, book value. Calendarize financials if fiscal years differ.
+
+3. **Calculate multiples** for each peer: trailing and forward EV/EBITDA, P/E, EV/Revenue.
+
+4. **Use median** (not mean) to reduce outlier impact. Calculate 25th and 75th percentiles for range.
+
+5. **Apply to target:**
+```
+Implied Value = Target Metric × Selected Multiple
+```
+
+### Precedent transactions include control premiums
+
+Analyze prices paid in historical M&A transactions for similar companies.
+
+**Control Premium:**
+```
+Premium (%) = (Offer Price / Unaffected Price - 1) × 100
+```
+
+Unaffected price = stock price before deal announcement (typically 1-30 days prior). **Typical control premiums: 20-40%** over market price.
+
+**Data sources:** SEC merger proxies (DEF 14A), 8-K filings, SDC Platinum, Bloomberg M&A database, PitchBook.
+
+---
+
+## Asset-based methods establish floor values
+
+Asset-based valuation anchors value to what a company owns rather than what it earns—essential for distressed situations, holding companies, and asset-intensive businesses.
+
+### Book value provides starting point
+
+```
+Equity Value = Total Assets - Total Liabilities
+Book Value per Share = (Shareholders' Equity - Preferred) / Shares Outstanding
+```
+
+**Adjusted book value** marks assets to fair market value rather than historical cost. Key adjustments include real estate appraisals, LIFO-to-FIFO inventory conversion, and removal of impaired intangibles.
+
+### Liquidation value sets absolute floor
+
+```
+Liquidation Value = Σ (Asset × Recovery Rate) - Total Liabilities - Liquidation Costs
+```
+
+**Typical recovery rates:**
+| Asset Type | Orderly Liquidation | Forced Sale |
+|------------|---------------------|-------------|
+| Cash | 100% | 100% |
+| Marketable Securities | 95-100% | 90-100% |
+| Accounts Receivable | 70-90% | 50-80% |
+| Inventory | 50-75% | 25-50% |
+| PP&E | 50-80% | 20-50% |
+| Goodwill/Intangibles | 0-20% | 0% |
+
+Ben Graham's Net Current Asset Value (NCAV) strategy—buying stocks trading below liquidation value—historically generated excess returns.
+
+### NAV for REITs uses cap rates
+
+```
+Property Value = Net Operating Income / Capitalization Rate
+REIT NAV = FMV of Properties + Cash + Other Assets - Debt - Overhead (capitalized)
+NAV per Share = NAV / Shares Outstanding
+```
+
+Compare market price to NAV to identify premium/discount. REITs trading at significant discounts to NAV may be undervalued.
+
+---
+
+## Residual Income and EVA measure economic profit
+
+These methods value companies based on their ability to generate returns above the cost of capital—particularly useful for financial institutions and companies with unpredictable cash flows.
+
+### Residual Income Model values abnormal earnings
+
+**Residual Income calculation:**
+```
+RI = Net Income - (re × Book Value)
+RI = (ROE - re) × Book Value
+```
+
+**Valuation formula:**
+```
+V₀ = BV₀ + Σ [RIₜ / (1 + re)ᵗ]
+```
+
+A company creates value only when ROE exceeds the cost of equity. The model explicitly quantifies this value creation.
+
+### Economic Value Added (EVA) measures operational value creation
+
+**Core formula:**
+```
+EVA = NOPAT - (WACC × Invested Capital)
+EVA = (ROIC - WACC) × Invested Capital
+```
+
+**NOPAT calculation:**
+```
+NOPAT = EBIT × (1 - Tax Rate)
+```
+
+**Invested Capital:**
+```
+Invested Capital = Net Working Capital + Net PP&E + Goodwill + Other Operating Assets
+```
+
+Or equivalently:
+```
+Invested Capital = Total Debt + Equity - Excess Cash - Non-operating Assets
+```
+
+**Common adjustments:** Capitalize R&D (typically 3-7 year amortization), capitalize operating leases, adjust LIFO reserves to FIFO, add back goodwill impairments.
+
+**Market Value Added connects EVA to market value:**
+```
+MVA = Market Value of Equity - Book Value of Equity = PV of all future EVAs
+```
+
+### Sum-of-the-parts values diversified businesses
+
+For conglomerates, value each business segment separately using the most appropriate method, then sum.
+
+```
+SOTP Value = Σ (Segment EV) - Corporate Overhead (capitalized) - Net Debt + Non-operating Assets
+```
+
+**Implementation:**
+1. Identify segments from 10-K segment disclosures (required under ASC 280)
+2. Select appropriate valuation method per segment (EV/EBITDA for mature, EV/Revenue for growth)
+3. Apply peer multiples to each segment's metrics
+4. Allocate corporate overhead (typically capitalized at 6-8x)
+5. Deduct net debt and add non-operating assets
+
+**Conglomerate discount** of **10-30%** often applied due to management complexity, poor capital allocation, and lack of pure-play transparency.
+
+---
+
+## Growth companies require specialized approaches
+
+Companies with negative earnings or cash flows can't be valued using standard P/E or DCF methods. Specialized approaches focus on leading indicators of future profitability.
+
+### Revenue multiples value top-line growth
+
+When EBITDA is negative, revenue becomes the primary valuation anchor:
+```
+EV/Revenue = Enterprise Value / Total Revenue
+```
+
+**Growth-adjusted interpretation:** A company growing revenue at 40% deserves a higher revenue multiple than one growing at 10%. SaaS companies at 40%+ growth typically command **8-12x EV/ARR**.
+
+### Rule of 40 balances growth and profitability
+
+```
+Rule of 40 Score = Revenue Growth Rate (%) + Profit Margin (%)
+```
+
+Companies scoring 40+ are considered healthy—they balance growth investment with operating efficiency. A company growing 50% with -10% margins scores 40 (acceptable). One growing 15% with 5% margins scores 20 (underperforming).
+
+### SaaS metrics drive software valuations
+
+**Annual Recurring Revenue (ARR):**
+```
+ARR = Monthly Recurring Revenue × 12
+```
+
+**Net Revenue Retention (NRR):**
+```
+NRR = (Starting MRR + Expansion - Churned - Contraction) / Starting MRR × 100
+```
+
+Top-quartile SaaS companies achieve **130%+ NRR**—they expand revenue from existing customers faster than they lose it.
+
+**Customer Lifetime Value (LTV) and Customer Acquisition Cost (CAC):**
+```
+LTV = (ARPU × Gross Margin) / Churn Rate
+CAC = Sales & Marketing Spend / New Customers Acquired
+LTV/CAC Ratio: Target ≥ 3:1
+```
+
+A healthy **LTV/CAC of 3:1** means $3 of value created for every $1 spent acquiring customers. Below 1:1 destroys value; above 5:1 may indicate underinvestment in growth.
+
+**EV/ARR multiples by growth rate (2025 market):**
+| Revenue Growth | Typical EV/ARR |
+|----------------|----------------|
+| <20% | 3-5x |
+| 20-40% | 5-8x |
+| 40-60% | 8-12x |
+| 60%+ | 12-20x+ |
+
+### User-based valuation for consumer platforms
+
+```
+Value per User = Enterprise Value / Active Users (DAU or MAU)
+ARPU = Total Revenue / Active Users
+```
+
+**Metcalfe's Law** suggests network value grows proportional to **n²** (number of users squared)—explaining the massive valuations of platforms with strong network effects.
+
+### Real options value growth optionality
+
+Early-stage companies possess valuable options: to expand into new markets, delay investments, or abandon failing projects. These real options add value beyond DCF.
+
+**Black-Scholes application:**
+```
+C = S₀ × N(d₁) - K × e^(-rT) × N(d₂)
+```
+
+**Variable mapping:**
+- **S₀** = Present value of expected project cash flows
+- **K** = Investment required to exercise the option
+- **T** = Time until option expires
+- **σ** = Volatility of project cash flows
+
+Real options valuation is most applicable to **R&D-intensive companies, phased geographic expansion, and patent portfolios**. However, input estimation is challenging—use primarily as qualitative framework rather than precise calculation.
+
+### DCF for negative cash flows extends the forecast
+
+When cash flows are currently negative, extend the projection period until they turn positive:
+
+1. Project **10-15 years** (vs. typical 5-year DCF)
+2. Model detailed path to profitability: gross margin improvement, operating leverage
+3. Include negative FCF years in the sum (they reduce value)
+4. Apply **scenario analysis** with probability weights:
+```
+Expected Value = (Bull Case × 25%) + (Base Case × 50%) + (Bear Case × 25%)
+```
+
+---
+
+## Discount rates translate future value to present value
+
+The discount rate is the required return that makes an investment worthwhile—it reflects the time value of money plus risk.
+
+### WACC weighs cost of debt and equity
+
+```
+WACC = (E/V) × re + (D/V) × rd × (1 - T)
+```
+
+**Variables:**
+- **E** = Market value of equity (shares × price)
+- **D** = Market value of debt (use book value for non-traded debt)
+- **V** = E + D
+- **re** = Cost of equity
+- **rd** = Cost of debt (yield on company bonds)
+- **T** = Marginal tax rate
+
+**Typical WACC ranges:** Utilities **4-6%**; industrials **7-9%**; technology **8-12%**.
+
+### CAPM calculates cost of equity
+
+```
+re = Rf + β × (Rm - Rf)
+```
+
+**Current inputs (December 2024/January 2025):**
+- **Rf (Risk-free rate):** 10-Year Treasury ≈ **4.3-4.5%** (source: FRED)
+- **ERP (Equity Risk Premium):** **4.3-5.5%** (Damodaran implied: 4.33%; Kroll recommended: 5.5%)
+- **β (Beta):** Company-specific (source: Yahoo Finance, Bloomberg)
+
+**Adjusted Beta (Bloomberg method):**
+```
+βadjusted = 0.67 × βraw + 0.33 × 1.0
+```
+
+**Unlevering/relevering beta (Hamada equation):**
+```
+βU = βL / [1 + (1 - T) × (D/E)]
+βL = βU × [1 + (1 - T) × (D/E)]
+```
+
+Use unlevered beta to compare companies with different capital structures.
+
+### Build-Up Method for private companies
+
+```
+re = Rf + ERP + Size Premium + Industry Premium + Company-Specific Premium
+```
+
+**Size premiums (Kroll 2025 data):**
+| Market Cap | Size Premium |
+|------------|--------------|
+| >$50B | -0.4% |
+| $3B-$5B | 1.2% |
+| $600M-$1.2B | 2.0% |
+| $150M-$300M | 3.2% |
+| <$2M | ~11% |
+
+**Company-specific factors (0-5%+):** Customer concentration, management depth, competitive position, regulatory exposure.
+
+### Cost of debt uses credit spreads
+
+**For traded bonds:** Use yield to maturity (YTM).
+
+**Synthetic rating method (Damodaran):**
+```
+Cost of Debt = Risk-free Rate + Default Spread based on Interest Coverage Ratio
+```
+
+**Interest Coverage to Rating mapping:**
+| Interest Coverage | Rating | Default Spread |
+|-------------------|--------|----------------|
+| >8.5 | AAA | 0.45% |
+| 4.25-5.5 | A | 0.85% |
+| 2.5-3.0 | BBB | 1.20% |
+| 1.75-2.0 | B+ | 2.61% |
+| <1.25 | CCC | 7.28% |
+
+**After-tax cost of debt:**
+```
+After-tax rd = Pre-tax rd × (1 - T)
+```
+
+---
+
+## Terminal value captures value beyond the forecast period
+
+Terminal value typically represents **60-80%** of total DCF value, making its calculation critical.
+
+### Gordon Growth perpetuity method
+
+```
+TV = FCFn × (1 + g) / (WACC - g)
+```
+
+**Constraints:**
+- **g** must be less than WACC (or value goes infinite)
+- **g** should approximate long-term GDP growth: **2-3%** for developed markets
+- **g** should not exceed the risk-free rate long-term
+
+### Exit Multiple method
+
+```
+TV = EBITDAn × Exit Multiple
+```
+
+Select exit multiple based on current trading multiples of mature companies in the industry. Cross-check implied perpetual growth rate:
+```
+Implied g = (TV × WACC - FCF) / (FCF + TV)
+```
+
+If implied growth exceeds 4%, the exit multiple may be too aggressive.
+
+### Sensitivity analysis is essential
+
+Create tables varying both WACC (±1%) and terminal growth (±0.5%). A ±1% change in terminal growth can swing value by **15-25%**.
+
+---
+
+## Decision framework for selecting valuation methods
+
+Match valuation approach to company characteristics:
+
+**By profitability stage:**
+| Situation | Primary Method | Secondary Method |
+|-----------|---------------|-----------------|
+| Profitable, dividend paying | DCF (FCFE), DDM | P/E, EV/EBITDA |
+| Profitable, no dividends | DCF (FCFF, FCFE) | EV/EBITDA, P/E |
+| Unprofitable, revenue growing | EV/Revenue, SaaS metrics | Scenario DCF |
+| Pre-revenue | VC Method, Real Options | User-based valuation |
+| Distressed | Liquidation Value | Asset-based NAV |
+
+**By industry:**
+| Industry | Primary Methods |
+|----------|-----------------|
+| Banks/Insurance | P/B, Residual Income, P/E |
+| Utilities | DCF (stable growth), DDM |
+| Technology/SaaS | EV/Revenue, EV/ARR, Rule of 40 |
+| REITs | NAV, P/FFO, Cap Rate |
+| Manufacturing | EV/EBITDA, DCF, Asset-based |
+| Biotech | rNPV, Real Options, Pipeline valuation |
+| Conglomerates | Sum-of-the-Parts |
+
+**By purpose:**
+- **M&A:** DCF, Precedent Transactions, SOTP
+- **Public equity investing:** Comps, DCF, Relative valuation
+- **Venture capital:** VC Method, Revenue multiples, User metrics
+- **Restructuring:** Liquidation value, Asset-based
+
+---
+
+## Data sources for implementation
+
+**SEC filings (free via sec.gov/EDGAR):**
+- **10-K:** Annual financials, segment data, management discussion
+- **10-Q:** Quarterly updates
+- **DEF 14A (Proxy):** Executive compensation peers, governance
+- **8-K:** Material events including M&A
+
+**Market data:**
+- **Yahoo Finance:** Stock prices, basic financials, beta, analyst estimates (free)
+- **FRED (fred.stlouisfed.org):** Treasury rates, economic data (free)
+- **Damodaran Online (pages.stern.nyu.edu/~adamodar):** Industry betas, ERP, country risk premiums (free)
+- **Kroll Cost of Capital Navigator:** Size premiums, risk data (subscription)
+- **Bloomberg/Capital IQ/FactSet:** Comprehensive data (subscription)
+
+**Industry benchmarks:**
+- **BVP Cloud Index:** SaaS multiples and metrics
+- **PitchBook/CB Insights:** VC transaction data
+- **SDC Platinum:** M&A transaction database
+
+---
+
+## Practical implementation checklist
+
+1. **Determine company stage:** Profitable? Growing? Asset-heavy? This dictates method selection.
+
+2. **Gather data:** Pull financials from 10-K, market data from Yahoo Finance, and comparable multiples from industry databases.
+
+3. **Calculate discount rate:** Use CAPM for cost of equity, synthetic rating for cost of debt, combine into WACC.
+
+4. **Project cash flows or select multiples:** For DCF, forecast 5-10 years with explicit assumptions. For relative valuation, select peer group carefully.
+
+5. **Calculate terminal value:** Use both perpetuity growth and exit multiple methods, verify implied growth is reasonable.
+
+6. **Triangulate:** Apply 2-3 methods, compare results, understand drivers of differences.
+
+7. **Sensitivity test:** Vary key assumptions (WACC, growth, multiples) to establish valuation range rather than point estimate.
+
+8. **Document assumptions:** Every input should have a source and rationale. This enables updating as conditions change.
+
+The goal is not false precision but informed judgment. A range of $45-55 per share based on explicit, well-reasoned assumptions is far more valuable than a confident "$50 exactly" that collapses under scrutiny.
+
+
+Update Fund Tracker notice
+In the Fund Tracker part of the tool, it would be good if the user gets notified when there is an update of the Fund holdings. When you check the fund holdings and there are updates on the holdings can you indicate this in the navigation bar on the Fund Tracker link with a small symbol and in the Fund Tracker tab mark the Fund that has been updated.
+This way the user can notice when there are updates on the holdings.
+
+ETF Tracker
+I would like to implement a ETF tracker that works in the same way as the Fund Tracker part. The main difference is that the data must be provided by a new agent that need to be implemented as well.
+Thestructure f the ETF Tracker should be the same:
+- List of all ETFs on the left with n item that summarises all at the top with holdings, Recent changes, New positions, Sold positions. The date the dta was extracted. An indication on recent changes just like in the Fund tracker.
+The same possibilities to add new ETFs or delete them, just like in the Fund Tracker, but for ETFs.
+Please make sure to analyse the structure and functionality of the Fund Tracker first so you know how to implement this in the same way.
+The agent that provides the data will have the following requirements:
+- The agent downloads the holdings from a website in csv or pdf format. The website will be provided. 
+- Via the configuration tab it should be possible to change the ETF URL from where the data is collected.
+- The agenmt must be able to open the URL and find the correct link to download the holdings from
+- the preferred format is CSV
+- the llm model used for the extraction must be configurable via the Configuration tab. this setting is for all ETFs
+- Agent description: 
+- The agent might need to use BeautifulSoup or Selenium to download the content
+- there should be a defined output format in JSON to server the relevant sources that need the data
+- if the data cannot be found or the agent runs into an error, this should be properly handled and the user informaed
+- the file with the downloaded data should be saved temporarily and all data must be extracted and saved in the database
+- it should be checked for new data on a regular basis, but at least daily
+- there should be a possibility for the user to trigger a check for new data on the given ETFs.
+
+
+

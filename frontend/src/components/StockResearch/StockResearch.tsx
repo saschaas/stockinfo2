@@ -109,12 +109,13 @@ export default function StockResearch() {
     }))
   }
 
-  // Handle batch jobs from Fund Tracker
+  // Handle batch jobs from Fund Tracker or ETF Tracker
   const location = useLocation()
   useEffect(() => {
-    // Check if navigated from Fund Tracker with batch jobs
-    if (location.state?.fromFundTracker && location.state?.batchJobs) {
+    // Check if navigated from Fund Tracker or ETF Tracker with batch jobs
+    if ((location.state?.fromFundTracker || location.state?.fromETFTracker) && location.state?.batchJobs) {
       const { batchJobs, errors } = location.state
+      const source = location.state?.fromETFTracker ? 'ETF Tracker' : 'Fund Tracker'
 
       // Add jobs to the research store
       if (batchJobs && batchJobs.length > 0) {
@@ -128,7 +129,7 @@ export default function StockResearch() {
             createdAt: new Date(),
           })
         })
-        console.log(`Started analysis for ${batchJobs.length} stocks from Fund Tracker:`, batchJobs.map((j: any) => j.ticker).join(', '))
+        console.log(`Started analysis for ${batchJobs.length} stocks from ${source}:`, batchJobs.map((j: any) => j.ticker).join(', '))
       }
 
       // Log errors for failed tickers

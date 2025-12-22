@@ -123,6 +123,86 @@ class FundHolding(Base):
     )
 
 
+class ETF(Base):
+    """ETF configuration for tracking holdings from provider websites."""
+
+    __tablename__ = "etfs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)  # Holdings page URL
+    agent_command: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # LLM extraction prompt
+    description: Mapped[str] = mapped_column(
+        Text, nullable=True
+    )  # Auto-populated from scrape
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="general"
+    )  # innovation, sector, broad_market, etc.
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_scrape_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_scrape_success: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    last_scrape_error: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    holdings: Mapped[list["ETFHolding"]] = relationship(
+        "ETFHolding", back_populates="etf"
+    )
+
+
+class ETFHolding(Base):
+    """ETF holdings extracted from provider websites."""
+
+    __tablename__ = "etf_holdings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    etf_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("etfs.id"), nullable=False, index=True
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    company_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    cusip: Mapped[str] = mapped_column(String(20), nullable=True)
+    holding_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    shares: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    market_value: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )  # Value in USD
+    weight_pct: Mapped[Decimal] = mapped_column(
+        Numeric(7, 4), nullable=True
+    )  # % of portfolio
+    shares_change: Mapped[int] = mapped_column(
+        BigInteger, nullable=True
+    )  # Change from previous date
+    weight_change: Mapped[Decimal] = mapped_column(
+        Numeric(7, 4), nullable=True
+    )  # Weight change from previous
+    change_type: Mapped[str] = mapped_column(
+        String(20), nullable=True
+    )  # new, increased, decreased, sold
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    etf: Mapped["ETF"] = relationship("ETF", back_populates="holdings")
+
+    __table_args__ = (
+        Index("idx_etf_holding_etf_date", "etf_id", "holding_date"),
+        Index("idx_etf_holding_ticker_date", "ticker", "holding_date"),
+    )
+
+
 class MarketSentiment(Base):
     """Daily market sentiment analysis."""
 
