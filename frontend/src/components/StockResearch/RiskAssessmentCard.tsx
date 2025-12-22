@@ -70,9 +70,9 @@ export default function RiskAssessmentCard({ data }: RiskAssessmentCardProps) {
                 >
                   {data.risk_level.charAt(0).toUpperCase() + data.risk_level.slice(1)} Risk
                 </span>
-                {/* Risk Score */}
+                {/* Decision Score (composite score that drives the investment decision) */}
                 <span className="text-sm text-gray-600">
-                  Score: <span className="font-bold" style={{ color: riskColor.text }}>{safeToFixed(data.risk_score, 0)}</span>/100
+                  Decision Score: <span className="font-bold" style={{ color: decisionColor.text }}>{safeToFixed(data.decision_composite_score, 0)}</span>/100
                 </span>
               </div>
             </div>

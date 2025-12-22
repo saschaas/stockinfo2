@@ -453,10 +453,34 @@ class ValuationEngine:
         all_lows = []
         all_highs = []
 
+        # Sanity check: If a method produces a value > 5x current price, reduce its weight
+        # This prevents extreme DCF valuations from dominating the result
+        MAX_REASONABLE_MULTIPLE = 5.0
+        current_price = result.current_price
+
         for mr in result.method_results:
             if mr.fair_value > 0 and mr.confidence > 30:
-                # Weight by both assigned weight and confidence
+                # Check for extreme valuations
                 effective_weight = mr.weight * (mr.confidence / 100)
+
+                if current_price > 0:
+                    value_multiple = mr.fair_value / current_price
+                    if value_multiple > MAX_REASONABLE_MULTIPLE:
+                        # Reduce weight for extreme valuations
+                        weight_penalty = min(0.8, (value_multiple - MAX_REASONABLE_MULTIPLE) / 10)
+                        effective_weight *= (1 - weight_penalty)
+                        result.data_warnings.append(
+                            f"{mr.method.value}: Fair value {value_multiple:.1f}x current price - weight reduced"
+                        )
+                        logger.warning(
+                            "Extreme valuation detected",
+                            method=mr.method.value,
+                            fair_value=mr.fair_value,
+                            current_price=current_price,
+                            multiple=value_multiple,
+                            weight_reduced_by=f"{weight_penalty:.0%}",
+                        )
+
                 weighted_sum += mr.fair_value * effective_weight
                 total_weight += effective_weight
 

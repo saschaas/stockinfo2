@@ -518,9 +518,10 @@ class RiskAssessmentAgent:
         Calculate risk/reward metrics integrating both technical levels and price targets.
 
         Uses:
-        - Technical support/resistance for risk (stop loss) levels
-        - Price targets from growth analysis for reward (target) levels
-        - Combines both for a comprehensive risk/reward assessment
+        - Technical support/resistance for reference levels
+        - ATR for stop loss calculation (2x ATR below support)
+        - Growth analysis or resistance for target price
+        - Risk/reward calculated from actual entry, stop, target levels
         """
         rr = RiskRewardAnalysis()
         rr.current_price = current_price
@@ -544,37 +545,68 @@ class RiskAssessmentAgent:
             if resistance_levels:
                 rr.nearest_resistance = resistance_levels[0]
 
-        # Calculate risk distance (to support/stop)
-        if current_price > 0 and rr.nearest_support > 0:
-            rr.risk_distance_pct = ((current_price - rr.nearest_support) / current_price) * 100
-
-        # Calculate reward distance (to resistance)
-        if current_price > 0 and rr.nearest_resistance > 0:
-            rr.reward_distance_pct = ((rr.nearest_resistance - current_price) / current_price) * 100
-
-        # Calculate risk/reward ratio
-        if rr.risk_distance_pct > 0:
-            rr.risk_reward_ratio = rr.reward_distance_pct / rr.risk_distance_pct
-        else:
-            rr.risk_reward_ratio = 0
-
-        rr.is_favorable = rr.risk_reward_ratio >= 2.0
-
-        # Calculate entry, stop, target
+        # Get ATR for stop loss calculation
         atr = self._safe_float(technical.get("atr", 0))
 
+        # Calculate entry, stop, target FIRST (these drive the actual R:R)
         # Suggested entry near support (within 2%)
         if rr.nearest_support > 0:
             rr.suggested_entry = rr.nearest_support * 1.01  # 1% above support
+        else:
+            rr.suggested_entry = current_price  # Fallback to current price
 
         # Stop loss at 2x ATR below support
         if rr.nearest_support > 0 and atr > 0:
             rr.suggested_stop = rr.nearest_support - (2 * atr)
         elif rr.nearest_support > 0:
             rr.suggested_stop = rr.nearest_support * 0.97  # 3% below support
+        else:
+            # Fallback: 5% below entry
+            rr.suggested_stop = rr.suggested_entry * 0.95
 
-        # Target: Use nearest resistance
-        rr.suggested_target = rr.nearest_resistance
+        # Target: Use growth analysis price target if available, otherwise resistance
+        if growth and growth.get("price_target_base"):
+            growth_target = self._safe_float(growth.get("price_target_base", 0))
+            if growth_target > current_price:
+                # Use growth target, but blend with resistance if target is very aggressive
+                if rr.nearest_resistance > 0 and growth_target > rr.nearest_resistance * 1.5:
+                    # Blend: 70% growth target, 30% resistance
+                    rr.suggested_target = growth_target * 0.7 + rr.nearest_resistance * 0.3
+                else:
+                    rr.suggested_target = growth_target
+            else:
+                rr.suggested_target = rr.nearest_resistance
+        else:
+            rr.suggested_target = rr.nearest_resistance
+
+        # If still no target, estimate based on ATR (3x ATR upside potential)
+        if rr.suggested_target <= 0:
+            if atr > 0:
+                rr.suggested_target = current_price + (3 * atr)
+            else:
+                rr.suggested_target = current_price * 1.05  # 5% upside fallback
+
+        # Calculate risk and reward distances based on ACTUAL trading levels
+        # Risk: from entry to stop (what you'd lose if stopped out)
+        if rr.suggested_entry > 0 and rr.suggested_stop > 0:
+            rr.risk_distance_pct = ((rr.suggested_entry - rr.suggested_stop) / rr.suggested_entry) * 100
+        else:
+            rr.risk_distance_pct = 0
+
+        # Reward: from entry to target (what you'd gain if target hit)
+        if rr.suggested_entry > 0 and rr.suggested_target > rr.suggested_entry:
+            rr.reward_distance_pct = ((rr.suggested_target - rr.suggested_entry) / rr.suggested_entry) * 100
+        else:
+            rr.reward_distance_pct = 0
+
+        # Calculate risk/reward ratio (Reward:Risk, e.g., 2.0 means 2:1 reward to risk)
+        if rr.risk_distance_pct > 0:
+            rr.risk_reward_ratio = rr.reward_distance_pct / rr.risk_distance_pct
+        else:
+            rr.risk_reward_ratio = 0
+
+        # Favorable if reward is at least 1.5x risk (more realistic threshold)
+        rr.is_favorable = rr.risk_reward_ratio >= 1.5
 
         return rr
 
@@ -588,9 +620,10 @@ class RiskAssessmentAgent:
         Generate investment decision based on a weighted composite of all analysis factors.
 
         This is the AUTHORITATIVE decision that consolidates:
-        - Risk Assessment Score (35% weight) - technical risk from market structure, momentum, volatility
-        - Growth Analysis Score (25% weight) - fundamental growth potential
-        - Technical Signal (25% weight) - technical indicator signals from Technical Analysis Agent
+        - Risk Assessment Score (30% weight) - technical risk from market structure, momentum, volatility
+        - Growth Analysis Score (20% weight) - fundamental growth potential
+        - Technical Signal (20% weight) - technical indicator signals from Technical Analysis Agent
+        - Valuation Score (15% weight) - intrinsic value and margin of safety
         - Risk/Reward Quality (15% weight) - entry point quality
 
         Decision thresholds (on 0-100 composite scale):
@@ -631,6 +664,52 @@ class RiskAssessmentAgent:
                     else:
                         technical_score = 50  # neutral/hold
 
+        # Valuation score based on margin of safety and valuation status
+        # Higher margin of safety = better buying opportunity
+        valuation_score = 50  # Default neutral
+        margin_of_safety = None
+        valuation_status = None
+        if growth:
+            margin_of_safety = self._safe_float(growth.get("margin_of_safety"), None)
+            valuation_status = growth.get("valuation_status")
+
+            if margin_of_safety is not None:
+                # Margin of safety scoring:
+                # >= 40%: Excellent (deeply undervalued) = 95
+                # 25-40%: Good (significantly undervalued) = 80
+                # 10-25%: Moderate (undervalued) = 65
+                # 0-10%: Slight (fair value) = 55
+                # -10-0%: Slightly overvalued = 40
+                # -25 to -10%: Overvalued = 25
+                # < -25%: Significantly overvalued = 10
+                if margin_of_safety >= 40:
+                    valuation_score = 95
+                elif margin_of_safety >= 25:
+                    valuation_score = 80
+                elif margin_of_safety >= 10:
+                    valuation_score = 65
+                elif margin_of_safety >= 0:
+                    valuation_score = 55
+                elif margin_of_safety >= -10:
+                    valuation_score = 40
+                elif margin_of_safety >= -25:
+                    valuation_score = 25
+                else:
+                    valuation_score = 10
+            elif valuation_status:
+                # Fallback to valuation_status if margin_of_safety not available
+                status_lower = valuation_status.lower()
+                if "deeply_undervalued" in status_lower or "significantly_undervalued" in status_lower:
+                    valuation_score = 85
+                elif "undervalued" in status_lower:
+                    valuation_score = 70
+                elif "fair" in status_lower:
+                    valuation_score = 50
+                elif "overvalued" in status_lower and "significantly" in status_lower:
+                    valuation_score = 20
+                elif "overvalued" in status_lower:
+                    valuation_score = 35
+
         # Risk/Reward quality score
         rr_ratio = result.risk_reward.risk_reward_ratio
         rr_favorable = result.risk_reward.is_favorable
@@ -648,11 +727,13 @@ class RiskAssessmentAgent:
             rr_score = 15
 
         # Calculate weighted composite score
+        # Weights: Risk 30%, Growth 20%, Technical 20%, Valuation 15%, R:R 15% = 100%
         composite_score = (
-            risk_score * 0.35 +      # Risk assessment weight
-            growth_score * 0.25 +     # Growth analysis weight
-            technical_score * 0.25 +  # Technical signal weight
-            rr_score * 0.15           # Risk/Reward weight
+            risk_score * 0.30 +        # Risk assessment weight
+            growth_score * 0.20 +      # Growth analysis weight
+            technical_score * 0.20 +   # Technical signal weight
+            valuation_score * 0.15 +   # Valuation score weight
+            rr_score * 0.15            # Risk/Reward weight
         )
 
         # Apply upside potential adjustment
@@ -689,6 +770,9 @@ class RiskAssessmentAgent:
             "risk_score_component": risk_score,
             "growth_score_component": growth_score,
             "technical_score_component": technical_score,
+            "valuation_score_component": valuation_score,
+            "margin_of_safety": margin_of_safety,
+            "valuation_status": valuation_status,
             "rr_score_component": rr_score,
             "upside_potential": upside_potential,
             "upside_adjustment": upside_adjustment,
@@ -721,9 +805,33 @@ class RiskAssessmentAgent:
             decision = "SELL"
             base_confidence = 65 + (30 - final_composite) * 0.5  # 65-80%
 
+        # SAFEGUARD: Cap BUY to HOLD if risk/reward is unfavorable
+        # Even strong fundamentals/technicals shouldn't overcome poor entry points
+        if decision == "BUY" and rr_ratio < 0.75:
+            # Very unfavorable R:R (less than 0.75:1) - cap at HOLD
+            decision = "HOLD"
+            base_confidence = min(base_confidence, 60)
+            entry_quality = "fair"
+            logger.info(
+                "Decision capped to HOLD due to unfavorable R:R",
+                rr_ratio=round(rr_ratio, 2),
+                original_decision="BUY"
+            )
+        elif decision == "BUY" and rr_ratio < 1.0:
+            # Marginal R:R (0.75-1.0) - reduce confidence
+            base_confidence = base_confidence * 0.85
+            if entry_quality == "excellent":
+                entry_quality = "good"
+            elif entry_quality == "good":
+                entry_quality = "fair"
+            logger.info(
+                "Confidence reduced due to marginal R:R",
+                rr_ratio=round(rr_ratio, 2)
+            )
+
         # Boost confidence if factors are aligned (agreement increases confidence)
-        scores = [risk_score, growth_score, technical_score, rr_score]
-        score_std = (sum((s - sum(scores)/4)**2 for s in scores) / 4) ** 0.5
+        scores = [risk_score, growth_score, technical_score, valuation_score, rr_score]
+        score_std = (sum((s - sum(scores)/len(scores))**2 for s in scores) / len(scores)) ** 0.5
         if score_std < 15:  # Low variance = high agreement
             base_confidence += 5
         elif score_std > 25:  # High variance = low agreement
@@ -738,6 +846,8 @@ class RiskAssessmentAgent:
             risk_component=round(risk_score, 1),
             growth_component=round(growth_score, 1),
             technical_component=round(technical_score, 1),
+            valuation_component=round(valuation_score, 1),
+            margin_of_safety=round(margin_of_safety, 1) if margin_of_safety else None,
             rr_component=round(rr_score, 1),
             upside_potential=round(upside_potential, 1),
             upside_adjustment=upside_adjustment,
@@ -800,6 +910,23 @@ class RiskAssessmentAgent:
                 elif method == "analyst":
                     factors.append(f"Analyst consensus target: ${price_target_base:.2f}")
 
+            # Valuation factors (intrinsic value and margin of safety)
+            margin_of_safety = self._safe_float(growth.get("margin_of_safety"), None)
+            valuation_status = growth.get("valuation_status")
+            intrinsic_value = self._safe_float(growth.get("intrinsic_value"), None)
+
+            if margin_of_safety is not None:
+                if margin_of_safety >= 40:
+                    factors.append(f"Deeply undervalued with {margin_of_safety:.1f}% margin of safety")
+                elif margin_of_safety >= 25:
+                    factors.append(f"Significantly undervalued with {margin_of_safety:.1f}% margin of safety")
+                elif margin_of_safety >= 10:
+                    factors.append(f"Undervalued with {margin_of_safety:.1f}% margin of safety")
+            elif valuation_status:
+                status_lower = valuation_status.lower()
+                if "undervalued" in status_lower:
+                    factors.append(f"Stock appears {valuation_status.replace('_', ' ')}")
+
             strengths = growth.get("key_strengths", [])
             factors.extend(strengths[:2])  # Add top 2 strengths
 
@@ -855,6 +982,22 @@ class RiskAssessmentAgent:
                 factors.append(f"Stock appears overvalued ({abs(upside):.1f}% downside to target)")
             elif upside < 5:
                 factors.append("Limited upside potential (<5%)")
+
+            # Valuation concerns (margin of safety and valuation status)
+            margin_of_safety = self._safe_float(growth.get("margin_of_safety"), None)
+            valuation_status = growth.get("valuation_status")
+
+            if margin_of_safety is not None:
+                if margin_of_safety < -25:
+                    factors.append(f"Significantly overvalued ({abs(margin_of_safety):.1f}% above intrinsic value)")
+                elif margin_of_safety < -10:
+                    factors.append(f"Overvalued ({abs(margin_of_safety):.1f}% above intrinsic value)")
+                elif margin_of_safety < 0:
+                    factors.append(f"Slightly overvalued ({abs(margin_of_safety):.1f}% above intrinsic value)")
+            elif valuation_status:
+                status_lower = valuation_status.lower()
+                if "overvalued" in status_lower:
+                    factors.append(f"Stock appears {valuation_status.replace('_', ' ')}")
 
             risks = growth.get("key_risks", [])
             factors.extend(risks[:2])  # Add top 2 risks

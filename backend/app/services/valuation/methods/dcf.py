@@ -25,6 +25,12 @@ class DCFValuation:
     DEFAULT_TERMINAL_GROWTH = 0.025  # 2.5% perpetual growth (close to GDP growth)
     MAX_TERMINAL_GROWTH = 0.04  # Cap terminal growth at 4%
 
+    # Minimum discount rate floors to prevent unrealistic valuations
+    # These are conservative minimums - actual rates should be higher for riskier companies
+    MIN_WACC = 0.08  # 8% minimum WACC - any company has this minimum cost of capital
+    MIN_COST_OF_EQUITY = 0.10  # 10% minimum cost of equity
+    MIN_SPREAD = 0.04  # 4% minimum spread between discount rate and terminal growth
+
     def __init__(
         self,
         projection_years: int = DEFAULT_PROJECTION_YEARS,
@@ -69,6 +75,7 @@ class DCFValuation:
         """
         terminal_growth = terminal_growth or self.terminal_growth
         warnings = []
+        original_wacc = wacc
 
         # Validate inputs
         if current_fcf <= 0:
@@ -77,11 +84,22 @@ class DCFValuation:
                 "FCFF must be positive for DCF valuation",
             )
 
-        if wacc <= terminal_growth:
+        # Apply minimum WACC floor
+        # This prevents unrealistic valuations from low beta/high debt companies
+        if wacc < self.MIN_WACC:
             warnings.append(
-                f"WACC ({wacc:.2%}) adjusted to be above terminal growth ({terminal_growth:.2%})"
+                f"WACC ({wacc:.2%}) adjusted to minimum floor ({self.MIN_WACC:.2%})"
             )
-            wacc = terminal_growth + 0.03  # Force 3% spread
+            wacc = self.MIN_WACC
+
+        # Ensure minimum spread between WACC and terminal growth
+        # Small spreads create extremely high terminal values
+        min_required_wacc = terminal_growth + self.MIN_SPREAD
+        if wacc < min_required_wacc:
+            warnings.append(
+                f"WACC ({wacc:.2%}) adjusted to maintain {self.MIN_SPREAD:.0%} spread above terminal growth"
+            )
+            wacc = min_required_wacc
 
         if shares_outstanding <= 0:
             return self._create_error_result(
@@ -199,11 +217,20 @@ class DCFValuation:
                 "FCFE must be positive for DCF valuation",
             )
 
-        if cost_of_equity <= terminal_growth:
+        # Apply minimum cost of equity floor
+        if cost_of_equity < self.MIN_COST_OF_EQUITY:
             warnings.append(
-                f"Cost of equity ({cost_of_equity:.2%}) adjusted to be above terminal growth"
+                f"Cost of equity ({cost_of_equity:.2%}) adjusted to minimum floor ({self.MIN_COST_OF_EQUITY:.2%})"
             )
-            cost_of_equity = terminal_growth + 0.04
+            cost_of_equity = self.MIN_COST_OF_EQUITY
+
+        # Ensure minimum spread between cost of equity and terminal growth
+        min_required_coe = terminal_growth + self.MIN_SPREAD
+        if cost_of_equity < min_required_coe:
+            warnings.append(
+                f"Cost of equity ({cost_of_equity:.2%}) adjusted to maintain {self.MIN_SPREAD:.0%} spread above terminal growth"
+            )
+            cost_of_equity = min_required_coe
 
         if shares_outstanding <= 0:
             return self._create_error_result(

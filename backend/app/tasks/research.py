@@ -499,6 +499,13 @@ def research_stock(
                         "key_strengths": result.get("key_strengths", []),
                         "key_risks": result.get("key_risks", []),
                         "data_completeness_score": result.get("data_completeness_score"),
+                        # Valuation data for decision-making
+                        "price_target_base": result.get("price_target_base"),
+                        "price_target_method": result.get("price_target_method"),
+                        # Valuation Analysis results (if available)
+                        "intrinsic_value": result.get("valuation_analysis", {}).get("intrinsic_value") if result.get("valuation_analysis") else None,
+                        "margin_of_safety": result.get("valuation_analysis", {}).get("margin_of_safety") if result.get("valuation_analysis") else None,
+                        "valuation_status": result.get("valuation_analysis", {}).get("valuation_status") if result.get("valuation_analysis") else None,
                     }
 
                 # Get technical analysis data (already serialized format)
