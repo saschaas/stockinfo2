@@ -680,3 +680,36 @@ As a first example you can add the following ETF:
 
 This is only a frist example, there will be further URLs in the future added by the user.
 
+
+Watchlist
+I would like to add a new tab to the Tool called Watchlist. In this section, I want to monitor all the stocks I have on my watchlist. The user interface should display all the stocks I'm monitoring, along with their current price, their current percentage change for the day (compared to the opening price at the beginning of the day), and the ability to add new stocks. When adding a stock, the Stock ID (the symbol) should be sufficient. The overview should also include an easy way to remove a stock from the watchlist.
+
+The current price should be retrieved every time the watchlist loads. Clicking on a stock in my watchlist should allow me to trigger stock research, similar to the ETF Tracker and Fun Tracker tabs.
+
+The latest news for each stock should be retrieved every time the watchlist loads. The existing APIs can be used for this. Only the most recent news for each stock should be displayed. An indicator should show the number of news items, and clicking on the indicator should display the relevant news in a small window.
+
+The user interface should match the existing format and be modern and uncluttered.
+
+Please ensure you fully understand the functionality and Lori of the tool before implementing this new feature. This feature should be integrated into the existing tool as seamlessly as possible and make effective use of the existing APIs.
+
+After implementation, you can populate the watchlist with the following two stocks to test the functionality: WULF and ROKU.
+
+Database
+I would like to add a database tab to the tool. This should be used to see the current size of the database, the number of tables and the size for each table and number of rows.
+#Export functionality:
+There should be the possibility to export a dump of the database of all talbes that are relevant to import them on a different PC and continue seamlessly. The export should be in a file and be saved locally. 
+After the export an overview of the exported tables and sizes should be displayed.
+#Import functionality:
+For this an import function is need and needs to be implemented also. Here the user can select a file to be imported from the local file system.
+#Design:
+Make sure to stick to the overall design of the tool when designing the UI. 
+#Test:
+Make sure to test the new functionality.
+#Implementation
+Please ensure you fully understand the functionality and Lori of the tool before implementing this new feature. This feature should be integrated into the existing tool as seamlessly as possible and make use of existing functionality where needed.
+Please make sure to understand which tables are needed to continue with a given database on a different PC and which tables are not needed.
+
+It looks very good, but there are some issues I think:
+1. The funds and fund_holdings table show 0 rows, which is not possible and the size indicates existing rows.
+2. I don#t think we need to export the Research history (listed in the Export data part. And I don't think it makes sense to export the scraped_websites table as this needs to be updated daily anyway.
+

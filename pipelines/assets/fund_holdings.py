@@ -71,8 +71,8 @@ async def fetch_fund_holdings(fund: dict[str, Any]) -> dict[str, Any]:
 
 
 async def save_holdings_to_db(fund_data: dict[str, Any]) -> int:
-    """Save fund holdings to database."""
-    from sqlalchemy import select, and_, func
+    """Save fund holdings to database. Replaces all existing holdings for the fund."""
+    from sqlalchemy import select, delete
     from backend.app.db.session import async_session_factory
     from backend.app.db.models import Fund, FundHolding
 
@@ -106,28 +106,12 @@ async def save_holdings_to_db(fund_data: dict[str, Any]) -> int:
         if isinstance(filing_date, str):
             filing_date = date.fromisoformat(filing_date)
 
-        # Check if we already have ALL holdings for this filing by counting
-        count_stmt = select(func.count(FundHolding.id)).where(
-            and_(
-                FundHolding.fund_id == fund.id,
-                FundHolding.filing_date == filing_date
-            )
-        )
-        result = await session.execute(count_stmt)
-        existing_count = result.scalar()
+        # Delete ALL existing holdings for this fund (only keep current)
+        delete_stmt = delete(FundHolding).where(FundHolding.fund_id == fund.id)
+        await session.execute(delete_stmt)
+        logger.info("Deleted old holdings", fund=fund.name)
 
-        # If we have holdings and the count matches, skip
-        expected_count = len([h for h in fund_data["holdings"] if h.get("shares", 0) != 0])
-        if existing_count > 0 and existing_count >= expected_count:
-            logger.info(
-                "Holdings already exist",
-                fund=fund.name,
-                date=filing_date,
-                count=existing_count
-            )
-            return 0
-
-        # Add holdings with duplicate checking
+        # Add new holdings
         count = 0
         for holding in fund_data["holdings"]:
             # Skip sold positions (shares = 0)
@@ -135,19 +119,6 @@ async def save_holdings_to_db(fund_data: dict[str, Any]) -> int:
                 continue
 
             ticker = holding.get("ticker") or holding.get("cusip", "")[:10]
-
-            # Check if this specific holding already exists
-            check_stmt = select(FundHolding).where(
-                and_(
-                    FundHolding.fund_id == fund.id,
-                    FundHolding.ticker == ticker,
-                    FundHolding.filing_date == filing_date
-                )
-            )
-            existing_result = await session.execute(check_stmt)
-            if existing_result.scalar_one_or_none():
-                # This specific holding already exists, skip it
-                continue
 
             fund_holding = FundHolding(
                 fund_id=fund.id,

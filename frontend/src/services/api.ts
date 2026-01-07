@@ -839,4 +839,67 @@ export async function fetchWatchlistNews(itemId: number, limit: number = 10): Pr
   return data
 }
 
+// Database management types
+export interface TableStats {
+  name: string
+  row_count: number
+  size_bytes: number
+  size_formatted: string
+  category: 'user_data' | 'cache' | 'system'
+}
+
+export interface DatabaseStats {
+  total_size_bytes: number
+  total_size_formatted: string
+  table_count: number
+  total_rows: number
+  tables: TableStats[]
+}
+
+export interface ExportResponse {
+  filename: string
+  size_bytes: number
+  size_formatted: string
+  tables_exported: string[]
+  row_counts: Record<string, number>
+  exported_at: string
+}
+
+export interface ImportResponse {
+  success: boolean
+  tables_imported: string[]
+  row_counts: Record<string, number>
+  errors: string[]
+  warnings: string[]
+}
+
+// Database management endpoints
+export async function fetchDatabaseStats(): Promise<DatabaseStats> {
+  const { data } = await api.get('/database/stats')
+  return data
+}
+
+export async function exportDatabase(): Promise<ExportResponse> {
+  const { data } = await api.post('/database/export')
+  return data
+}
+
+export async function downloadExport(filename: string): Promise<Blob> {
+  const { data } = await api.get(`/database/export/${filename}`, {
+    responseType: 'blob',
+  })
+  return data
+}
+
+export async function importDatabase(file: File): Promise<ImportResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/database/import', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+  return data
+}
+
 export default api

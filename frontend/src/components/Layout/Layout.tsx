@@ -52,6 +52,7 @@ export default function Layout() {
     { path: '/funds', label: 'Fund Tracker', icon: '💼', badge: hasUpdates ? updatedFundIds.size : 0 },
     { path: '/etfs', label: 'ETF Tracker', icon: '📈', badge: hasETFUpdates ? updatedETFIds.size : 0 },
     { path: '/config', label: 'Configuration', icon: '⚙️' },
+    { path: '/database', label: 'Database', icon: '🗄️' },
     { path: '/overview', label: 'Overview', icon: '🔗' },
   ]
 

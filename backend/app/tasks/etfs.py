@@ -28,7 +28,7 @@ def run_async(coro):
 
 async def save_etf_holdings_to_db(etf_id: int, holdings: list[dict], holding_date: date | None) -> int:
     """
-    Save ETF holdings to database, calculating changes from previous holdings.
+    Save ETF holdings to database. Replaces all existing holdings for the ETF.
 
     Args:
         etf_id: ETF database ID
@@ -38,7 +38,7 @@ async def save_etf_holdings_to_db(etf_id: int, holdings: list[dict], holding_dat
     Returns:
         Number of holdings saved
     """
-    from sqlalchemy import select, func, and_
+    from sqlalchemy import delete
     from backend.app.db.session import async_session_factory
     from backend.app.db.models import ETF, ETFHolding
 
@@ -49,48 +49,10 @@ async def save_etf_holdings_to_db(etf_id: int, holdings: list[dict], holding_dat
         holding_date = date.today()
 
     async with async_session_factory() as session:
-        # Check if we already have holdings for this date
-        existing_stmt = select(func.count(ETFHolding.id)).where(
-            and_(
-                ETFHolding.etf_id == etf_id,
-                ETFHolding.holding_date == holding_date
-            )
-        )
-        existing_result = await session.execute(existing_stmt)
-        existing_count = existing_result.scalar() or 0
-
-        if existing_count > 0:
-            logger.info(
-                "Holdings already exist for this date",
-                etf_id=etf_id,
-                holding_date=holding_date,
-                count=existing_count
-            )
-            return 0
-
-        # Get previous holdings for change calculation
-        prev_date_stmt = (
-            select(func.max(ETFHolding.holding_date))
-            .where(ETFHolding.etf_id == etf_id)
-            .where(ETFHolding.holding_date < holding_date)
-        )
-        prev_date_result = await session.execute(prev_date_stmt)
-        prev_date = prev_date_result.scalar()
-
-        previous_holdings: dict[str, ETFHolding] = {}
-        if prev_date:
-            prev_holdings_stmt = (
-                select(ETFHolding)
-                .where(ETFHolding.etf_id == etf_id)
-                .where(ETFHolding.holding_date == prev_date)
-            )
-            prev_result = await session.execute(prev_holdings_stmt)
-            for h in prev_result.scalars().all():
-                key = h.ticker.upper() if h.ticker else h.company_name
-                previous_holdings[key] = h
-
-        # Track which previous holdings are still present
-        current_tickers = set()
+        # Delete ALL existing holdings for this ETF (only keep current)
+        delete_stmt = delete(ETFHolding).where(ETFHolding.etf_id == etf_id)
+        await session.execute(delete_stmt)
+        logger.info("Deleted old holdings", etf_id=etf_id)
 
         saved_count = 0
         for holding in holdings:
@@ -100,33 +62,8 @@ async def save_etf_holdings_to_db(etf_id: int, holdings: list[dict], holding_dat
             if not ticker and not company_name:
                 continue
 
-            key = ticker or company_name
-            current_tickers.add(key)
-
-            # Calculate changes
             shares = holding.get("shares")
             weight_pct = holding.get("weight_pct")
-            shares_change = None
-            weight_change = None
-            change_type = None
-
-            prev = previous_holdings.get(key)
-            if prev:
-                # Existing position
-                if shares is not None and prev.shares is not None:
-                    shares_change = shares - prev.shares
-                    if shares_change > 0:
-                        change_type = "increased"
-                    elif shares_change < 0:
-                        change_type = "decreased"
-                    else:
-                        change_type = None  # unchanged
-
-                if weight_pct is not None and prev.weight_pct is not None:
-                    weight_change = float(weight_pct) - float(prev.weight_pct)
-            else:
-                # New position
-                change_type = "new"
 
             # Create holding record
             etf_holding = ETFHolding(
@@ -138,31 +75,12 @@ async def save_etf_holdings_to_db(etf_id: int, holdings: list[dict], holding_dat
                 shares=shares,
                 market_value=Decimal(str(holding.get("market_value", 0))) if holding.get("market_value") else None,
                 weight_pct=Decimal(str(weight_pct)) if weight_pct else None,
-                shares_change=shares_change,
-                weight_change=Decimal(str(weight_change)) if weight_change else None,
-                change_type=change_type,
+                shares_change=None,
+                weight_change=None,
+                change_type=None,
             )
             session.add(etf_holding)
             saved_count += 1
-
-        # Add "sold" entries for positions that are no longer present
-        for key, prev in previous_holdings.items():
-            if key not in current_tickers:
-                sold_holding = ETFHolding(
-                    etf_id=etf_id,
-                    ticker=prev.ticker,
-                    company_name=prev.company_name,
-                    cusip=prev.cusip,
-                    holding_date=holding_date,
-                    shares=0,
-                    market_value=Decimal("0"),
-                    weight_pct=Decimal("0"),
-                    shares_change=-prev.shares if prev.shares else None,
-                    weight_change=-prev.weight_pct if prev.weight_pct else None,
-                    change_type="sold",
-                )
-                session.add(sold_holding)
-                saved_count += 1
 
         # Update ETF last_scrape status
         etf = await session.get(ETF, etf_id)

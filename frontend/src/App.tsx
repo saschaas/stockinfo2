@@ -5,6 +5,7 @@ import Watchlist from './components/Watchlist/Watchlist'
 import FundTracker from './components/FundTracker/FundTracker'
 import ETFTracker from './components/ETFTracker/ETFTracker'
 import Configuration from './components/Configuration/Configuration'
+import Database from './components/Database/Database'
 import Overview from './components/Overview/Overview'
 import Layout from './components/Layout/Layout'
 
@@ -19,6 +20,7 @@ function App() {
           <Route path="funds" element={<FundTracker />} />
           <Route path="etfs" element={<ETFTracker />} />
           <Route path="config" element={<Configuration />} />
+          <Route path="database" element={<Database />} />
           <Route path="overview" element={<Overview />} />
         </Route>
       </Routes>
