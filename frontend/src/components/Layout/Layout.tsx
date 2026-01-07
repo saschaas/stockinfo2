@@ -5,12 +5,11 @@ import { useETFNotificationStore } from '../../stores/etfNotificationStore'
 
 export default function Layout() {
   const location = useLocation()
-  const { hasUpdates, updatedFundIds, checkForUpdates, markAsViewed } = useFundNotificationStore()
+  const { hasUpdates, updatedFundIds, checkForUpdates } = useFundNotificationStore()
   const {
     hasUpdates: hasETFUpdates,
     updatedETFIds,
     checkForUpdates: checkETFUpdates,
-    markAsViewed: markETFAsViewed
   } = useETFNotificationStore()
 
   // Check for fund updates on mount and periodically
@@ -24,13 +23,6 @@ export default function Layout() {
     return () => clearInterval(interval)
   }, [checkForUpdates])
 
-  // Mark as viewed when navigating to Fund Tracker
-  useEffect(() => {
-    if (location.pathname === '/funds') {
-      markAsViewed()
-    }
-  }, [location.pathname, markAsViewed])
-
   // Check for ETF updates on mount and periodically
   useEffect(() => {
     checkETFUpdates()
@@ -38,12 +30,8 @@ export default function Layout() {
     return () => clearInterval(interval)
   }, [checkETFUpdates])
 
-  // Mark ETF as viewed when navigating to ETF Tracker
-  useEffect(() => {
-    if (location.pathname === '/etfs') {
-      markETFAsViewed()
-    }
-  }, [location.pathname, markETFAsViewed])
+  // Note: Individual fund/ETF updates are cleared when clicked in the tracker components
+  // via clearFundUpdate() and clearETFUpdate() - we don't clear all on navigation
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
