@@ -50,6 +50,7 @@ export default function Configuration() {
     fund_recent_changes_items: 10,
     holdings_per_fund: 50,
     peers_in_comparison: 5,
+    watchlist_refresh_interval: 3,
   })
 
   const [marketScraping, setMarketScraping] = useState({
@@ -143,6 +144,7 @@ export default function Configuration() {
         fund_recent_changes_items: configData.settings.display_preferences.fund_recent_changes_items ?? 10,
         holdings_per_fund: configData.settings.display_preferences.holdings_per_fund ?? 50,
         peers_in_comparison: configData.settings.display_preferences.peers_in_comparison ?? 5,
+        watchlist_refresh_interval: configData.settings.display_preferences.watchlist_refresh_interval ?? 3,
       })
 
       setMarketScraping({
@@ -1027,6 +1029,34 @@ export default function Configuration() {
               <span>3</span>
               <span>10</span>
             </div>
+          </div>
+
+          {/* Watchlist Refresh Interval */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Watchlist Price Refresh: {displayPreferences.watchlist_refresh_interval} min
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={displayPreferences.watchlist_refresh_interval}
+              onChange={(e) =>
+                setDisplayPreferences({
+                  ...displayPreferences,
+                  watchlist_refresh_interval: parseInt(e.target.value),
+                })
+              }
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1 min</span>
+              <span>10 min</span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              How often to auto-refresh stock prices in the Watchlist (when market is open)
+            </p>
           </div>
         </div>
       </div>

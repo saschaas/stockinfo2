@@ -203,6 +203,20 @@ class ETFHolding(Base):
     )
 
 
+class WatchlistItem(Base):
+    """User watchlist items for stock monitoring."""
+
+    __tablename__ = "watchlist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False, unique=True, index=True)
+    company_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class MarketSentiment(Base):
     """Daily market sentiment analysis."""
 

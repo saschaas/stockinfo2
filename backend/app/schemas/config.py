@@ -537,6 +537,7 @@ class DisplayPreferences(BaseModel):
     fund_recent_changes_items: Optional[int] = Field(10, ge=5, le=50, description="Number of fund recent changes")
     holdings_per_fund: Optional[int] = Field(50, ge=10, le=100, description="Holdings per fund")
     peers_in_comparison: Optional[int] = Field(5, ge=3, le=10, description="Number of peers in comparison")
+    watchlist_refresh_interval: Optional[int] = Field(3, ge=1, le=10, description="Watchlist price refresh interval in minutes")
 
 
 class WebsiteInfo(BaseModel):

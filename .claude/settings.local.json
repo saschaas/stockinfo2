@@ -39,7 +39,8 @@
       "Bash(git commit:*)",
       "Bash(for:*)",
       "Bash(do echo \"=== Check $i ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(dir \"D:\\\\Docs\\\\Coding\\\\stockinfo2\\\\backend\\\\app\\\\db\\\\migrations\" /B)"
     ],
     "deny": [],
     "ask": []

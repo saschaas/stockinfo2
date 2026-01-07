@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { WatchlistResponse, WatchlistItem, WatchlistNewsResponse } from '../types'
 
 // Construct API URL based on current page URL (works with both normal and host networking)
 // This allows API calls to work when accessing via IP address or domain
@@ -606,6 +607,7 @@ export interface DisplayPreferences {
   fund_recent_changes_items?: number
   holdings_per_fund?: number
   peers_in_comparison?: number
+  watchlist_refresh_interval?: number  // Refresh interval in minutes (default: 3)
 }
 
 export interface WebsiteInfo {
@@ -814,6 +816,26 @@ export async function refreshCategoryData(
   category: string
 ): Promise<{ status: string; message: string; jobs: Array<{ source_key: string; job_id: string }> }> {
   const { data } = await api.post(`/config/refresh-category/${category}`)
+  return data
+}
+
+// Watchlist endpoints
+export async function fetchWatchlist(): Promise<WatchlistResponse> {
+  const { data } = await api.get('/watchlist/')
+  return data
+}
+
+export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
+  const { data } = await api.post('/watchlist/', { ticker })
+  return data
+}
+
+export async function removeFromWatchlist(itemId: number): Promise<void> {
+  await api.delete(`/watchlist/${itemId}`)
+}
+
+export async function fetchWatchlistNews(itemId: number, limit: number = 10): Promise<WatchlistNewsResponse> {
+  const { data } = await api.get(`/watchlist/${itemId}/news`, { params: { limit } })
   return data
 }
 

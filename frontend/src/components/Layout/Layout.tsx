@@ -48,6 +48,7 @@ export default function Layout() {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
     { path: '/research', label: 'Stock Research', icon: '🔍' },
+    { path: '/watchlist', label: 'Watchlist', icon: '👁️' },
     { path: '/funds', label: 'Fund Tracker', icon: '💼', badge: hasUpdates ? updatedFundIds.size : 0 },
     { path: '/etfs', label: 'ETF Tracker', icon: '📈', badge: hasETFUpdates ? updatedETFIds.size : 0 },
     { path: '/config', label: 'Configuration', icon: '⚙️' },

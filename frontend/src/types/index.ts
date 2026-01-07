@@ -156,3 +156,37 @@ export type WSMessage =
   | WSCompleteMessage
   | WSErrorMessage
   | WSNotificationMessage
+
+// Watchlist types
+export interface WatchlistItem {
+  id: number
+  ticker: string
+  company_name?: string
+  added_at: string
+  current_price?: number
+  previous_close?: number
+  change_amount?: number
+  change_pct?: number
+  news_count: number
+}
+
+export interface WatchlistResponse {
+  total: number
+  items: WatchlistItem[]
+}
+
+export interface WatchlistNewsItem {
+  title: string
+  url?: string
+  source?: string
+  published_at?: string
+  summary?: string
+  sentiment_score?: number
+  sentiment_label?: string
+}
+
+export interface WatchlistNewsResponse {
+  ticker: string
+  news: WatchlistNewsItem[]
+  total: number
+}

@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.app.api.routes import market, stocks, funds, etfs, reports, websocket, health, config, websites
+from backend.app.api.routes import market, stocks, funds, etfs, reports, websocket, health, config, websites, watchlist
 from backend.app.config import get_settings
 from backend.app.core.exceptions import StockResearchException
 from backend.app.db.session import close_db, init_db
@@ -203,6 +203,7 @@ app.include_router(etfs.router, prefix="/api/v1/etfs", tags=["ETFs"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 app.include_router(websocket.router, prefix="/api/v1/ws", tags=["WebSocket"])
 app.include_router(websites.router, prefix="/api/v1/websites", tags=["Websites"])
+app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["Watchlist"])
 
 
 def run() -> None:
