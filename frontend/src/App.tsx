@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Dashboard from './components/Dashboard/Dashboard'
 import StockResearch from './components/StockResearch/StockResearch'
 import Watchlist from './components/Watchlist/Watchlist'
+import WatchlistStockDetails from './components/Watchlist/WatchlistStockDetails'
 import FundTracker from './components/FundTracker/FundTracker'
 import ETFTracker from './components/ETFTracker/ETFTracker'
 import Configuration from './components/Configuration/Configuration'
@@ -17,6 +18,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="research" element={<StockResearch />} />
           <Route path="watchlist" element={<Watchlist />} />
+          <Route path="watchlist/:ticker" element={<WatchlistStockDetails />} />
           <Route path="funds" element={<FundTracker />} />
           <Route path="etfs" element={<ETFTracker />} />
           <Route path="config" element={<Configuration />} />

@@ -216,6 +216,86 @@ class WatchlistItem(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Momentum indicators (calculated on each price update)
+    has_golden_cross: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    is_bullish_trend: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    sma_20: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    sma_50: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    sma_200: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    last_momentum_update: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    lines: Mapped[list["WatchlistLine"]] = relationship(
+        "WatchlistLine", back_populates="watchlist_item", cascade="all, delete-orphan"
+    )
+
+
+class WatchlistLine(Base):
+    """Custom lines (trend lines and alerts) for watchlist stocks."""
+
+    __tablename__ = "watchlist_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    watchlist_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("watchlist_items.id"), nullable=False, index=True
+    )
+    line_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "trend" or "alert"
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    price_level: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    color: Mapped[str] = mapped_column(String(20), nullable=True, default="#8b5cf6")  # Hex color
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    watchlist_item: Mapped["WatchlistItem"] = relationship(
+        "WatchlistItem", back_populates="lines"
+    )
+    triggered_alerts: Mapped[list["TriggeredAlert"]] = relationship(
+        "TriggeredAlert", back_populates="line", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("idx_watchlist_line_item", "watchlist_item_id"),
+    )
+
+
+class TriggeredAlert(Base):
+    """Record of triggered price alerts."""
+
+    __tablename__ = "triggered_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    line_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("watchlist_lines.id"), nullable=False, index=True
+    )
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    triggered_price: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    direction: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "crossed_up" or "crossed_down"
+    notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Relationships
+    line: Mapped["WatchlistLine"] = relationship(
+        "WatchlistLine", back_populates="triggered_alerts"
+    )
+
+    __table_args__ = (
+        Index("idx_triggered_alert_line_date", "line_id", "triggered_at"),
+    )
+
 
 class MarketSentiment(Base):
     """Daily market sentiment analysis."""

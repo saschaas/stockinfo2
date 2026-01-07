@@ -168,6 +168,14 @@ export interface WatchlistItem {
   change_amount?: number
   change_pct?: number
   news_count: number
+  // Momentum indicators
+  has_golden_cross?: boolean
+  is_bullish_trend?: boolean
+  sma_20?: number
+  sma_50?: number
+  sma_200?: number
+  // Alert status
+  has_triggered_alert?: boolean
 }
 
 export interface WatchlistResponse {
@@ -189,4 +197,109 @@ export interface WatchlistNewsResponse {
   ticker: string
   news: WatchlistNewsItem[]
   total: number
+}
+
+// Watchlist Custom Lines types
+export interface WatchlistLineCreate {
+  line_type: 'trend' | 'alert'
+  name: string
+  price_level: number
+  color?: string
+}
+
+export interface WatchlistLineUpdate {
+  name?: string
+  price_level?: number
+  color?: string
+  is_active?: boolean
+}
+
+export interface WatchlistLineResponse {
+  id: number
+  watchlist_item_id: number
+  line_type: string
+  name: string
+  price_level: number
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Technical Analysis Summary types
+export interface TechnicalSummaryResponse {
+  ticker: string
+  current_price: number | null
+  // SMA Trends
+  sma_20: number | null
+  sma_50: number | null
+  sma_200: number | null
+  price_above_sma_20: boolean
+  price_above_sma_50: boolean
+  price_above_sma_200: boolean
+  sma_20_direction: string
+  sma_50_direction: string
+  // MACD
+  macd: number | null
+  macd_signal: number | null
+  macd_histogram: number | null
+  macd_status: string
+  histogram_direction: string
+  // Golden cross status
+  has_golden_cross: boolean
+  has_death_cross: boolean
+}
+
+// Chart Data types
+export interface ChartDataResponse {
+  ticker: string
+  company_name?: string
+  dates: string[]
+  ohlcv: {
+    open: number[]
+    high: number[]
+    low: number[]
+    close: number[]
+    volume: number[]
+  }
+  moving_averages: {
+    sma_20: (number | null)[]
+    sma_50: (number | null)[]
+    sma_200: (number | null)[]
+  }
+  support_levels: number[]
+  resistance_levels: number[]
+  custom_lines: WatchlistLineResponse[]
+  entry_level?: number
+  stop_loss?: number
+  target_price?: number
+}
+
+// Alert types
+export interface TriggeredAlertResponse {
+  id: number
+  line_id: number
+  line_name: string
+  ticker: string
+  price_level: number
+  triggered_price: number
+  direction: string
+  triggered_at: string
+  notified: boolean
+  dismissed: boolean
+}
+
+export interface TriggeredAlertsResponse {
+  alerts: TriggeredAlertResponse[]
+  total: number
+}
+
+// Stock Details Response
+export interface WatchlistStockDetailsResponse {
+  item: WatchlistItem
+  technical_summary: TechnicalSummaryResponse
+  chart_data: ChartDataResponse
+  custom_lines: WatchlistLineResponse[]
+  triggered_alerts_today: TriggeredAlertResponse[]
+  news: WatchlistNewsItem[]
 }

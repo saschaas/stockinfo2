@@ -1,5 +1,16 @@
 import axios from 'axios'
-import type { WatchlistResponse, WatchlistItem, WatchlistNewsResponse } from '../types'
+import type {
+  WatchlistResponse,
+  WatchlistItem,
+  WatchlistNewsResponse,
+  WatchlistStockDetailsResponse,
+  WatchlistLineCreate,
+  WatchlistLineUpdate,
+  WatchlistLineResponse,
+  TechnicalSummaryResponse,
+  ChartDataResponse,
+  TriggeredAlertsResponse,
+} from '../types'
 
 // Construct API URL based on current page URL (works with both normal and host networking)
 // This allows API calls to work when accessing via IP address or domain
@@ -837,6 +848,56 @@ export async function removeFromWatchlist(itemId: number): Promise<void> {
 export async function fetchWatchlistNews(itemId: number, limit: number = 10): Promise<WatchlistNewsResponse> {
   const { data } = await api.get(`/watchlist/${itemId}/news`, { params: { limit } })
   return data
+}
+
+// Watchlist Stock Details endpoints
+export async function fetchWatchlistStockDetails(itemId: number): Promise<WatchlistStockDetailsResponse> {
+  const { data } = await api.get(`/watchlist/${itemId}/details`)
+  return data
+}
+
+export async function fetchWatchlistChartData(itemId: number, period: string = '6mo'): Promise<ChartDataResponse> {
+  const { data } = await api.get(`/watchlist/${itemId}/chart-data`, { params: { period } })
+  return data
+}
+
+export async function fetchWatchlistTechnicalSummary(itemId: number): Promise<TechnicalSummaryResponse> {
+  const { data } = await api.get(`/watchlist/${itemId}/technical`)
+  return data
+}
+
+// Custom Lines endpoints
+export async function fetchCustomLines(itemId: number): Promise<WatchlistLineResponse[]> {
+  const { data } = await api.get(`/watchlist/${itemId}/lines`)
+  return data
+}
+
+export async function createCustomLine(itemId: number, line: WatchlistLineCreate): Promise<WatchlistLineResponse> {
+  const { data } = await api.post(`/watchlist/${itemId}/lines`, line)
+  return data
+}
+
+export async function updateCustomLine(
+  itemId: number,
+  lineId: number,
+  updates: WatchlistLineUpdate
+): Promise<WatchlistLineResponse> {
+  const { data } = await api.put(`/watchlist/${itemId}/lines/${lineId}`, updates)
+  return data
+}
+
+export async function deleteCustomLine(itemId: number, lineId: number): Promise<void> {
+  await api.delete(`/watchlist/${itemId}/lines/${lineId}`)
+}
+
+// Alert endpoints
+export async function fetchTriggeredAlerts(): Promise<TriggeredAlertsResponse> {
+  const { data } = await api.get('/watchlist/alerts/triggered')
+  return data
+}
+
+export async function dismissAlert(alertId: number): Promise<void> {
+  await api.post(`/watchlist/alerts/${alertId}/dismiss`)
 }
 
 // Database management types

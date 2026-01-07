@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchWatchlist, addToWatchlist, removeFromWatchlist, fetchWatchlistNews, startStockResearch, fetchConfigSettings } from '../../services/api'
 import type { WatchlistNewsItem } from '../../types'
@@ -504,6 +504,7 @@ export default function Watchlist() {
                     <tr className="table-header">
                       <th className="text-left py-3 px-4">Ticker</th>
                       <th className="text-left py-3 px-4">Company</th>
+                      <th className="text-center py-3 px-4">Momentum</th>
                       <th className="text-right py-3 px-4">Price</th>
                       <th className="text-right py-3 px-4">Change</th>
                       <th className="text-center py-3 px-4">News</th>
@@ -514,12 +515,45 @@ export default function Watchlist() {
                     {watchlist?.items.map((item) => (
                       <tr key={item.id} className="table-row border-b border-gray-100">
                         <td className="py-4 px-4">
-                          <span className="font-semibold text-gray-900">{item.ticker}</span>
+                          <Link
+                            to={`/watchlist/${item.ticker}`}
+                            className="font-semibold text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-2"
+                          >
+                            {item.ticker}
+                            {item.has_triggered_alert && (
+                              <span className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" title="Alert triggered" />
+                            )}
+                          </Link>
                         </td>
                         <td className="py-4 px-4">
                           <span className="text-gray-600 truncate max-w-[200px] block">
                             {item.company_name || '-'}
                           </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {item.has_golden_cross && (
+                              <span
+                                className="px-1.5 py-0.5 text-xs font-semibold rounded bg-success-100 text-success-700 border border-success-200"
+                                title="Golden Cross (SMA 50 > SMA 200)"
+                              >
+                                GC
+                              </span>
+                            )}
+                            {item.is_bullish_trend && (
+                              <span
+                                className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-semibold rounded bg-success-100 text-success-700 border border-success-200"
+                                title="Bullish Trend (Price > SMA 20 & SMA 50)"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                              </span>
+                            )}
+                            {!item.has_golden_cross && !item.is_bullish_trend && (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-4 text-right">
                           {item.current_price ? (
