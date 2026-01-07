@@ -670,5 +670,13 @@ The agent that provides the data will have the following requirements:
 - it should be checked for new data on a regular basis, but at least daily
 - there should be a possibility for the user to trigger a check for new data on the given ETFs.
 
+Please make sure to understand fully how the tool works before deciding on how to implement the ETF feature and the conneted data source via the URL.
+As a first example you can add the following ETF:
+- Name: ARKK
+- URL: https://www.ark-funds.com/funds/arkk
+- Agent commend: Please download the holdings via the link on the provided URL.It is available as csv and PDF. Please download the cv version titled "Full Holdings CSV. Do not add any data. If a description of the ETF can be found on the website this can be added in the "Description field."
+- Description
+- Date data extraction
 
+This is only a frist example, there will be further URLs in the future added by the user.
 

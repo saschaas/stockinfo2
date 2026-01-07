@@ -36,7 +36,10 @@
       "Bash(cat:*)",
       "Bash(mcp__playwright__browser_navigate:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== Check $i ===\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

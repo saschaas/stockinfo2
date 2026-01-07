@@ -55,7 +55,14 @@ export default function JobProgressManager() {
         const data = JSON.parse(event.data)
         if (data.type === 'pong') return
 
-        if (data.type === 'progress') {
+        if (data.type === 'connected') {
+          // Handle initial connection message with current status
+          updateJobRef.current(jobId, {
+            progress: data.progress,
+            currentStep: data.current_step,
+            status: data.status === 'queued' ? 'pending' : data.status,
+          })
+        } else if (data.type === 'progress') {
           updateJobRef.current(jobId, {
             progress: data.progress,
             currentStep: data.current_step,
