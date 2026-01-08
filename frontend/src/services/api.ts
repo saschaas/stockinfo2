@@ -10,6 +10,7 @@ import type {
   TechnicalSummaryResponse,
   ChartDataResponse,
   TriggeredAlertsResponse,
+  WatchlistOrderUpdate,
 } from '../types'
 
 // Construct API URL based on current page URL (works with both normal and host networking)
@@ -832,8 +833,16 @@ export async function refreshCategoryData(
 }
 
 // Watchlist endpoints
-export async function fetchWatchlist(): Promise<WatchlistResponse> {
-  const { data } = await api.get('/watchlist/')
+export type WatchlistSortBy = 'custom' | 'change'
+export type WatchlistSortDirection = 'asc' | 'desc'
+
+export async function fetchWatchlist(
+  sortBy: WatchlistSortBy = 'custom',
+  sortDirection: WatchlistSortDirection = 'asc'
+): Promise<WatchlistResponse> {
+  const { data } = await api.get('/watchlist/', {
+    params: { sort_by: sortBy, sort_direction: sortDirection }
+  })
   return data
 }
 
@@ -844,6 +853,10 @@ export async function addToWatchlist(ticker: string): Promise<WatchlistItem> {
 
 export async function removeFromWatchlist(itemId: number): Promise<void> {
   await api.delete(`/watchlist/${itemId}`)
+}
+
+export async function updateWatchlistOrder(orderUpdate: WatchlistOrderUpdate): Promise<void> {
+  await api.put('/watchlist/order', orderUpdate)
 }
 
 export async function fetchWatchlistNews(itemId: number, limit: number = 50, days: number = 30): Promise<WatchlistNewsResponse> {

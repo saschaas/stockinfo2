@@ -3,7 +3,7 @@
 import asyncio
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,7 @@ from backend.app.schemas.watchlist import (
     TriggeredAlertResponse,
     TriggeredAlertsResponse,
     WatchlistStockDetailsResponse,
+    WatchlistOrderUpdate,
 )
 
 logger = structlog.get_logger(__name__)
@@ -422,15 +423,23 @@ async def _get_technical_summary(ticker: str, momentum_data: dict[str, Any]) -> 
 
 @router.get("/", response_model=WatchlistResponse)
 async def get_watchlist(
+    sort_by: Literal["custom", "change"] = Query(default="custom", description="Sort by: 'custom' for user-defined order, 'change' for price change"),
+    sort_direction: Literal["asc", "desc"] = Query(default="asc", description="Sort direction: 'asc' or 'desc'"),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistResponse:
     """Get all watchlist items with current prices and news counts.
 
     Returns all stocks in the watchlist with real-time price data
     and news counts fetched from external APIs.
+
+    Supports sorting by:
+    - custom: User-defined sort_order (default)
+    - change: Price change percentage
+
+    The change sorting is done client-side after price data is fetched.
     """
-    # Get all active watchlist items from DB
-    stmt = select(WatchlistItem).where(WatchlistItem.is_active == True).order_by(WatchlistItem.added_at.desc())
+    # Get all active watchlist items from DB - always fetch in sort_order initially
+    stmt = select(WatchlistItem).where(WatchlistItem.is_active == True).order_by(WatchlistItem.sort_order.asc())
     result = await db.execute(stmt)
     items = result.scalars().all()
 
@@ -515,6 +524,7 @@ async def get_watchlist(
                 ticker=item.ticker,
                 company_name=company_name,
                 added_at=item.added_at,
+                sort_order=item.sort_order,
                 current_price=price_data.get("current_price") if isinstance(price_data, dict) else None,
                 previous_close=price_data.get("previous_close") if isinstance(price_data, dict) else None,
                 change_amount=price_data.get("change_amount") if isinstance(price_data, dict) else None,
@@ -533,6 +543,17 @@ async def get_watchlist(
 
     # Commit momentum updates
     await db.commit()
+
+    # Apply sorting if requested
+    if sort_by == "change":
+        # Sort by change_pct (treat None as 0 for sorting)
+        response_items.sort(
+            key=lambda x: x.change_pct if x.change_pct is not None else 0,
+            reverse=(sort_direction == "desc")
+        )
+    elif sort_by == "custom" and sort_direction == "desc":
+        # Reverse the custom order if descending
+        response_items.reverse()
 
     return WatchlistResponse(total=len(response_items), items=response_items)
 
@@ -558,8 +579,14 @@ async def add_to_watchlist(
         if existing.is_active:
             raise HTTPException(status_code=400, detail=f"{ticker} is already in your watchlist")
         else:
-            # Reactivate inactive item
+            # Reactivate inactive item - get max sort_order and assign to end
+            from sqlalchemy import func as sql_func
+            max_order_stmt = select(sql_func.max(WatchlistItem.sort_order)).where(WatchlistItem.is_active == True)
+            max_order_result = await db.execute(max_order_stmt)
+            max_order = max_order_result.scalar() or -1
+
             existing.is_active = True
+            existing.sort_order = max_order + 1
             await db.commit()
             await db.refresh(existing)
             item = existing
@@ -577,11 +604,18 @@ async def add_to_watchlist(
             logger.error("Failed to validate ticker", ticker=ticker, error=str(e))
             raise HTTPException(status_code=404, detail=f"Stock ticker '{ticker}' not found or invalid")
 
+        # Get max sort_order to place new item at the end
+        from sqlalchemy import func as sql_func
+        max_order_stmt = select(sql_func.max(WatchlistItem.sort_order)).where(WatchlistItem.is_active == True)
+        max_order_result = await db.execute(max_order_stmt)
+        max_order = max_order_result.scalar() or -1
+
         # Create new watchlist item
         item = WatchlistItem(
             ticker=ticker,
             company_name=company_name,
             is_active=True,
+            sort_order=max_order + 1,
         )
         db.add(item)
         await db.commit()
@@ -596,6 +630,7 @@ async def add_to_watchlist(
         ticker=item.ticker,
         company_name=item.company_name or price_data.get("company_name"),
         added_at=item.added_at,
+        sort_order=item.sort_order,
         current_price=price_data.get("current_price"),
         previous_close=price_data.get("previous_close"),
         change_amount=price_data.get("change_amount"),
@@ -627,6 +662,44 @@ async def remove_from_watchlist(
     await db.commit()
 
     return {"message": f"{item.ticker} removed from watchlist"}
+
+
+@router.put("/order", response_model=dict)
+async def update_watchlist_order(
+    request: WatchlistOrderUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Update the sort order of watchlist items.
+
+    Accepts a list of item IDs with their new sort orders.
+    Used for drag-and-drop reordering in the UI.
+    """
+    # Fetch all items to update
+    item_ids = [item.id for item in request.items]
+    stmt = select(WatchlistItem).where(
+        WatchlistItem.id.in_(item_ids),
+        WatchlistItem.is_active == True,
+    )
+    result = await db.execute(stmt)
+    items = {item.id: item for item in result.scalars().all()}
+
+    # Validate all items exist
+    missing_ids = set(item_ids) - set(items.keys())
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Watchlist items not found: {missing_ids}"
+        )
+
+    # Update sort orders
+    for order_item in request.items:
+        items[order_item.id].sort_order = order_item.sort_order
+
+    await db.commit()
+
+    logger.info("Updated watchlist order", item_count=len(request.items))
+
+    return {"message": f"Updated order for {len(request.items)} items"}
 
 
 @router.get("/{item_id}/news", response_model=WatchlistNewsResponse)
@@ -831,6 +904,7 @@ async def get_stock_details(
         ticker=item.ticker,
         company_name=item.company_name or price_data.get("company_name"),
         added_at=item.added_at,
+        sort_order=item.sort_order,
         current_price=price_data.get("current_price"),
         previous_close=price_data.get("previous_close"),
         change_amount=price_data.get("change_amount"),

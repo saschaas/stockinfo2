@@ -12,6 +12,19 @@ class WatchlistItemCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=10, description="Stock ticker symbol")
 
 
+class WatchlistOrderItem(BaseModel):
+    """Single item in order update request."""
+
+    id: int = Field(..., description="Watchlist item ID")
+    sort_order: int = Field(..., ge=0, description="New sort order position")
+
+
+class WatchlistOrderUpdate(BaseModel):
+    """Schema for bulk updating watchlist item order."""
+
+    items: list[WatchlistOrderItem] = Field(..., min_length=1, description="List of items with new sort orders")
+
+
 class WatchlistItemInfo(BaseModel):
     """Watchlist item with current market data."""
 
@@ -19,6 +32,7 @@ class WatchlistItemInfo(BaseModel):
     ticker: str
     company_name: str | None = None
     added_at: datetime
+    sort_order: int = 0  # Custom sort order for user-defined ordering
 
     # Live market data (from Yahoo Finance)
     current_price: float | None = None

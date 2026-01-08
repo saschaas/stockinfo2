@@ -215,6 +215,7 @@ class WatchlistItem(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
 
     # Momentum indicators (calculated on each price update)
     has_golden_cross: Mapped[bool] = mapped_column(Boolean, nullable=True)

@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchWatchlist, addToWatchlist, removeFromWatchlist, fetchWatchlistNews, startStockResearch, fetchConfigSettings } from '../../services/api'
-import type { WatchlistNewsItem } from '../../types'
+import { fetchWatchlist, addToWatchlist, removeFromWatchlist, fetchWatchlistNews, startStockResearch, fetchConfigSettings, updateWatchlistOrder } from '../../services/api'
+import type { WatchlistSortBy, WatchlistSortDirection } from '../../services/api'
+import type { WatchlistNewsItem, WatchlistItem } from '../../types'
 
 // Market hours utilities (US Eastern Time)
 const MARKET_OPEN_HOUR = 9
@@ -115,6 +116,14 @@ export default function Watchlist() {
   const navigate = useNavigate()
   const MAX_SELECTION = 5
 
+  // Sorting state
+  const [sortBy, setSortBy] = useState<WatchlistSortBy>('custom')
+  const [sortDirection, setSortDirection] = useState<WatchlistSortDirection>('asc')
+
+  // Drag-and-drop state
+  const [draggedItem, setDraggedItem] = useState<WatchlistItem | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
+
   const queryClient = useQueryClient()
 
   // Fetch config to get refresh interval
@@ -151,11 +160,42 @@ export default function Watchlist() {
     return refreshIntervalMinutes * 60 * 1000
   }, [isPaused, marketOpen, refreshIntervalMinutes])
 
-  // Fetch watchlist data
-  const { data: watchlist, isLoading, error, dataUpdatedAt } = useQuery({
+  // Fetch watchlist data - always fetch with custom order, sorting is done client-side
+  const { data: watchlistData, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['watchlist'],
-    queryFn: fetchWatchlist,
+    queryFn: () => fetchWatchlist('custom', 'asc'),
     refetchInterval,
+  })
+
+  // Sort items client-side based on selected sort mode
+  const watchlist = useMemo(() => {
+    if (!watchlistData) return undefined
+
+    const sortedItems = [...watchlistData.items]
+
+    if (sortBy === 'change') {
+      sortedItems.sort((a, b) => {
+        const aChange = a.change_pct ?? 0
+        const bChange = b.change_pct ?? 0
+        return sortDirection === 'desc' ? bChange - aChange : aChange - bChange
+      })
+    } else if (sortBy === 'custom' && sortDirection === 'desc') {
+      sortedItems.reverse()
+    }
+    // For 'custom' with 'asc', items are already in correct order from API
+
+    return {
+      ...watchlistData,
+      items: sortedItems
+    }
+  }, [watchlistData, sortBy, sortDirection])
+
+  // Mutation for updating sort order
+  const orderMutation = useMutation({
+    mutationFn: updateWatchlistOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] })
+    },
   })
 
   // Track last update time
@@ -291,6 +331,84 @@ export default function Watchlist() {
         return 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
     }
   }
+
+  // Drag-and-drop handlers for custom ordering
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLTableRowElement>, item: WatchlistItem) => {
+    if (sortBy !== 'custom') return
+    setDraggedItem(item)
+    e.dataTransfer.effectAllowed = 'move'
+    // Add some visual feedback
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }, [sortBy])
+
+  const handleDragEnd = useCallback((e: React.DragEvent<HTMLTableRowElement>) => {
+    setDraggedItem(null)
+    setDragOverId(null)
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = '1'
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLTableRowElement>, itemId: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverId(itemId)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverId(null)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLTableRowElement>, targetItem: WatchlistItem) => {
+    e.preventDefault()
+    setDragOverId(null)
+
+    if (!draggedItem || draggedItem.id === targetItem.id || !watchlistData?.items) return
+
+    // Calculate new order using the base data (not the sorted view)
+    const items = [...watchlistData.items]
+    const draggedIndex = items.findIndex(i => i.id === draggedItem.id)
+    const targetIndex = items.findIndex(i => i.id === targetItem.id)
+
+    if (draggedIndex === -1 || targetIndex === -1) return
+
+    // Remove dragged item and insert at target position
+    const [removed] = items.splice(draggedIndex, 1)
+    items.splice(targetIndex, 0, removed)
+
+    // Create new order update with consecutive sort_order values
+    const orderUpdate = items.map((item, index) => ({
+      id: item.id,
+      sort_order: index
+    }))
+
+    // Optimistically update the cache
+    queryClient.setQueryData(['watchlist'], {
+      ...watchlistData,
+      items: items.map((item, index) => ({ ...item, sort_order: index }))
+    })
+
+    // Save to backend
+    orderMutation.mutate({ items: orderUpdate })
+  }, [draggedItem, watchlistData, queryClient, orderMutation])
+
+  // Toggle sort direction for change column
+  const toggleChangeSorting = useCallback(() => {
+    if (sortBy !== 'change') {
+      setSortBy('change')
+      setSortDirection('desc') // Default to descending for change (highest gains first)
+    } else {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    }
+  }, [sortBy])
+
+  // Switch to custom ordering
+  const switchToCustomOrder = useCallback(() => {
+    setSortBy('custom')
+    setSortDirection('asc')
+  }, [])
 
   // Get news history days from config
   const newsHistoryDays = configData?.settings?.display_preferences?.news_history_days ?? 30
@@ -490,7 +608,50 @@ export default function Watchlist() {
         {/* Right Panel - Stock Details */}
         <div className="lg:col-span-2">
           <div className="card card-body">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Details</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Stock Details</h2>
+              {/* Sorting Controls */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Sort:</span>
+                <button
+                  onClick={switchToCustomOrder}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    sortBy === 'custom'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                  }`}
+                >
+                  Custom
+                </button>
+                <button
+                  onClick={toggleChangeSorting}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
+                    sortBy === 'change'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+                  }`}
+                >
+                  Change
+                  {sortBy === 'change' && (
+                    <svg className={`w-4 h-4 transition-transform ${sortDirection === 'desc' ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Order Info */}
+            {sortBy === 'custom' && watchlist && watchlist.items.length > 0 && (
+              <div className="mb-4 p-2 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-sm text-blue-700 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Drag and drop rows to reorder your watchlist
+                </p>
+              </div>
+            )}
 
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -515,6 +676,7 @@ export default function Watchlist() {
                 <table className="w-full">
                   <thead>
                     <tr className="table-header">
+                      {sortBy === 'custom' && <th className="text-center py-3 px-2 w-8"></th>}
                       <th className="text-left py-3 px-4">Ticker</th>
                       <th className="text-left py-3 px-4">Company</th>
                       <th className="text-center py-3 px-4">Momentum</th>
@@ -526,7 +688,27 @@ export default function Watchlist() {
                   </thead>
                   <tbody>
                     {watchlist?.items.map((item) => (
-                      <tr key={item.id} className="table-row border-b border-gray-100">
+                      <tr
+                        key={item.id}
+                        className={`table-row border-b border-gray-100 ${
+                          sortBy === 'custom' ? 'cursor-grab active:cursor-grabbing' : ''
+                        } ${dragOverId === item.id ? 'bg-primary-50 border-primary-300' : ''}`}
+                        draggable={sortBy === 'custom'}
+                        onDragStart={(e) => handleDragStart(e, item)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => handleDragOver(e, item.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, item)}
+                      >
+                        {sortBy === 'custom' && (
+                          <td className="py-4 px-2 text-center">
+                            <div className="text-gray-400 hover:text-gray-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                              </svg>
+                            </div>
+                          </td>
+                        )}
                         <td className="py-4 px-4">
                           <Link
                             to={`/watchlist/${item.ticker}`}

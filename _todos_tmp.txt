@@ -737,5 +737,23 @@ A news section should display the current news on the stock for the last 30 days
 Also there should be an indication in the WAtchlist when a stock of the watchlist has a bullish momentum like a golden cross and an overall bullish trend.
 
 
+Watchlist News indication:
+I noticed that in the Watchlist tab, the indication of news is not working as I wanted. The displayed number of news should only be of the current day and the day before. When clicking on the news indicator I want the news of the past 30 days. Please make sure to include the date in the overview window for each article and have the latest news on top. Please also indicate in the news window o the stock that it fetches the news of the past 30 days. Please also make this configurable in the configuration tab and make sure f it is changes in the configuration tab, it is also updated in the news window.
+Please also adapt the color of the news indicator based on the sentiment of the past 2 days:
+- green if bullish,
+- light green if somewhat bullish,
+- orange if somewhat bearish,
+- red if bearish,
+- grey if no news or no clear sentiment.
+Please make sure to test this after the implementation.
+Please make sure to understand the current logic and functions of the project to make use of existing functions where it makes sense.
+
+Watchlist ordering:
+For the Watchlist tab, can you add a feature that sorts the Watchlist details by:
+- change (alternate: ascending, descending),
+- sort by custom ordering (See below).
+Add a feature to custom order the Watchlist stocks by the user. For this the user should be able to drag and drop items upward and downward to change the position. The position should be saved in the database to keep this between sessions.
+
+
 
 

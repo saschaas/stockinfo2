@@ -30,11 +30,11 @@ export default function WatchlistStockDetails() {
   // Get watchlist to find item ID for the ticker
   const { data: watchlist } = useQuery({
     queryKey: ['watchlist'],
-    queryFn: fetchWatchlist,
+    queryFn: () => fetchWatchlist(),
   })
 
   const watchlistItem = watchlist?.items.find(
-    (item) => item.ticker.toLowerCase() === ticker?.toLowerCase()
+    (item: { ticker: string }) => item.ticker.toLowerCase() === ticker?.toLowerCase()
   )
 
   // Fetch stock details

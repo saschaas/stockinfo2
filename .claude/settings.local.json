@@ -44,7 +44,8 @@
       "Bash(docker rmi:*)",
       "Bash(docker builder prune:*)",
       "Bash(find:*)",
-      "Bash(make db-upgrade:*)"
+      "Bash(make db-upgrade:*)",
+      "Bash(dir \"D:\\\\Docs\\\\Coding\\\\stockinfo2\\\\backend\\\\migrations\" /B)"
     ],
     "deny": [],
     "ask": []

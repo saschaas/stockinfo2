@@ -163,6 +163,7 @@ export interface WatchlistItem {
   ticker: string
   company_name?: string
   added_at: string
+  sort_order: number  // Custom sort order for user-defined ordering
   current_price?: number
   previous_close?: number
   change_amount?: number
@@ -178,6 +179,16 @@ export interface WatchlistItem {
   sma_200?: number
   // Alert status
   has_triggered_alert?: boolean
+}
+
+// Watchlist Order types
+export interface WatchlistOrderItem {
+  id: number
+  sort_order: number
+}
+
+export interface WatchlistOrderUpdate {
+  items: WatchlistOrderItem[]
 }
 
 export interface WatchlistResponse {
