@@ -425,6 +425,7 @@ async def _get_technical_summary(ticker: str, momentum_data: dict[str, Any]) -> 
 async def get_watchlist(
     sort_by: Literal["custom", "change"] = Query(default="custom", description="Sort by: 'custom' for user-defined order, 'change' for price change"),
     sort_direction: Literal["asc", "desc"] = Query(default="asc", description="Sort direction: 'asc' or 'desc'"),
+    include_news: bool = Query(default=True, description="Include news data (slower). Set to false for faster initial load."),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistResponse:
     """Get all watchlist items with current prices and news counts.
@@ -437,6 +438,8 @@ async def get_watchlist(
     - change: Price change percentage
 
     The change sorting is done client-side after price data is fetched.
+
+    Set include_news=false for faster initial load, then fetch news separately.
     """
     # Get all active watchlist items from DB - always fetch in sort_order initially
     stmt = select(WatchlistItem).where(WatchlistItem.is_active == True).order_by(WatchlistItem.sort_order.asc())
@@ -453,15 +456,20 @@ async def get_watchlist(
     price_tasks = [_fetch_stock_price(ticker) for ticker in tickers]
     price_results = await asyncio.gather(*price_tasks, return_exceptions=True)
 
-    # Fetch news data sequentially to avoid rate limiting
-    # Alpha Vantage rate limit: 0.5 req/sec = 1 request every 2 seconds
-    # Using 2.5s delay to provide buffer for token regeneration
-    news_results = []
-    for ticker in tickers:
-        result = await _fetch_news_data(ticker, limit=50)
-        news_results.append(result)
-        # 2.5-second delay between requests for reliable token acquisition
-        await asyncio.sleep(2.5)
+    # Fetch news data only if requested (this is the slow part - sequential with delays)
+    if include_news:
+        # Fetch news data sequentially to avoid rate limiting
+        # Alpha Vantage rate limit: 0.5 req/sec = 1 request every 2 seconds
+        # Using 2.5s delay to provide buffer for token regeneration
+        news_results = []
+        for ticker in tickers:
+            result = await _fetch_news_data(ticker, limit=50)
+            news_results.append(result)
+            # 2.5-second delay between requests for reliable token acquisition
+            await asyncio.sleep(2.5)
+    else:
+        # Return empty news data for faster initial load
+        news_results = [{"total_count": 0, "recent_count": 0, "sentiment": None} for _ in tickers]
 
     # Calculate momentum indicators for all tickers
     momentum_tasks = [_calculate_momentum_indicators(ticker) for ticker in tickers]

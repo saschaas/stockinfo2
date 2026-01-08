@@ -838,10 +838,11 @@ export type WatchlistSortDirection = 'asc' | 'desc'
 
 export async function fetchWatchlist(
   sortBy: WatchlistSortBy = 'custom',
-  sortDirection: WatchlistSortDirection = 'asc'
+  sortDirection: WatchlistSortDirection = 'asc',
+  includeNews: boolean = true
 ): Promise<WatchlistResponse> {
   const { data } = await api.get('/watchlist/', {
-    params: { sort_by: sortBy, sort_direction: sortDirection }
+    params: { sort_by: sortBy, sort_direction: sortDirection, include_news: includeNews }
   })
   return data
 }
