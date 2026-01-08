@@ -70,15 +70,88 @@ async def _fetch_stock_price(ticker: str) -> dict[str, Any]:
         }
 
 
-async def _fetch_news_count(ticker: str) -> int:
-    """Fetch news count for a ticker from Alpha Vantage."""
+async def _fetch_news_data(ticker: str, limit: int = 50) -> dict[str, Any]:
+    """Fetch news data for a ticker from Alpha Vantage.
+
+    Returns dict with:
+        - total_count: Total news articles fetched
+        - recent_count: News from past 48 hours (handles timezone differences)
+        - sentiment: Aggregated sentiment based on recent news ("bullish", "somewhat_bullish", "somewhat_bearish", "bearish", "neutral")
+        - articles: List of news articles
+    """
     try:
         client = await get_alpha_vantage_client()
-        news = await client.get_news_sentiment(tickers=ticker, limit=10)
-        return len(news)
+        news = await client.get_news_sentiment(tickers=ticker, limit=limit)
+
+        if not news:
+            return {
+                "total_count": 0,
+                "recent_count": 0,
+                "sentiment": "neutral",
+                "articles": [],
+            }
+
+        # Use 48-hour window for "recent" news (handles timezone differences between server and client)
+        now = datetime.utcnow()
+        cutoff_time = now - timedelta(hours=48)
+
+        recent_articles = []
+        recent_sentiments = []
+
+        for article in news:
+            published_at = article.get("published_at", "")
+            # Alpha Vantage returns dates in format: YYYYMMDDTHHMMSS (e.g., 20240115T123456)
+            try:
+                if published_at:
+                    # Parse Alpha Vantage date format (YYYYMMDDTHHMMSS)
+                    if "T" in published_at:
+                        # Full datetime format
+                        article_datetime = datetime.strptime(published_at, "%Y%m%dT%H%M%S")
+                    else:
+                        # Date only - assume start of day
+                        article_datetime = datetime.strptime(published_at[:8], "%Y%m%d")
+
+                    # Check if article is within the 48-hour window
+                    if article_datetime >= cutoff_time:
+                        recent_articles.append(article)
+                        sentiment_score = article.get("overall_sentiment")
+                        if sentiment_score is not None:
+                            recent_sentiments.append(float(sentiment_score))
+            except (ValueError, TypeError):
+                # If date parsing fails, skip this article for recent count
+                pass
+
+        # Calculate aggregated sentiment from recent news
+        sentiment = "neutral"
+        if recent_sentiments:
+            avg_sentiment = sum(recent_sentiments) / len(recent_sentiments)
+            # Alpha Vantage sentiment scores: -1 (bearish) to 1 (bullish)
+            # Map to categories
+            if avg_sentiment >= 0.25:
+                sentiment = "bullish"
+            elif avg_sentiment >= 0.05:
+                sentiment = "somewhat_bullish"
+            elif avg_sentiment <= -0.25:
+                sentiment = "bearish"
+            elif avg_sentiment <= -0.05:
+                sentiment = "somewhat_bearish"
+            else:
+                sentiment = "neutral"
+
+        return {
+            "total_count": len(news),
+            "recent_count": len(recent_articles),
+            "sentiment": sentiment,
+            "articles": news,
+        }
     except Exception as e:
-        logger.warning("Failed to fetch news count", ticker=ticker, error=str(e))
-        return 0
+        logger.warning("Failed to fetch news data", ticker=ticker, error=str(e))
+        return {
+            "total_count": 0,
+            "recent_count": 0,
+            "sentiment": "neutral",
+            "articles": [],
+        }
 
 
 async def _calculate_momentum_indicators(ticker: str) -> dict[str, Any]:
@@ -364,20 +437,22 @@ async def get_watchlist(
     if not items:
         return WatchlistResponse(total=0, items=[])
 
-    # Fetch price and news data for all tickers concurrently
+    # Fetch price and news data for all tickers
     tickers = [item.ticker for item in items]
 
-    # Create tasks for price fetching
+    # Fetch prices concurrently (uses Yahoo Finance which has higher rate limit)
     price_tasks = [_fetch_stock_price(ticker) for ticker in tickers]
-    news_tasks = [_fetch_news_count(ticker) for ticker in tickers]
+    price_results = await asyncio.gather(*price_tasks, return_exceptions=True)
 
-    # Run all tasks concurrently
-    all_tasks = price_tasks + news_tasks
-    results = await asyncio.gather(*all_tasks, return_exceptions=True)
-
-    # Split results
-    price_results = results[:len(tickers)]
-    news_results = results[len(tickers):]
+    # Fetch news data sequentially to avoid rate limiting
+    # Alpha Vantage rate limit: 0.5 req/sec = 1 request every 2 seconds
+    # Using 2.5s delay to provide buffer for token regeneration
+    news_results = []
+    for ticker in tickers:
+        result = await _fetch_news_data(ticker, limit=50)
+        news_results.append(result)
+        # 2.5-second delay between requests for reliable token acquisition
+        await asyncio.sleep(2.5)
 
     # Calculate momentum indicators for all tickers
     momentum_tasks = [_calculate_momentum_indicators(ticker) for ticker in tickers]
@@ -414,11 +489,16 @@ async def get_watchlist(
     response_items = []
     for i, item in enumerate(items):
         price_data = price_results[i] if not isinstance(price_results[i], Exception) else {}
-        news_count = news_results[i] if not isinstance(news_results[i], Exception) else 0
+        news_data = news_results[i] if not isinstance(news_results[i], Exception) else {}
         momentum_data = momentum_results[i] if not isinstance(momentum_results[i], Exception) else {}
 
         # Use company name from DB if available, otherwise from API
         company_name = item.company_name or (price_data.get("company_name") if isinstance(price_data, dict) else None)
+
+        # Extract news counts and sentiment from news data
+        news_count = news_data.get("total_count", 0) if isinstance(news_data, dict) else 0
+        recent_news_count = news_data.get("recent_count", 0) if isinstance(news_data, dict) else 0
+        news_sentiment = news_data.get("sentiment", "neutral") if isinstance(news_data, dict) else "neutral"
 
         # Update momentum in DB (async, don't wait)
         if isinstance(momentum_data, dict) and momentum_data.get("sma_20"):
@@ -439,7 +519,9 @@ async def get_watchlist(
                 previous_close=price_data.get("previous_close") if isinstance(price_data, dict) else None,
                 change_amount=price_data.get("change_amount") if isinstance(price_data, dict) else None,
                 change_pct=price_data.get("change_pct") if isinstance(price_data, dict) else None,
-                news_count=news_count if isinstance(news_count, int) else 0,
+                news_count=news_count,
+                recent_news_count=recent_news_count,
+                news_sentiment=news_sentiment,
                 has_golden_cross=momentum_data.get("has_golden_cross") if isinstance(momentum_data, dict) else None,
                 is_bullish_trend=momentum_data.get("is_bullish_trend") if isinstance(momentum_data, dict) else None,
                 sma_20=momentum_data.get("sma_20") if isinstance(momentum_data, dict) else None,
@@ -507,7 +589,7 @@ async def add_to_watchlist(
 
     # Fetch current price and news
     price_data = await _fetch_stock_price(ticker)
-    news_count = await _fetch_news_count(ticker)
+    news_data = await _fetch_news_data(ticker, limit=50)
 
     return WatchlistItemInfo(
         id=item.id,
@@ -518,7 +600,9 @@ async def add_to_watchlist(
         previous_close=price_data.get("previous_close"),
         change_amount=price_data.get("change_amount"),
         change_pct=price_data.get("change_pct"),
-        news_count=news_count,
+        news_count=news_data.get("total_count", 0),
+        recent_news_count=news_data.get("recent_count", 0),
+        news_sentiment=news_data.get("sentiment", "neutral"),
     )
 
 
@@ -548,12 +632,15 @@ async def remove_from_watchlist(
 @router.get("/{item_id}/news", response_model=WatchlistNewsResponse)
 async def get_stock_news(
     item_id: int,
-    limit: int = Query(default=10, ge=1, le=50),
+    limit: int = Query(default=50, ge=1, le=100),
+    days: int = Query(default=30, ge=7, le=90, description="Number of days of news to fetch"),
     db: AsyncSession = Depends(get_db),
 ) -> WatchlistNewsResponse:
     """Get news articles for a watchlist stock.
 
-    Fetches the latest news from Alpha Vantage for the specified ticker.
+    Fetches news from Alpha Vantage for the specified ticker.
+    The 'days' parameter controls how many days of news to include.
+    News is sorted by latest first.
     """
     # Get watchlist item
     stmt = select(WatchlistItem).where(WatchlistItem.id == item_id)
@@ -568,6 +655,42 @@ async def get_stock_news(
         client = await get_alpha_vantage_client()
         articles = await client.get_news_sentiment(tickers=item.ticker, limit=limit)
 
+        # Filter articles by date and sort by latest first
+        cutoff_date = (datetime.utcnow() - timedelta(days=days)).date()
+        filtered_articles = []
+
+        for article in articles:
+            published_at = article.get("published_at", "")
+            try:
+                if published_at:
+                    # Parse Alpha Vantage date format (YYYYMMDDTHHMMSS)
+                    date_part = published_at.split("T")[0] if "T" in published_at else published_at[:8]
+                    article_date = datetime.strptime(date_part, "%Y%m%d").date()
+
+                    # Only include articles within the date range
+                    if article_date >= cutoff_date:
+                        filtered_articles.append(article)
+                else:
+                    # Include articles without dates (edge case)
+                    filtered_articles.append(article)
+            except (ValueError, TypeError):
+                # Include articles with unparseable dates
+                filtered_articles.append(article)
+
+        # Sort by published_at (latest first)
+        def parse_date_for_sort(article: dict) -> datetime:
+            published_at = article.get("published_at", "")
+            try:
+                if published_at and "T" in published_at:
+                    return datetime.strptime(published_at, "%Y%m%dT%H%M%S")
+                elif published_at:
+                    return datetime.strptime(published_at[:8], "%Y%m%d")
+            except (ValueError, TypeError):
+                pass
+            return datetime.min  # Put unparseable dates at the end
+
+        filtered_articles.sort(key=parse_date_for_sort, reverse=True)
+
         news_items = [
             NewsItem(
                 title=article.get("title", ""),
@@ -578,13 +701,14 @@ async def get_stock_news(
                 sentiment_score=article.get("overall_sentiment"),
                 sentiment_label=article.get("overall_sentiment_label"),
             )
-            for article in articles
+            for article in filtered_articles
         ]
 
         return WatchlistNewsResponse(
             ticker=item.ticker,
             news=news_items,
             total=len(news_items),
+            days_fetched=days,
         )
     except Exception as e:
         logger.error("Failed to fetch news", ticker=item.ticker, error=str(e))
@@ -592,6 +716,7 @@ async def get_stock_news(
             ticker=item.ticker,
             news=[],
             total=0,
+            days_fetched=days,
         )
 
 

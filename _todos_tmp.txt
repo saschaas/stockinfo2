@@ -712,4 +712,30 @@ Please make sure to understand which tables are needed to continue with a given 
 It looks very good, but there are some issues I think:
 1. The funds and fund_holdings table show 0 rows, which is not possible and the size indicates existing rows.
 2. I don#t think we need to export the Research history (listed in the Export data part. And I don't think it makes sense to export the scraped_websites table as this needs to be updated daily anyway.
+Can you please correct these issues?
+
+
+The tabs Fund Tracker and ETF Tracker show correctly an indicator when there are updates in the holdings, but in the relevant tab itself there is no indication which Fund or ETF has updates. Can you please check as this worked before.
+
+
+Stock Details:
+Can you add a functionality to display details about stocks in the Watchlist as follows:
+- If I click on a Stock Sysmbol in the Watchlist I want open a new window with details of the stock (as described below).
+#Stock Details:
+- the stock chart should be displayed just like in the stock research tab in the "Technical Analysis" part with all trendlines, entry level, stop loss and target price
+- in the chart it should be further be possible to add new horizontal lines for alerts (when the price of the stock reaches the marked price level with the horizontal line.
+- when placing the horizontal line:
+  - a name should be given to the line,
+  - when hovering the mouse over the chart to place the line, the price should be displayed according to the position of the line and on click the line should be placed.
+- it should be possible to edit the added lines by clicking on them and then move them.
+- the following categories should be available to start: custom trend line, alert
+- when the price of a stock reaches the price of the alert the stock should be marked in the watchlist for the day and an alert should be displayed once to let the user know the alert was reached.
+- the lines for custom trend lines and alerts should be different from the other lines and different from eachother
+- the details page should further give information on trends concerning 20 SMA and 50 SMA and MACD
+Please make sure to use as many functions from the technical analysis as possible where it makes sense and where it is the best way to include the features already avaialbe.
+A news section should display the current news on the stock for the last 30 days.
+Also there should be an indication in the WAtchlist when a stock of the watchlist has a bullish momentum like a golden cross and an overall bullish trend.
+
+
+
 

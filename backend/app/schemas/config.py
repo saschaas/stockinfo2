@@ -538,6 +538,7 @@ class DisplayPreferences(BaseModel):
     holdings_per_fund: Optional[int] = Field(50, ge=10, le=100, description="Holdings per fund")
     peers_in_comparison: Optional[int] = Field(5, ge=3, le=10, description="Number of peers in comparison")
     watchlist_refresh_interval: Optional[int] = Field(3, ge=1, le=10, description="Watchlist price refresh interval in minutes")
+    news_history_days: Optional[int] = Field(30, ge=7, le=90, description="Number of days of news to show in watchlist news modal")
 
 
 class WebsiteInfo(BaseModel):

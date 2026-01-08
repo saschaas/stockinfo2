@@ -619,6 +619,7 @@ export interface DisplayPreferences {
   holdings_per_fund?: number
   peers_in_comparison?: number
   watchlist_refresh_interval?: number  // Refresh interval in minutes (default: 3)
+  news_history_days?: number  // Number of days of news to show in watchlist news modal (default: 30)
 }
 
 export interface WebsiteInfo {
@@ -845,8 +846,8 @@ export async function removeFromWatchlist(itemId: number): Promise<void> {
   await api.delete(`/watchlist/${itemId}`)
 }
 
-export async function fetchWatchlistNews(itemId: number, limit: number = 10): Promise<WatchlistNewsResponse> {
-  const { data } = await api.get(`/watchlist/${itemId}/news`, { params: { limit } })
+export async function fetchWatchlistNews(itemId: number, limit: number = 50, days: number = 30): Promise<WatchlistNewsResponse> {
+  const { data } = await api.get(`/watchlist/${itemId}/news`, { params: { limit, days } })
   return data
 }
 

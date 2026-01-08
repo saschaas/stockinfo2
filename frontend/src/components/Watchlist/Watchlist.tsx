@@ -199,12 +199,15 @@ export default function Watchlist() {
   }
 
   // Handle news modal
+  const [newsDaysFetched, setNewsDaysFetched] = useState<number>(30)
+
   const openNewsModal = async (itemId: number, ticker: string) => {
     setNewsModal({ itemId, ticker })
     setNewsLoading(true)
     try {
-      const response = await fetchWatchlistNews(itemId)
+      const response = await fetchWatchlistNews(itemId, 50, newsHistoryDays)
       setNewsItems(response.news)
+      setNewsDaysFetched(response.days_fetched)
     } catch (error) {
       console.error('Failed to fetch news:', error)
       setNewsItems([])
@@ -273,14 +276,24 @@ export default function Watchlist() {
     }
   }
 
-  // Format sentiment label to color
-  const getSentimentColor = (label: string | undefined) => {
-    if (!label) return 'text-gray-500'
-    const l = label.toLowerCase()
-    if (l.includes('bullish') || l.includes('positive')) return 'text-success-600'
-    if (l.includes('bearish') || l.includes('negative')) return 'text-danger-600'
-    return 'text-gray-500'
+  // Get indicator colors based on aggregated news sentiment (for the badge button)
+  const getNewsSentimentIndicatorStyle = (sentiment: string | undefined) => {
+    switch (sentiment) {
+      case 'bullish':
+        return 'bg-success-100 text-success-700 hover:bg-success-200 border border-success-300'
+      case 'somewhat_bullish':
+        return 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
+      case 'somewhat_bearish':
+        return 'bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200'
+      case 'bearish':
+        return 'bg-danger-50 text-danger-700 hover:bg-danger-100 border border-danger-300'
+      default: // 'neutral' or undefined
+        return 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+    }
   }
+
+  // Get news history days from config
+  const newsHistoryDays = configData?.settings?.display_preferences?.news_history_days ?? 30
 
   return (
     <div className="space-y-6">
@@ -583,13 +596,13 @@ export default function Watchlist() {
                         <td className="py-4 px-4 text-center">
                           <button
                             onClick={() => openNewsModal(item.id, item.ticker)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
-                            title={`${item.news_count} news articles`}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${getNewsSentimentIndicatorStyle(item.news_sentiment)}`}
+                            title={`${item.recent_news_count} recent news (today/yesterday), ${item.news_count} total - Sentiment: ${item.news_sentiment || 'neutral'}`}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                             </svg>
-                            <span className="text-sm font-medium">{item.news_count}</span>
+                            <span className="text-sm font-medium">{item.recent_news_count}</span>
                           </button>
                         </td>
                         <td className="py-4 px-4 text-center">
@@ -665,9 +678,14 @@ export default function Watchlist() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                News for {newsModal.ticker}
-              </h3>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  News for {newsModal.ticker}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Showing news from the past {newsDaysFetched} days (sorted by latest)
+                </p>
+              </div>
               <button
                 onClick={closeNewsModal}
                 className="p-1 text-gray-400 hover:text-gray-600"
@@ -687,50 +705,99 @@ export default function Watchlist() {
                 </div>
               ) : newsItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  No news articles found
+                  No news articles found in the past {newsDaysFetched} days
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {newsItems.map((news, index) => (
-                    <div key={index} className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      <a
-                        href={news.url || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block"
-                      >
-                        <h4 className="font-medium text-gray-900 hover:text-primary-600 mb-2">
-                          {news.title}
-                        </h4>
-                        {news.summary && (
-                          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-                            {news.summary}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                          {news.source && <span>{news.source}</span>}
-                          {news.published_at && (
-                            <span>{new Date(news.published_at).toLocaleDateString()}</span>
+                  {newsItems.map((news, index) => {
+                    // Format the date nicely
+                    const formatNewsDate = (dateStr: string | undefined) => {
+                      if (!dateStr) return 'Unknown date'
+                      try {
+                        // Parse Alpha Vantage format: YYYYMMDDTHHMMSS
+                        const year = dateStr.substring(0, 4)
+                        const month = dateStr.substring(4, 6)
+                        const day = dateStr.substring(6, 8)
+                        const hour = dateStr.length > 9 ? dateStr.substring(9, 11) : '00'
+                        const minute = dateStr.length > 11 ? dateStr.substring(11, 13) : '00'
+
+                        const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`)
+                        const today = new Date()
+                        const yesterday = new Date(today)
+                        yesterday.setDate(yesterday.getDate() - 1)
+
+                        // Check if it's today or yesterday
+                        if (date.toDateString() === today.toDateString()) {
+                          return `Today at ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+                        } else if (date.toDateString() === yesterday.toDateString()) {
+                          return `Yesterday at ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+                        } else {
+                          return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                        }
+                      } catch {
+                        return dateStr
+                      }
+                    }
+
+                    return (
+                      <div key={index} className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <a
+                          href={news.url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <h4 className="font-medium text-gray-900 hover:text-primary-600 flex-1">
+                              {news.title}
+                            </h4>
+                            {news.sentiment_label && (
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap ${
+                                news.sentiment_label.toLowerCase().includes('bullish') || news.sentiment_label.toLowerCase().includes('positive')
+                                  ? 'bg-success-100 text-success-700'
+                                  : news.sentiment_label.toLowerCase().includes('bearish') || news.sentiment_label.toLowerCase().includes('negative')
+                                  ? 'bg-danger-100 text-danger-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {news.sentiment_label}
+                              </span>
+                            )}
+                          </div>
+                          {news.summary && (
+                            <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+                              {news.summary}
+                            </p>
                           )}
-                          {news.sentiment_label && (
-                            <span className={`font-medium ${getSentimentColor(news.sentiment_label)}`}>
-                              {news.sentiment_label}
-                            </span>
-                          )}
-                        </div>
-                      </a>
-                    </div>
-                  ))}
+                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                            <span className="font-medium text-gray-700">{formatNewsDate(news.published_at)}</span>
+                            {news.source && (
+                              <>
+                                <span className="text-gray-300">|</span>
+                                <span>{news.source}</span>
+                              </>
+                            )}
+                          </div>
+                        </a>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
-            <div className="p-4 border-t">
-              <button
-                onClick={closeNewsModal}
-                className="btn-secondary w-full"
-              >
-                Close
-              </button>
+            <div className="p-4 border-t bg-gray-50">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">
+                  {newsItems.length} article{newsItems.length !== 1 ? 's' : ''} found
+                  {' - '}
+                  <span className="text-gray-600">Adjust the news history days in Configuration tab</span>
+                </span>
+                <button
+                  onClick={closeNewsModal}
+                  className="btn-secondary"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

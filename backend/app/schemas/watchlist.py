@@ -26,8 +26,10 @@ class WatchlistItemInfo(BaseModel):
     change_amount: float | None = None
     change_pct: float | None = None
 
-    # News data
-    news_count: int = 0
+    # News data - recent_news_count is for today and yesterday only (for display in table)
+    news_count: int = 0  # Total news count for the modal
+    recent_news_count: int = 0  # News from today and yesterday (for table display)
+    news_sentiment: str | None = None  # Aggregated sentiment: "bullish", "somewhat_bullish", "somewhat_bearish", "bearish", "neutral"
 
     # Momentum indicators
     has_golden_cross: bool | None = None
@@ -65,6 +67,7 @@ class WatchlistNewsResponse(BaseModel):
     ticker: str
     news: list[NewsItem]
     total: int
+    days_fetched: int = 30  # Number of days of news fetched
 
 
 # ============== Custom Lines Schemas ==============

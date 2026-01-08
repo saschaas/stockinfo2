@@ -51,6 +51,7 @@ export default function Configuration() {
     holdings_per_fund: 50,
     peers_in_comparison: 5,
     watchlist_refresh_interval: 3,
+    news_history_days: 30,
   })
 
   const [marketScraping, setMarketScraping] = useState({
@@ -145,6 +146,7 @@ export default function Configuration() {
         holdings_per_fund: configData.settings.display_preferences.holdings_per_fund ?? 50,
         peers_in_comparison: configData.settings.display_preferences.peers_in_comparison ?? 5,
         watchlist_refresh_interval: configData.settings.display_preferences.watchlist_refresh_interval ?? 3,
+        news_history_days: configData.settings.display_preferences.news_history_days ?? 30,
       })
 
       setMarketScraping({
@@ -1056,6 +1058,34 @@ export default function Configuration() {
             </div>
             <p className="mt-1 text-xs text-gray-500">
               How often to auto-refresh stock prices in the Watchlist (when market is open)
+            </p>
+          </div>
+
+          {/* News History Days */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              News History Days: {displayPreferences.news_history_days} days
+            </label>
+            <input
+              type="range"
+              min="7"
+              max="90"
+              step="1"
+              value={displayPreferences.news_history_days}
+              onChange={(e) =>
+                setDisplayPreferences({
+                  ...displayPreferences,
+                  news_history_days: parseInt(e.target.value),
+                })
+              }
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>7 days</span>
+              <span>90 days</span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Number of days of news to show when clicking the news indicator in Watchlist. The indicator badge always shows news from today and yesterday only.
             </p>
           </div>
         </div>

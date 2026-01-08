@@ -168,6 +168,8 @@ export interface WatchlistItem {
   change_amount?: number
   change_pct?: number
   news_count: number
+  recent_news_count: number  // News from today and yesterday (for table display)
+  news_sentiment?: string  // Aggregated sentiment: "bullish", "somewhat_bullish", "somewhat_bearish", "bearish", "neutral"
   // Momentum indicators
   has_golden_cross?: boolean
   is_bullish_trend?: boolean
@@ -197,6 +199,7 @@ export interface WatchlistNewsResponse {
   ticker: string
   news: WatchlistNewsItem[]
   total: number
+  days_fetched: number  // Number of days of news fetched
 }
 
 // Watchlist Custom Lines types
