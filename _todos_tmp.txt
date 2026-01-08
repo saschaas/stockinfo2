@@ -755,5 +755,20 @@ For the Watchlist tab, can you add a feature that sorts the Watchlist details by
 Add a feature to custom order the Watchlist stocks by the user. For this the user should be able to drag and drop items upward and downward to change the position. The position should be saved in the database to keep this between sessions.
 
 
+New load in background:
+When loading the Watchlist, can you first load the Watchlist with the prices and % change as you already do, but make this first and load the news data in the background and show a progress somehow. This should make the page load faster as the loading of news data probably takes the longest time. Please check before implementing if this makes sense and is possible to implement easyly.
+
+Holdings:
+Can you add a tab "My Holdings" that will show my stock holdings. The structure should be like the structure of the Watchlist tab mostly. Can you implement this in the same manner as the watchlist tab. Make sure to analyze the structure and logic of the tool, the apis and the watchlist tab to fully understand how to implement the "My Holdings" tab.
+Function of the "My Holdings" tab:
+- list all my stock holdings and display price and change (like in Watchlist),
+- possibility to add stocks, remove stocks easily (like in the Watchlist tab),
+- possibility to order the list by Custom ordering or by % change (like in the Watchlist tab),
+- possibility to see the details page of the stock and add trendlines and alerts (like in the Watchlist tab),
+- load the current news and display the sentiment (like in the Watchlist tab),
+- trigger alerts when an added alert is reached,
+- possibility to set the interval of price refreshes (1 minute, 3 minutes, 7 minutes) and to pause the refresh of price data.
+Please make sure to fully understand the project logic and functions and APIs first, before implementing anything.
+After the implementation test the new feature in depth to verify the correct functioning.
 
 

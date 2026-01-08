@@ -3,6 +3,8 @@ import Dashboard from './components/Dashboard/Dashboard'
 import StockResearch from './components/StockResearch/StockResearch'
 import Watchlist from './components/Watchlist/Watchlist'
 import WatchlistStockDetails from './components/Watchlist/WatchlistStockDetails'
+import Holdings from './components/Holdings/Holdings'
+import HoldingStockDetails from './components/Holdings/HoldingStockDetails'
 import FundTracker from './components/FundTracker/FundTracker'
 import ETFTracker from './components/ETFTracker/ETFTracker'
 import Configuration from './components/Configuration/Configuration'
@@ -19,6 +21,8 @@ function App() {
           <Route path="research" element={<StockResearch />} />
           <Route path="watchlist" element={<Watchlist />} />
           <Route path="watchlist/:ticker" element={<WatchlistStockDetails />} />
+          <Route path="holdings" element={<Holdings />} />
+          <Route path="holdings/:ticker" element={<HoldingStockDetails />} />
           <Route path="funds" element={<FundTracker />} />
           <Route path="etfs" element={<ETFTracker />} />
           <Route path="config" element={<Configuration />} />

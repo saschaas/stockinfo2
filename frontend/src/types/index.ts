@@ -317,3 +317,116 @@ export interface WatchlistStockDetailsResponse {
   triggered_alerts_today: TriggeredAlertResponse[]
   news: WatchlistNewsItem[]
 }
+
+// ============== Holdings types ==============
+
+export interface HoldingItem {
+  id: number
+  ticker: string
+  company_name?: string
+  quantity: number
+  cost_basis?: number
+  added_at: string
+  sort_order: number
+  current_price?: number
+  previous_close?: number
+  change_amount?: number
+  change_pct?: number
+  // Portfolio metrics
+  market_value?: number
+  total_cost?: number
+  profit_loss?: number
+  profit_loss_pct?: number
+  // News data
+  news_count: number
+  recent_news_count: number
+  news_sentiment?: string
+  // Momentum indicators
+  has_golden_cross?: boolean
+  is_bullish_trend?: boolean
+  sma_20?: number
+  sma_50?: number
+  sma_200?: number
+  // Alert status
+  has_triggered_alert?: boolean
+}
+
+export interface HoldingOrderItem {
+  id: number
+  sort_order: number
+}
+
+export interface HoldingOrderUpdate {
+  items: HoldingOrderItem[]
+}
+
+export interface HoldingResponse {
+  total: number
+  items: HoldingItem[]
+  total_market_value?: number
+  total_cost?: number
+  total_profit_loss?: number
+  total_profit_loss_pct?: number
+}
+
+export interface HoldingLineCreate {
+  line_type: 'trend' | 'alert'
+  name: string
+  price_level: number
+  color?: string
+}
+
+export interface HoldingLineUpdate {
+  name?: string
+  price_level?: number
+  color?: string
+  is_active?: boolean
+}
+
+export interface HoldingLineResponse {
+  id: number
+  holding_item_id: number
+  line_type: string
+  name: string
+  price_level: number
+  color: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface HoldingChartDataResponse {
+  ticker: string
+  company_name?: string
+  dates: string[]
+  ohlcv: {
+    open: number[]
+    high: number[]
+    low: number[]
+    close: number[]
+    volume: number[]
+  }
+  moving_averages: {
+    sma_20: (number | null)[]
+    sma_50: (number | null)[]
+    sma_200: (number | null)[]
+  }
+  support_levels: number[]
+  resistance_levels: number[]
+  custom_lines: HoldingLineResponse[]
+  entry_level?: number
+  stop_loss?: number
+  target_price?: number
+}
+
+export interface HoldingStockDetailsResponse {
+  item: HoldingItem
+  technical_summary: TechnicalSummaryResponse
+  chart_data: HoldingChartDataResponse
+  custom_lines: HoldingLineResponse[]
+  triggered_alerts_today: TriggeredAlertResponse[]
+  news: WatchlistNewsItem[]
+}
+
+export type HoldingSortBy = 'custom' | 'change'
+export type HoldingSortDirection = 'asc' | 'desc'

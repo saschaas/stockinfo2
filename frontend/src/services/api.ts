@@ -11,6 +11,17 @@ import type {
   ChartDataResponse,
   TriggeredAlertsResponse,
   WatchlistOrderUpdate,
+  HoldingResponse,
+  HoldingItem,
+  HoldingStockDetailsResponse,
+  HoldingLineCreate,
+  HoldingLineUpdate,
+  HoldingLineResponse,
+  HoldingChartDataResponse,
+  HoldingOrderUpdate,
+  WatchlistNewsResponse as HoldingNewsResponse,
+  HoldingSortBy,
+  HoldingSortDirection,
 } from '../types'
 
 // Construct API URL based on current page URL (works with both normal and host networking)
@@ -976,6 +987,113 @@ export async function importDatabase(file: File): Promise<ImportResponse> {
     },
   })
   return data
+}
+
+// ============== Holdings endpoints ==============
+
+export async function fetchHoldings(
+  sortBy: HoldingSortBy = 'custom',
+  sortDirection: HoldingSortDirection = 'asc',
+  includeNews: boolean = true
+): Promise<HoldingResponse> {
+  const { data } = await api.get('/holdings/', {
+    params: { sort_by: sortBy, sort_direction: sortDirection, include_news: includeNews }
+  })
+  return data
+}
+
+export async function addToHoldings(
+  ticker: string,
+  quantity: number,
+  costBasis?: number
+): Promise<HoldingItem> {
+  const { data } = await api.post('/holdings/', { ticker, quantity, cost_basis: costBasis })
+  return data
+}
+
+export async function updateHolding(
+  itemId: number,
+  quantity?: number,
+  costBasis?: number
+): Promise<HoldingItem> {
+  const payload: { quantity?: number; cost_basis?: number } = {}
+  if (quantity !== undefined) payload.quantity = quantity
+  if (costBasis !== undefined) payload.cost_basis = costBasis
+  const { data } = await api.put(`/holdings/${itemId}`, payload)
+  return data
+}
+
+export async function removeFromHoldings(itemId: number): Promise<void> {
+  await api.delete(`/holdings/${itemId}`)
+}
+
+export async function updateHoldingsOrder(orderUpdate: HoldingOrderUpdate): Promise<void> {
+  await api.put('/holdings/order', orderUpdate)
+}
+
+export async function fetchHoldingNews(
+  itemId: number,
+  limit: number = 50,
+  days: number = 30
+): Promise<HoldingNewsResponse> {
+  const { data } = await api.get(`/holdings/${itemId}/news`, { params: { limit, days } })
+  return data
+}
+
+// Holdings Stock Details endpoints
+export async function fetchHoldingStockDetails(itemId: number): Promise<HoldingStockDetailsResponse> {
+  const { data } = await api.get(`/holdings/${itemId}/details`)
+  return data
+}
+
+export async function fetchHoldingChartData(
+  itemId: number,
+  period: string = '6mo'
+): Promise<HoldingChartDataResponse> {
+  const { data } = await api.get(`/holdings/${itemId}/chart-data`, { params: { period } })
+  return data
+}
+
+export async function fetchHoldingTechnicalSummary(itemId: number): Promise<TechnicalSummaryResponse> {
+  const { data } = await api.get(`/holdings/${itemId}/technical`)
+  return data
+}
+
+// Holdings Custom Lines endpoints
+export async function fetchHoldingCustomLines(itemId: number): Promise<HoldingLineResponse[]> {
+  const { data } = await api.get(`/holdings/${itemId}/lines`)
+  return data
+}
+
+export async function createHoldingCustomLine(
+  itemId: number,
+  line: HoldingLineCreate
+): Promise<HoldingLineResponse> {
+  const { data } = await api.post(`/holdings/${itemId}/lines`, line)
+  return data
+}
+
+export async function updateHoldingCustomLine(
+  itemId: number,
+  lineId: number,
+  updates: HoldingLineUpdate
+): Promise<HoldingLineResponse> {
+  const { data } = await api.put(`/holdings/${itemId}/lines/${lineId}`, updates)
+  return data
+}
+
+export async function deleteHoldingCustomLine(itemId: number, lineId: number): Promise<void> {
+  await api.delete(`/holdings/${itemId}/lines/${lineId}`)
+}
+
+// Holdings Alert endpoints
+export async function fetchHoldingTriggeredAlerts(): Promise<TriggeredAlertsResponse> {
+  const { data } = await api.get('/holdings/alerts/triggered')
+  return data
+}
+
+export async function dismissHoldingAlert(alertId: number): Promise<void> {
+  await api.post(`/holdings/alerts/${alertId}/dismiss`)
 }
 
 export default api

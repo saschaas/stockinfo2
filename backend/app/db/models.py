@@ -709,6 +709,103 @@ class ScrapedWebsite(Base):
     )
 
 
+class HoldingItem(Base):
+    """User stock holdings for portfolio tracking."""
+
+    __tablename__ = "holding_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False, unique=True, index=True)
+    company_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)  # Shares owned
+    cost_basis: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)  # Average cost per share
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+
+    # Momentum indicators (calculated on each price update)
+    has_golden_cross: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    is_bullish_trend: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    sma_20: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    sma_50: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    sma_200: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=True)
+    last_momentum_update: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    lines: Mapped[list["HoldingLine"]] = relationship(
+        "HoldingLine", back_populates="holding_item", cascade="all, delete-orphan"
+    )
+
+
+class HoldingLine(Base):
+    """Custom lines (trend lines and alerts) for holding stocks."""
+
+    __tablename__ = "holding_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    holding_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("holding_items.id"), nullable=False, index=True
+    )
+    line_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "trend" or "alert"
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    price_level: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    color: Mapped[str] = mapped_column(String(20), nullable=True, default="#8b5cf6")  # Hex color
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    holding_item: Mapped["HoldingItem"] = relationship(
+        "HoldingItem", back_populates="lines"
+    )
+    triggered_alerts: Mapped[list["HoldingTriggeredAlert"]] = relationship(
+        "HoldingTriggeredAlert", back_populates="line", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("idx_holding_line_item", "holding_item_id"),
+    )
+
+
+class HoldingTriggeredAlert(Base):
+    """Record of triggered price alerts for holdings."""
+
+    __tablename__ = "holding_triggered_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    line_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("holding_lines.id"), nullable=False, index=True
+    )
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    triggered_price: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    direction: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "crossed_up" or "crossed_down"
+    notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Relationships
+    line: Mapped["HoldingLine"] = relationship(
+        "HoldingLine", back_populates="triggered_alerts"
+    )
+
+    __table_args__ = (
+        Index("idx_holding_triggered_alert_line_date", "line_id", "triggered_at"),
+    )
+
+
 # Data use categories for scraped websites
 DATA_USE_CATEGORIES = [
     "dashboard_sentiment",
